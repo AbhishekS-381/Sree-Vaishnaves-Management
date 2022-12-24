@@ -10,16 +10,11 @@ const connectionPromise = new Promise((res, rej) => {
   connectionFailed = rej;
 })
 var con = mysql.createConnection({
-//   host: "sql.freedb.tech",
-//   port: 3306,
-//   user: "freedb_abhishek",
-//   password: "KeK&aH@PeTX&K3Y",
-//   database: "freedb_MinutesofMeet"
-  host: "sql6.freemysqlhosting.net",
+  host: "sql207.epizy.com",
   port: 3306,
-  user: "sql6529296",
-  password: "EEQcBXVuQX",
-  database: "sql6529296"
+  user: "epiz_33257278",
+  password: "mdpziqDVBon",
+  database: "epiz_33257278_HotelSreeVaishnaves	"
 });
 
 con.connect(function (err) {
