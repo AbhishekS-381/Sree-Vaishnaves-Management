@@ -1,0 +1,48 @@
+#sublinks{
+  list-style: none;
+  padding: 0;
+  margin-top: 50;
+  width: 100%;
+  text-align: center;
+}
+
+.subli{
+  display: inline-block;
+  margin-left: 30px;
+  color: black;
+  cursor: pointer;
+}
+
+.minutesContent-box {
+  width: 100%;
+  padding: 10px;
+  padding-left: 30px;
+  margin-top: 5%;
+  background: whitesmoke;
+  box-sizing: border-box;
+  box-shadow: 0 15px 25px rgba(0,0,0,.6);
+  border-radius: 10px;
+}
+
+#cardTitle{
+  color: #6d23cf;
+  margin-bottom: 10px;
+}
+
+h5{
+  color: #6d23cf;
+  font-size: large;
+}
+
+p,li{
+  color: black;
+}
+
+#subtitle{
+  margin-top: 30px;
+}
+
+#link{
+  color: black;
+  margin-left: 10px;
+}

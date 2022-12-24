@@ -1,0 +1,138 @@
+<html>
+
+<head>
+  <title>Minutes of Meet</title>
+  <link href="/css/layout.css" rel="stylesheet">
+  <% if(flag==1){%>
+    <link href="/css/homePage.css" rel="stylesheet">
+    <link href="/css/actionItems.css" rel="stylesheet">
+    <link href="/css/createMinute.css" rel="stylesheet">
+    <link href="/css/minutesContent.css" rel="stylesheet">
+    <%}else{%>
+      <link href="/cssLight/homePage.css" rel="stylesheet">
+      <link href="/cssLight/actionItems.css" rel="stylesheet">
+      <link href="/cssLight/createMinute.css" rel="stylesheet">
+      <link href="/cssLight/minutesContent.css" rel="stylesheet">
+      <%}%>
+        <link rel="icon" type="image/x-icon" href="https://myadp.adpcorp.com/themes/custom/customadp/favicon.icov">
+</head>
+
+<body>
+  <div class="col col-12" id="loginDiv">
+    <div class="landing-page">
+      <div class="container">
+        <div class="header-area">
+          <div class="logo">Hi <b id="heading">
+              <%=userName%>
+            </b></div>
+          <ul class="links">
+            <a href="/manager/home/<%=userToken%>/<%=flag%>">
+              <li>Home</li>
+            </a>
+            <a href="/manager/team/<%=userToken%>/<%=flag%>">
+              <li>Team</li>
+            </a>
+            <a href="/manager/meet/<%=userToken%>/<%=flag%>">
+              <li id="highlight">Meet</li>
+            </a>
+            <a href="/manager/minutes/content/<%=userToken%>/<%=flag%>">
+              <li>Meet History</li>
+            </a>
+            <a href="/manager/queries/<%=userToken%>/<%=flag%>">
+              <li>Queries</li>
+            </a>
+            <a href="/manager/actionitems/<%=userToken%>/<%=flag%>">
+              <li>Action Items</li>
+            </a>
+            <a href="/logout/<%=userToken%>">
+              <li>Logout</li>
+            </a>
+          </ul>
+        </div>
+        <div id="subHeader-area">
+          <ul id="sublinks">
+            <a href="/manager/meet/<%=userToken%>/<%=flag%>">
+              <li class="subli">Minutes Entry</li>
+            </a>
+            <a href="/manager/meet/editActionItem/<%=userToken%>/<%=flag%>">
+              <li class="subli" id="highlight">Edit Action Items</li>
+            </a>
+          </ul>
+        </div>
+      </div>
+      <div class="col col-12" id="tableDiv">
+        <% for( var i=0; i < team.length; i++){ %>
+          <div class="query-box" style="overflow-y: scroll; height: 600px">
+            <h2 id="cardTitle">
+              <%=team[i].teamName%>
+            </h2>
+            <p id="addMember">Team Description</p>
+            <p id="teamDetails">
+              <%=team[i].details%>
+            </p>
+            <p id="addMember">Assign an Action Item</p>
+            <form action="/manager/meet/newActionItem/<%=team[i].teamName%>/<%=userToken%>/<%=flag%>" method="POST">
+              <input class="addNewTask" type="text" name="newActionItem" placeholder="  Add an Action Item..."
+                autocomplete="off">
+              <select name="assignedEmployee" id="picklist">
+                <% for( var k=0; k < employee.length; k++){ %>
+                  <% for( var l=0; l < members.length; l++){ %>
+                    <% if(members[l].teamName==team[i].teamName && members[l].employeeID==employee[k].employeeID){%>
+                      <option value="<%= employee[k].employeeID %>">
+                        <%= employee[k].employeeName %>
+                      </option>
+                      <% } %>
+                        <%}%>
+                          <%}%>
+              </select>
+              <button id="deleteBtn">Add Action Item</button>
+            </form>
+            <div>
+              <p id="addMember">View pending Action Item</p>
+              <ul id="taskList">
+                <% for( var j=0; j < actionItem.length; j++){ %>
+                  <div class="col-12 col">
+                    <% if(actionItem[j].teamName==team[i].teamName) { %>
+                      <li>
+                        <form id="removeTask"
+                          action="/manager/meet/removeActionItem/<%=team[i].teamName%>/<%=userToken%>/<%=flag%>"
+                          method="POST">
+                          <div class="col-4 col">
+                            <% for( var k=0; k < employee.length; k++){ %>
+                              <% if(actionItem[j].assignedTo==employee[k].employeeID) { %>
+                                <label style="color: #6d23cf;">Name : </label>
+                                <label>
+                                  <%= employee[k].employeeName %>
+                                </label>
+                                <%}%>
+                                  <%}%>
+                                    <label style="color: #6d23cf;"> - ID : </label>
+                                    <label>
+                                      <%= actionItem[j].assignedTo %>
+                                    </label>
+                          </div>
+                          <div class="col-4 col">
+                            <input type="text" name="task" value="<%= actionItem[j].task%>" hidden>
+                            <label style="color: #6d23cf;">Task : </label>
+                            <label>
+                              <%= actionItem[j].task %>
+                            </label>
+                          </div>
+                          <div class="col-4 col">
+                            <button id="deleteBtn">Mark as Done</button>
+                          </div>
+                        </form>
+                      </li>
+                      <% } %>
+                  </div>
+                  <% } %>
+              </ul>
+            </div>
+          </div>
+          <% } %>
+      </div>
+    </div>
+  </div>
+</body>
+
+</html>

@@ -1,0 +1,53 @@
+<html>
+
+<head>
+  <title>Minutes of Meet</title>
+  <link href="/css/login.css" rel="stylesheet">
+  <link href="/css/layout.css" rel="stylesheet">
+  <link rel="icon" type="image/x-icon" href="https://myadp.adpcorp.com/themes/custom/customadp/favicon.ico">
+</head>
+
+<body>
+  <div class="col col-12" id="loginDiv">
+    <div class="container" id="container">
+      <div class="form-container sign-in-container">
+        <form id="loginForm" action="/manage" method="POST">
+          <h1 id="topCard">Sign in</h1>
+          <input type="number" name="employeeID" placeholder="Employee ID" autocomplete="off" /required>
+          <input type="password" name="password" placeholder="Old Password" autocomplete="off" /required>
+          <input type="password" name="newpassword" placeholder="New Password" autocomplete="off" /required>
+          <% if(flag===1){%>
+            <p id="warning">Invalid Login Credentials !!!</p>
+            <%}%>
+              <% if(flag===2){%>
+                <p id="warning">Account Reset Successful !!!</p>
+                <%}%>
+                  <button id="signin">Reset</button>
+        </form>
+      </div>
+      <div class="overlay-container">
+        <div class="overlay">
+          <div class="overlay-panel overlay-right">
+            <h1>Hello, Employee!</h1>
+            <p>It's good to reset your password in a regular interval of time</p>
+            <a href="/"><button class="ghost" id="signUp">Login</button></a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+<!-- 
+<script>
+  const signUpButton = document.getElementById('signUp');
+  const signInButton = document.getElementById('signIn');
+  const container = document.getElementById('container');
+  signUpButton.addEventListener('click', () => {
+    container.classList.add("right-panel-active");
+  });
+  signInButton.addEventListener('click', () => {
+    container.classList.remove("right-panel-active");
+  });
+</script> -->
+
+</html>

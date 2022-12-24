@@ -1,0 +1,48 @@
+const QUERIES = {
+  CREATE_USER_DETAILS: "CREATE TABLE IF NOT EXISTS user_details (employeeID INT PRIMARY KEY, employeeName VARCHAR(255), userToken VARCHAR(255), employeePassword VARCHAR(255), emailID VARCHAR(255), userType VARCHAR(255))",
+  CREATE_TEAM_DETAILS: "CREATE TABLE IF NOT EXISTS team_details (teamName VARCHAR(255) PRIMARY KEY, details TEXT, managerName VARCHAR(255), managerID INT)",
+  CREATE_TEAM_MAPPING: "CREATE TABLE IF NOT EXISTS team_mapping (employeeID INT, teamName VARCHAR(255))",
+  CREATE_ACTION_ITEMS: "CREATE TABLE IF NOT EXISTS action_items (task VARCHAR(255), assignedTo INT, teamName VARCHAR(255), currentStatus INT DEFAULT 0, assignedDate DATE)",
+  CREATE_MEET_SUMMARY: "CREATE TABLE IF NOT EXISTS meet_summary (teamName VARCHAR(255), startTime DATETIME, scrumMaster VARCHAR(255),content TEXT, endTime DATETIME);",
+  CREATE_QUERY_DETAILS: "CREATE TABLE IF NOT EXISTS query_details (employeeID INT, employeeName VARCHAR(255), teamName VARCHAR(255), managerName VARCHAR(255), meetDate DATETIME, querySubject VARCHAR(255), details TEXT)",
+  CREATE_MINUTE_LINK: "CREATE TABLE IF NOT EXISTS minute_link (teamName VARCHAR(255), content VARCHAR(255), link VARCHAR(255), meetDate DATETIME);",
+  CREATE_SESSION_CHECK: "CREATE TABLE IF NOT EXISTS session_check (userToken VARCHAR(255), currentStatus INT);",
+
+  CREATE_NEW_USER: "INSERT INTO user_details (employeeID, employeeName, userToken, employeePassword, emailID, userType) VALUES (?,?,?,?,?,?)",
+  CREATE_NEW_QUERY: "INSERT INTO query_details (employeeID, employeeName , teamName, managerName, meetDate, querySubject, details) VALUES (?,?,?,?,?,?,?)",
+  CREATE_NEW_MINUTE: "INSERT INTO meet_summary (teamName , startTime, scrumMaster, content, endTime) VALUES (?,?,?,?,?)",
+  CREATE_NEW_TEAM: "INSERT INTO team_details (teamName, details, managerName, managerID) VALUES (?,?,?,?)",
+  ADD_NEW_MEMBER: "INSERT INTO team_mapping (employeeID, teamName) VALUES(?,?)",
+  ADD_NEW_TASK: "INSERT INTO action_items (task, assignedTo, teamName, currentStatus, assignedDate) VALUES (?,?,?,?,?)",
+  ADD_NEW_LINK: "INSERT INTO minute_link (teamName, content, link, meetDate) VALUES (?,?,?,?)",
+  CREATE_USER_SESSION: "INSERT INTO session_check (userToken,currentStatus) VALUES (?,0);",
+
+  GET_PASSWORD: "SELECT userToken, employeePassword, userType, employeeName FROM user_details WHERE employeeID = ?",
+  GET_ALL_EMPLOYEE: "SELECT * FROM user_details",
+  GET_EMP_DETAIL: "SELECT employeeID, employeeName FROM user_details WHERE userToken=?",
+  GET_TEAMNAME: "SELECT teamName FROM team_mapping WHERE employeeID=?",
+  GET_MANAGER: "SELECT managerName FROM team_details WHERE teamName=?",
+  GET_QUERIES: "SELECT * FROM query_details WHERE managerName=? ORDER BY meetDate DESC",
+  GET_ACTION_ITEMS: "SELECT * FROM action_items WHERE assignedTo=? ORDER BY assignedDate DESC;",
+  GET_MINUTES: "SELECT * FROM meet_summary WHERE teamName=?",
+  GET_ALL_MINUTES: "SELECT * FROM meet_summary",
+  GET_MANAGER_MINUTES: "SELECT * FROM meet_summary WHERE scrumMaster=?",
+  GET_TEAM: "SELECT * FROM team_details WHERE managerName=?",
+  GET_MEMBERS: "SELECT * FROM team_mapping",
+  GET_ALL_LINK: "SELECT * FROM minute_link",
+  GET_LINK_DESC: "SELECT * FROM minute_link ORDER BY meetDate DESC",
+  GET_TASK: "SELECT * FROM action_items WHERE currentStatus=0",
+  GET_TIME: "SELECT startTime FROM meet_summary WHERE teamName=? ORDER BY startTime DESC;",
+  GET_STATUS: "SELECT currentStatus FROM session_check WHERE userToken=?",
+  ADD_SESSION: "UPDATE session_check SET currentStatus=1 WHERE userToken=?",
+  END_SESSION: "UPDATE session_check SET currentStatus=0 WHERE userToken=?",
+  UPDATE_PASSWORD: "UPDATE user_details SET employeePassword=? WHERE employeeID=?",
+
+  REMOVE_MEMBER: "DELETE FROM team_mapping WHERE employeeID=? AND teamName=?",
+  REMOVE_TEAM: "DELETE FROM team_details WHERE teamName=?",
+  REMOVE_TEAM_MEMBER: "DELETE FROM team_mapping WHERE teamName=?",
+  REMOVE_ACTION_ITEM: "UPDATE action_items SET currentStatus=1 WHERE teamName=? AND task=?",
+  REMOVE_MINUTE_LINK: "DELETE FROM minute_link WHERE teamName=? AND link=?"
+}
+
+module.exports = { QUERIES }

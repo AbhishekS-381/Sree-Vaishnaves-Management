@@ -1,0 +1,111 @@
+<html>
+
+<head>
+  <title>Minutes of Meet</title>
+  <link href="/css/layout.css" rel="stylesheet">
+  <% if(flag==1){%>
+    <link href="/css/homePage.css" rel="stylesheet">
+    <link href="/css/actionItems.css" rel="stylesheet">
+    <link href="/css/minutesContent.css" rel="stylesheet">
+    <%}else{%>
+      <link href="/cssLight/homePage.css" rel="stylesheet">
+      <link href="/cssLight/actionItems.css" rel="stylesheet">
+      <link href="/cssLight/minutesContent.css" rel="stylesheet">
+      <%}%>
+        <link rel="icon" type="image/x-icon" href="https://myadp.adpcorp.com/themes/custom/customadp/favicon.ico">
+</head>
+
+<body>
+  <div class="col col-12" id="loginDiv">
+    <div class="landing-page">
+      <div class="container">
+        <div class="header-area">
+          <div class="logo">Hi <b id="heading">
+              <%=userName%>
+            </b></div>
+          <ul class="links">
+            <a href="/manager/home/<%=userToken%>/<%=flag%>">
+              <li>Home</li>
+            </a>
+            <a href="/manager/team/<%=userToken%>/<%=flag%>">
+              <li>Team</li>
+            </a>
+            <a href="/manager/meet/<%=userToken%>/<%=flag%>">
+              <li>Meet</li>
+            </a>
+            <a href="/manager/minutes/content/<%=userToken%>/<%=flag%>">
+              <li id="highlight">Meet History</li>
+            </a>
+            <a href="/manager/queries/<%=userToken%>/<%=flag%>">
+              <li>Queries</li>
+            </a>
+            <a href="/manager/actionitems/<%=userToken%>/<%=flag%>">
+              <li>Action Items</li>
+            </a>
+            <a href="/logout/<%=userToken%>">
+              <li>Logout</li>
+            </a>
+          </ul>
+        </div>
+        <div id="subHeader-area">
+          <ul id="sublinks">
+            <a href="/manager/minutes/content/<%=userToken%>/<%=flag%>">
+              <li class="subli" id="highlight">Contents</li>
+            </a>
+            <a href="/manager/minutes/links/<%=userToken%>/<%=flag%>">
+              <li class="subli">Links</li>
+            </a>
+          </ul>
+        </div>
+      </div>
+      <div class="col col-12" id="tableDiv">
+        <% for( var i=0; i < minutes.length; i++){ %>
+          <div class="minutesContent-box col col-12">
+            <h2 id="cardTitle">
+              <%= minutes[i].startTime %>
+            </h2>
+            <div class="col col-12">
+              <div class="col col-2">
+                <h5>Team Name : </p>
+              </div>
+              <div class="col col-4">
+                <p id="subtitle">
+                  <%= minutes[i].teamName %>
+                </p>
+              </div>
+            </div>
+            <div class="col col-12">
+              <div class="col col-2">
+                <h5>Scrum Master : </p>
+              </div>
+              <div class="col col-4">
+                <p id="subtitle">
+                  <%= minutes[i].scrumMaster %>
+                </p>
+              </div>
+            </div>
+            <div class="col col-12">
+              <div class="col col-4">
+                <h5>Meet content :</p>
+              </div>
+              <div class="col col-12">
+                <p id="<%=i%>">
+                  <%= minutes[i].content %>
+                </p>
+              </div>
+            </div>
+          </div>
+          <% } %>
+      </div>
+    </div>
+  </div>
+</body>
+<script>
+  var l = "<%=minutes.length%>";
+  for (var i = 0; i < l; i++) {
+    var new1 = document.getElementById(i).innerText;
+    document.getElementById(i).innerHTML = new1;
+  }
+</script>
+
+</html>

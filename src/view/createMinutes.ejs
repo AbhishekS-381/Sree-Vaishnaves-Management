@@ -1,0 +1,274 @@
+<html>
+
+<head>
+  <title>Minutes of Meet</title>
+  <link href="/css/layout.css" rel="stylesheet">
+  <% if(flag==1){%>
+    <link href="/css/homePage.css" rel="stylesheet">
+    <link href="/css/actionItems.css" rel="stylesheet">
+    <link href="/css/createMinute.css" rel="stylesheet">
+    <link href="/css/minutesContent.css" rel="stylesheet">
+    <%}else{%>
+      <link href="/cssLight/homePage.css" rel="stylesheet">
+      <link href="/cssLight/actionItems.css" rel="stylesheet">
+      <link href="/cssLight/createMinute.css" rel="stylesheet">
+      <link href="/cssLight/minutesContent.css" rel="stylesheet">
+      <%}%>
+        <link href="/css/style.css" rel="stylesheet">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <link rel="icon" type="image/x-icon" href="https://myadp.adpcorp.com/themes/custom/customadp/favicon.ico">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css" />
+        <link href="https://fonts.googleapis.com/css2?family=Poppins&display=swap" rel="stylesheet" />
+</head>
+
+<body>
+  <div class="col col-12" id="loginDiv">
+    <div class="landing-page">
+      <div class="container">
+        <div class="header-area">
+          <div class="logo">Hi <b id="heading">
+              <%=userName%>
+            </b></div>
+          <ul class="links">
+            <a href="/manager/home/<%=userToken%>/<%=flag%>">
+              <li>Home</li>
+            </a>
+            <a href="/manager/team/<%=userToken%>/<%=flag%>">
+              <li>Team</li>
+            </a>
+            <a href="/manager/meet/<%=userToken%>/<%=flag%>">
+              <li id="highlight">Meet</li>
+            </a>
+            <a href="/manager/minutes/content/<%=userToken%>/<%=flag%>">
+              <li>Meet History</li>
+            </a>
+            <a href="/manager/queries/<%=userToken%>/<%=flag%>">
+              <li>Queries</li>
+            </a>
+            <a href="/manager/actionitems/<%=userToken%>/<%=flag%>">
+              <li>Action Items</li>
+            </a>
+            <a href="/logout/<%=userToken%>">
+              <li>Logout</li>
+            </a>
+          </ul>
+        </div>
+        <div id="subHeader-area">
+          <ul id="sublinks">
+            <a href="/manager/meet/<%=userToken%>/<%=flag%>">
+              <li class="subli" id="highlight">Minutes Entry</li>
+            </a>
+            <a href="/manager/meet/editActionItem/<%=userToken%>/<%=flag%>">
+              <li class="subli">Edit Action Items</li>
+            </a>
+          </ul>
+        </div>
+      </div>
+      <div class="col col-12" id="tableDiv">
+        <div class="query-box" style="overflow-y: scroll; height: 600px">
+          <h2 style="margin-bottom: 50px;" id="cardTitle">Enter the details of Meet</h2>
+          <form action="/manager/meet/minute/<%=userToken%>/<%=flag%>" method="post" id="newMinute">
+            <label>Team Name</label>
+            <div class="user-box">
+              <select name="teamName" id="cars" style="width: 100%;">
+                <% for( var i=0; i < team.length; i++){ %>
+                  <option value="<%= team[i].teamName %>">
+                    <%= team[i].teamName %>
+                  </option>
+                  <% } %>
+              </select>
+            </div>
+            <div class="user-box">
+              <label style="margin-left: 43%; margin-bottom: 20px;">Content of this meet</label>
+              <div class="container2" style="margin-top: 40px;">
+                <div class="options">
+                  <button type="button" id="bold" class="option-button format">
+                    <i class="fa-solid fa-bold"></i>
+                  </button>
+                  <button type="button" id="italic" class="option-button format">
+                    <i class="fa-solid fa-italic"></i>
+                  </button>
+                  <button type="button" id="underline" class="option-button format">
+                    <i class="fa-solid fa-underline"></i>
+                  </button>
+                  <!-- <button type="button" id="strikethrough" class="option-button format">
+                    <i class="fa-solid fa-strikethrough"></i>
+                  </button> -->
+                  <button type="button" id="superscript" class="option-button script">
+                    <i class="fa-solid fa-superscript"></i>
+                  </button>
+                  <button type="button" id="subscript" class="option-button script">
+                    <i class="fa-solid fa-subscript"></i>
+                  </button>
+                  <button type="button" id="insertOrderedList" class="option-button">
+                    <div class="fa-solid fa-list-ol"></div>
+                  </button>
+                  <button type="button" id="insertUnorderedList" class="option-button">
+                    <i class="fa-solid fa-list"></i>
+                  </button>
+                  <button type="button" id="undo" class="option-button">
+                    <i class="fa-solid fa-rotate-left"></i>
+                  </button>
+                  <button type="button" id="redo" class="option-button">
+                    <i class="fa-solid fa-rotate-right"></i>
+                  </button>
+                  <button type="button" id="createLink" class="adv-option-button">
+                    <i class="fa fa-link"></i>
+                  </button>
+                  <button type="button" id="unlink" class="option-button">
+                    <i class="fa fa-unlink"></i>
+                  </button>
+                  <button type="button" id="justifyLeft" class="option-button align">
+                    <i class="fa-solid fa-align-left"></i>
+                  </button>
+                  <button type="button" id="justifyCenter" class="option-button align">
+                    <i class="fa-solid fa-align-center"></i>
+                  </button>
+                  <button type="button" id="justifyRight" class="option-button align">
+                    <i class="fa-solid fa-align-right"></i>
+                  </button>
+                  <button type="button" id="justifyFull" class="option-button align">
+                    <i class="fa-solid fa-align-justify"></i>
+                  </button>
+                  <button type="button" id="indent" class="option-button spacing">
+                    <i class="fa-solid fa-indent"></i>
+                  </button>
+                  <button type="button" id="outdent" class="option-button spacing">
+                    <i class="fa-solid fa-outdent"></i>
+                  </button>
+                  <select id="formatBlock" class="adv-option-button">
+                    <option value="H1">H1</option>
+                    <option value="H2">H2</option>
+                    <option value="H3">H3</option>
+                    <option value="H4">H4</option>
+                    <option value="H5">H5</option>
+                    <option value="H6">H6</option>
+                  </select>
+                  <select id="fontName" class="adv-option-button"></select>
+                  <select id="fontSize" class="adv-option-button"></select>
+                  <!-- <div class="input-wrapper">
+                    <input type="color" id="foreColor" class="adv-option-button" />
+                    <p style='font-family: "Poppins", sans-serif;' for="foreColor">Font Color</p>
+                  </div>
+                  <div class="input-wrapper">
+                    <input type="color" id="backColor" class="adv-option-button" />
+                    <p style='font-family: "Poppins", sans-serif;' for="backColor">Highlight Color</p>
+                  </div> -->
+                </div>
+                <div id="text-input" contenteditable="true"></div>
+              </div>
+              <input type="hidden" name="divText" id="divText">
+            </div>
+
+        </div>
+      </div>
+      <center>
+        <button id="submitbtn" type="submit" onclick="runn()">
+          Submit
+        </button>
+      </center>
+      </form>
+    </div>
+</body>
+
+<script>
+  function runn() {
+    document.getElementById("divText").value = document.getElementById("text-input").innerHTML;
+  }
+  let optionsButtons = document.querySelectorAll(".option-button");
+  let advancedOptionButton = document.querySelectorAll(".adv-option-button");
+  let fontName = document.getElementById("fontName");
+  let fontSizeRef = document.getElementById("fontSize");
+  let writingArea = document.getElementById("text-input");
+  let linkButton = document.getElementById("createLink");
+  let alignButtons = document.querySelectorAll(".align");
+  let spacingButtons = document.querySelectorAll(".spacing");
+  let formatButtons = document.querySelectorAll(".format");
+  let scriptButtons = document.querySelectorAll(".script");
+
+  let fontList = [
+    "Arial",
+    "Verdana",
+    "Times New Roman",
+    "Garamond",
+    "Georgia",
+    "Courier New",
+    "cursive",
+  ];
+
+  const initializer = () => {
+    highlighter(alignButtons, true);
+    highlighter(spacingButtons, true);
+    highlighter(formatButtons, false);
+    highlighter(scriptButtons, true);
+
+    fontList.map((value) => {
+      let option = document.createElement("option");
+      option.value = value;
+      option.innerHTML = value;
+      fontName.appendChild(option);
+    });
+
+    for (let i = 1; i <= 7; i++) {
+      let option = document.createElement("option");
+      option.value = i;
+      option.innerHTML = i;
+      fontSizeRef.appendChild(option);
+    }
+
+    fontSizeRef.value = 3;
+  };
+
+  const modifyText = (command, defaultUi, value) => {
+    document.execCommand(command, defaultUi, value);
+  };
+
+  optionsButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      modifyText(button.id, false, null);
+    });
+  });
+
+  advancedOptionButton.forEach((button) => {
+    button.addEventListener("change", () => {
+      modifyText(button.id, false, button.value);
+    });
+  });
+
+  linkButton.addEventListener("click", () => {
+    let userLink = prompt("Enter a URL");
+    document.getElementById(linkButton.id).href = userLink;
+    modifyText(linkButton.id, false, userLink);
+  });
+
+  const highlighter = (className, needsRemoval) => {
+    className.forEach((button) => {
+      button.addEventListener("click", () => {
+        if (needsRemoval) {
+          let alreadyActive = false;
+
+          if (button.classList.contains("active")) {
+            alreadyActive = true;
+          }
+
+          highlighterRemover(className);
+          if (!alreadyActive) {
+            button.classList.add("active");
+          }
+        } else {
+          button.classList.toggle("active");
+        }
+      });
+    });
+  };
+
+  const highlighterRemover = (className) => {
+    className.forEach((button) => {
+      button.classList.remove("active");
+    });
+  };
+
+  window.onload = initializer();
+</script>
+
+</html>

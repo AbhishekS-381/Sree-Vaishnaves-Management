@@ -1,0 +1,105 @@
+<html>
+
+<head>
+  <title>Minutes of Meet</title>
+  <link href="/css/layout.css" rel="stylesheet">
+  <% if(flag==1){%>
+    <link href="/css/homePage.css" rel="stylesheet">
+    <link href="/css/actionItems.css" rel="stylesheet">
+    <link href="/css/minutesContent.css" rel="stylesheet">
+    <%}else{%>
+      <link href="/cssLight/homePage.css" rel="stylesheet">
+      <link href="/cssLight/actionItems.css" rel="stylesheet">
+      <link href="/cssLight/minutesContent.css" rel="stylesheet">
+      <%}%>
+        <link rel="icon" type="image/x-icon" href="https://myadp.adpcorp.com/themes/custom/customadp/favicon.ico">
+</head>
+
+<body>
+  <div class="col col-12" id="loginDiv">
+    <div class="landing-page">
+      <div class="container">
+        <div class="header-area">
+          <div class="logo">Hi <b id="heading">
+              <%=userName%>
+            </b></div>
+          <ul class="links">
+            <a href="/manager/home/<%=userToken%>/<%=flag%>">
+              <li>Home</li>
+            </a>
+            <a href="/manager/team/<%=userToken%>/<%=flag%>">
+              <li>Team</li>
+            </a>
+            <a href="/manager/meet/<%=userToken%>/<%=flag%>">
+              <li>Meet</li>
+            </a>
+            <a href="/manager/minutes/content/<%=userToken%>/<%=flag%>">
+              <li id="highlight">Meet History</li>
+            </a>
+            <a href="/manager/queries/<%=userToken%>/<%=flag%>">
+              <li>Queries</li>
+            </a>
+            <a href="/manager/actionitems/<%=userToken%>/<%=flag%>">
+              <li>Action Items</li>
+            </a>
+            <a href="/logout/<%=userToken%>">
+              <li>Logout</li>
+            </a>
+          </ul>
+        </div>
+        <div id="subHeader-area">
+          <ul id="sublinks">
+            <a href="/manager/minutes/content/<%=userToken%>/<%=flag%>">
+              <li class="subli">Contents</li>
+            </a>
+            <a href="/manager/minutes/links/<%=userToken%>/<%=flag%>">
+              <li class="subli" id="highlight">Links</li>
+            </a>
+          </ul>
+        </div>
+      </div>
+      <% for( var j=0; j < team.length; j++){ %>
+        <% for( var i=0; i < links.length; i++){ %>
+          <% if(links[i].teamName==team[j].teamName) { %>
+            <div class="col col-12" id="tableDiv">
+              <div class="minutesContent-box col col-12">
+                <h2 id="cardTitle">
+                  <%= links[i].meetDate %>
+                </h2>
+                <div class="col col-12">
+                  <div class="col col-2">
+                    <h5>Team Name : </p>
+                  </div>
+                  <div class="col col-4">
+                    <p id="subtitle">
+                      <%= links[i].teamName %>
+                    </p>
+                  </div>
+                </div>
+                <div class="col col-12">
+                  <ul>
+                    <li>
+                      <div class="col-6 col">
+                        <label>
+                          <%= links[i].content %>
+                        </label>
+                        <label id="spacing"> : </label>
+                        <label id="link">
+                          <a href="https://<%= links[i].link %>">
+                            <%= links[i].link %>
+                          </a>
+                        </label>
+                      </div>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+            <% } %>
+              <% } %>
+                <% } %>
+    </div>
+  </div>
+</body>
+
+</html>

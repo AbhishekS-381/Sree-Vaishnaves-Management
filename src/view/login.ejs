@@ -1,0 +1,66 @@
+<html>
+
+<head>
+  <title>Minutes of Meet</title>
+  <link href="/css/login.css" rel="stylesheet">
+  <link href="/css/layout.css" rel="stylesheet">
+  <link rel="icon" type="image/x-icon" href="https://myadp.adpcorp.com/themes/custom/customadp/favicon.ico">
+</head>
+
+<body>
+  <div class="col col-12" id="loginDiv">
+    <div class="container" id="container">
+      <div class="form-container sign-up-container">
+        <form id="createUser" action="/signup" method="POST">
+          <h1 id="topCard">Create Account</h1>
+          <input type="text" name="name" placeholder="Name" autocomplete="off" /required>
+          <input type="number" name="id" placeholder="Employee ID" autocomplete="off" /required>
+          <input type="email" name="email" placeholder="Email" autocomplete="off" /required>
+          <input type="text" name="type" placeholder="Manager/Employee" autocomplete="off" /required>
+          <input type="password" name="password" placeholder="Password" autocomplete="off" /required>
+          <button>Sign Up</button>
+        </form>
+      </div>
+      <div class="form-container sign-in-container">
+        <form id="loginForm" action="/home" method="POST">
+          <h1 id="topCard">Sign in</h1>
+          <input type="number" name="employeeID" placeholder="Employee ID" autocomplete="off" /required>
+          <input type="password" name="password" placeholder="Password" autocomplete="off" /required>
+          <a href="/reset">Reset your password</a>
+          <% if(flag===1){%>
+            <p id="warning">Invalid Login Credentials !!!</p>
+            <%}%>
+              <button id="signin">Sign In</button>
+        </form>
+      </div>
+      <div class="overlay-container">
+        <div class="overlay">
+          <div class="overlay-panel overlay-left">
+            <h1>Welcome Back!</h1>
+            <p>To experience minute of meet, login</p>
+            <button class="ghost" id="signIn">Sign In</button>
+          </div>
+          <div class="overlay-panel overlay-right">
+            <h1>Hello, Employee!</h1>
+            <p>Create an account and experience minutes of meet</p>
+            <button class="ghost" id="signUp">Sign Up</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+
+<script>
+  const signUpButton = document.getElementById('signUp');
+  const signInButton = document.getElementById('signIn');
+  const container = document.getElementById('container');
+  signUpButton.addEventListener('click', () => {
+    container.classList.add("right-panel-active");
+  });
+  signInButton.addEventListener('click', () => {
+    container.classList.remove("right-panel-active");
+  });
+</script>
+
+</html>

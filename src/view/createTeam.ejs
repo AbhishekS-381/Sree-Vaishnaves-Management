@@ -1,0 +1,151 @@
+<html>
+
+<head>
+  <title>Minutes of Meet</title>
+  <link href="/css/layout.css" rel="stylesheet">
+  <% if(flag==1){%>
+    <link href="/css/homePage.css" rel="stylesheet">
+    <link href="/css/actionItems.css" rel="stylesheet">
+    <link href="/css/createMinute.css" rel="stylesheet">
+    <%}else{%>
+      <link href="/cssLight/homePage.css" rel="stylesheet">
+      <link href="/cssLight/actionItems.css" rel="stylesheet">
+      <link href="/cssLight/createMinute.css" rel="stylesheet">
+      <%}%>
+        <link rel="icon" type="image/x-icon" href="https://myadp.adpcorp.com/themes/custom/customadp/favicon.ico">
+</head>
+
+<body>
+  <div class="col col-12" id="loginDiv">
+    <div class="landing-page">
+      <div class="container">
+        <div class="header-area">
+          <div class="logo">Hi <b id="heading">
+              <%=userName%>
+            </b></div>
+          <ul class="links">
+            <a href="/manager/home/<%=userToken%>/<%=flag%>">
+              <li>Home</li>
+            </a>
+            <a href="/manager/team/<%=userToken%>/<%=flag%>">
+              <li id="highlight">Team</li>
+            </a>
+            <a href="/manager/meet/<%=userToken%>/<%=flag%>">
+              <li>Meet</li>
+            </a>
+            <a href="/manager/minutes/content/<%=userToken%>/<%=flag%>">
+              <li>Minutes of Meet</li>
+            </a>
+            <a href="/manager/queries/<%=userToken%>/<%=flag%>">
+              <li>Queries</li>
+            </a>
+            <a href="/manager/actionitems/<%=userToken%>/<%=flag%>">
+              <li>Action Items</li>
+            </a>
+            <a href="/logout/<%=userToken%>">
+              <li>Logout</li>
+            </a>
+          </ul>
+        </div>
+      </div>
+      <div class="col col-12" id="tableDiv">
+        <div class="query-box">
+          <h2 id="cardTitle">Create Team</h2>
+          <form id="createTeam" action="/manager/createTeam/<%=userToken%>/<%=flag%>" method="POST">
+            <div class="user-box">
+              <input type="text" name="teamName" required="" autocomplete="off">
+              <label>Team Name</label>
+            </div>
+            <div class="user-box">
+              <input type="text" name="details" required="" autocomplete="off">
+              <label>Team functional description</label>
+            </div>
+            <button id="querySubmit">
+              <a>
+                <span></span>
+                <span></span>
+                <span></span>
+                <span></span>
+                Submit
+              </a>
+            </button>
+          </form>
+        </div>
+        <% for( var i=0; i < team.length; i++){ %>
+          <div class="query-box" style="overflow-y: scroll; height: 600px">
+            <h2 id="cardTitle">
+              <%=team[i].teamName%>
+            </h2>
+            <p id="addMember">Team Description</p>
+            <p id="teamDetails">
+              <%=team[i].details%>
+            </p>
+
+            <p id="addMember">Add members</p>
+            <form action="/manager/team/newMember/<%=team[i].teamName%>/<%=userToken%>/<%=flag%>" method="POST">
+              <input class="addNewMember" type="text" list="brow" name="newEmployee" placeholder="  Add Employee ID..."
+                autocomplete="off">
+              <datalist id="brow">
+                <% for( var k=0; k < employee.length; k++){ %>
+                  <option value="<%= employee[k].employeeID %>">
+                    <%= employee[k].employeeName %>
+                  </option>
+                  <%}%>
+              </datalist>
+              <button id="deleteBtn">Add Team Member</button>
+            </form>
+            <div>
+              <p id="addMember">Remove members</p>
+              <ul id="taskList">
+                <% for( var j=0; j < members.length; j++){ %>
+                  <div class="col-12 col">
+                    <% if(members[j].teamName==team[i].teamName) { %>
+                      <li>
+                        <form id="removeMember"
+                          action="/manager/team/removeMember/<%=team[i].teamName%>/<%=members[j].employeeID%>/<%=userToken%>/<%=flag%>"
+                          method="POST">
+                          <div class="col-4 col">
+                            <label style="color: #6d23cf;">Employee ID : </label>
+                            <label>
+                              <%= members[j].employeeID %>
+                            </label>
+                          </div>
+                          <div class="col-4 col">
+                            <% for( var k=0; k < employee.length; k++){ %>
+                              <% if(members[j].employeeID==employee[k].employeeID) { %>
+                                <label style="color: #6d23cf;">Employee Name : </label>
+                                <label>
+                                  <%= employee[k].employeeName %>
+                                </label>
+                                <%}%>
+                                  <%}%>
+                          </div>
+                          <div class="col-4 col">
+                            <button id="deleteBtn">Remove Team Member</button>
+                          </div>
+                        </form>
+                      </li>
+                      <% } %>
+                  </div>
+                  <% } %>
+              </ul>
+            </div>
+            <form action="/manager/team/delete/<%=team[i].teamName%>/<%=userToken%>/<%=flag%>" method="POST">
+              <button id="querySubmit">
+                <a>
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                  Delete team
+                </a>
+              </button>
+            </form>
+          </div>
+          <% } %>
+      </div>
+    </div>
+  </div>
+</body>
+
+</html>

@@ -1,0 +1,92 @@
+<html>
+
+<head>
+  <title>Minutes of Meet</title>
+  <link href="/css/layout.css" rel="stylesheet">
+  <% if(flag==1){%>
+    <link href="/css/homePage.css" rel="stylesheet">
+    <link href="/css/actionItems.css" rel="stylesheet">
+    <%}else{%>
+      <link href="/cssLight/homePage.css" rel="stylesheet">
+      <link href="/cssLight/actionItems.css" rel="stylesheet">
+      <%}%>
+        <link rel="icon" type="image/x-icon" href="https://myadp.adpcorp.com/themes/custom/customadp/favicon.ico">
+</head>
+
+<body>
+  <div class="col col-12" id="queryDiv">
+    <div class="landing-page">
+      <div class="container">
+        <div class="header-area">
+          <div class="logo">Hi <b id="heading">
+              <%=userName%>
+            </b></div>
+          <ul class="links">
+            <a href="/employee/home/<%=userToken%>/<%=flag%>">
+              <li>Home</li>
+            </a>
+            <a href="/employee/minutes/content/<%=userToken%>/<%=flag%>">
+              <li>Meet History</li>
+            </a>
+            <a href="/employee/queries/<%=userToken%>/<%=flag%>">
+              <li>Raise Query</li>
+            </a>
+            <a href="/employee/actionitems/<%=userToken%>/<%=flag%>">
+              <li id="highlight">Action Items</li>
+            </a>
+            <a href="/logout/<%=userToken%>">
+              <li>Logout</li>
+            </a>
+          </ul>
+        </div>
+        <div class="col col-12">
+          <section>
+            <h1>Your Action Items</h1>
+            <div class="tbl-header">
+              <table cellpadding="0" cellspacing="0">
+                <thead>
+                  <tr>
+                    <th>No</th>
+                    <th>Action Items</th>
+                    <th>Assigned on</th>
+                    <th>Team Name</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+              </table>
+            </div>
+            <div class="tbl-content">
+              <table cellpadding="0" cellspacing="0">
+                <tbody>
+                  <tr>
+                    <% for( var i=0; i < actionItems.length; i++){ %>
+                      <td>
+                        <%= i+1 %>
+                      </td>
+                      <td>
+                        <%= actionItems[i].task %>
+                      </td>
+                      <td>
+                        <%= actionItems[i].assignedDate %>
+                      </td>
+                      <td>
+                        <%= actionItems[i].teamName %>
+                      </td>
+                      <% if(actionItems[i].currentStatus==0) { %>
+                        <td>Pending</td>
+                        <% } else { %>
+                          <td>Completed</td>
+                          <% } %>
+                  </tr>
+                  <% } %>
+                    </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+</body>
+
+</html>

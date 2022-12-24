@@ -1,0 +1,179 @@
+.query-box {
+  width: 100%;
+  padding: 2%;
+  margin-top: 5%;
+  margin-bottom: 50px;
+  background: whitesmoke;
+  box-sizing: border-box;
+  box-shadow: 0 15px 25px rgba(0,0,0,.6);
+  border-radius: 10px;
+}
+
+.query-box h2 {
+  margin: 0 0 30px;
+  padding: 0;
+  color: black;
+  text-align: center;
+}
+
+.query-box .user-box {
+  position: relative;
+}
+
+.query-box .user-box input {
+  width: 100%;
+  padding: 10px 0;
+  font-size: 16px;
+  color: black;
+  margin-bottom: 30px;
+  border: none;
+  border-bottom: 1px solid black;
+  outline: none;
+  background: transparent;
+}
+.query-box .user-box label {
+  position: absolute;
+  top:0;
+  left: 0;
+  padding: 10px 0;
+  font-size: 16px;
+  color: black;
+  pointer-events: none;
+  transition: .5s;
+}
+
+.query-box .user-box input:focus ~ label,
+.query-box .user-box input:valid ~ label {
+  top: -20px;
+  left: 0;
+  color: #6d23cf;
+  font-size: 12px;
+}
+
+.query-box form a {
+  position: relative;
+  display: inline-block;
+  padding: 10px 20px;
+  color: #6d23cf;
+  font-size: 16px;
+  text-decoration: none;
+  text-transform: uppercase;
+  overflow: hidden;
+  transition: .5s;
+  margin-top: 40px;
+  letter-spacing: 4px
+}
+
+#list{
+  margin-top: 2%;
+}
+
+.action-item{
+  font-size: 16px;
+  color: black;
+}
+
+#cardTitle{
+  color: #6d23cf;
+  margin-bottom: 50px;
+}
+
+#tempLabel{
+  top:0;
+  left: 0;
+  padding: 10px 0;
+  font-size: 16px;
+  color: black;
+  pointer-events: none;
+  transition: .5s;
+}
+
+.itemlist{
+  margin-left: 5%;
+}
+
+.subtitle{
+  color: #6d23cf;
+}
+
+#querySubmit{
+  background-color: whitesmoke;
+  border: none;
+  cursor: pointer;
+}
+
+#addMember{
+  color: #6d23cf; 
+  margin-top: 50px; 
+  margin-bottom: 30px;
+  font-size: larger;
+  font-weight: bolder;
+}
+
+#taskList{
+  color: black;
+  list-style-type:number;
+  font-size: medium;
+  font-weight: bold;
+  padding-left: 20px;
+  margin-bottom: 80px;
+}
+
+#deleteBtn{
+  border-radius: 10px;
+  height: 25px;
+  width: 200px;
+  background-color: #6d23cf;
+  color: white;
+  border:none;
+}
+
+.addNewMember{
+  margin-left: 50px;
+  margin-right: 185px;
+  height: 30px;
+  width: 300px;
+  border-radius: 25px;
+  border-color: #6d23cf;
+}
+
+.addNewTask{
+  margin-left: 10px;
+  margin-right: 50px;
+  height: 30px;
+  width: 300px;
+  border-radius: 25px;
+  border-color: #6d23cf;
+}
+
+#teamDetails{
+  color: black;
+  margin-top: 50px; 
+  margin-bottom: 30px;
+  font-size: larger;
+  font-weight: bolder;
+}
+
+#spacing{
+  margin-left: 5px;
+  margin-right: 5px;
+}
+
+#submitbtn{
+  border-radius: 10px;
+  height: 35px;
+  width: 100px;
+  background-color: #6d23cf;
+  color: white;
+  border:none;
+}
+
+#picklist{
+  border-radius: 25px;
+  border-color: #6d23cf;
+  margin-left: 10px;
+  margin-right: 50px;
+  height: 30px;
+  width: 300px;
+  border-width: 2px;
+}

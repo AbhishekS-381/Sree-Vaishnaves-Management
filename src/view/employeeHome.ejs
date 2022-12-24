@@ -1,0 +1,66 @@
+<html>
+
+<head>
+  <title>Minutes of Meet</title>
+  <link href="/css/layout.css" rel="stylesheet" type="text/css">
+  <% if(flag==1){%>
+    <link href="/css/homePage.css" rel="stylesheet" type="text/css">
+    <%}else{%>
+      <link href="/cssLight/homePage.css" rel="stylesheet" type="text/css">
+      <%}%>
+        <link rel="icon" type="image/x-icon" href="https://myadp.adpcorp.com/themes/custom/customadp/favicon.ico">
+</head>
+
+<body>
+  <div class="col col-12" id="loginDiv">
+    <div class="landing-page">
+      <div class="container">
+        <div class="header-area">
+          <div class="logo">Hi <b id="heading">
+              <%=userName%>
+            </b>
+          </div>
+          <ul class="links">
+            <a href="/employee/home/<%=userToken%>/<%=flag%>">
+              <li id="highlight">Home</li>
+            </a>
+            <a href="/employee/minutes/content/<%=userToken%>/<%=flag%>">
+              <li>Meet History</li>
+            </a>
+            <a href="/employee/queries/<%=userToken%>/<%=flag%>">
+              <li>Raise Query</li>
+            </a>
+            <a href="/employee/actionitems/<%=userToken%>/<%=flag%>">
+              <li>Action Items</li>
+            </a>
+            <a href="/logout/<%=userToken%>">
+              <li>Logout</li>
+            </a>
+            <% if(flag==1){%>
+              <a href="/employee/home/<%=userToken%>/0">
+                <li id="darkLight">Switch to Light Mode</li>
+              </a>
+              <%}else{%>
+                <a href="/employee/home/<%=userToken%>/1">
+                  <li id="darkLight">Switch to Dark Mode</li>
+                </a>
+                <%}%>
+          </ul>
+        </div>
+        <div class="info">
+          <h1 id="heading">Minutes of Meeting</h1>
+          <p>Meeting minutes are notes taken of discussions and decisions made during meetings.</p>
+          <p>It’s important that the right person take notes because the note-taker must be able to
+            quickly determine which information is pertinent, and what can be left out.
+          </p>
+          <a href="/employee/minutes/content/<%=userToken%>/<%=flag%>"><button>View Minutes</button></a>
+        </div>
+        <div class="image">
+          <img src="/images/homePage.png">
+        </div>
+        <div class="clearfix"></div>
+      </div>
+    </div>
+  </div>
+
+</html>

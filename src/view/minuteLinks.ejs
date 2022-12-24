@@ -1,0 +1,113 @@
+<html>
+
+<head>
+  <title>Minutes of Meet</title>
+  <link href="/css/layout.css" rel="stylesheet">
+  <% if(flag==1){%>
+    <link href="/css/homePage.css" rel="stylesheet">
+    <link href="/css/actionItems.css" rel="stylesheet">
+    <link href="/css/createMinute.css" rel="stylesheet">
+    <link href="/css/minutesContent.css" rel="stylesheet">
+    <%}else{%>
+      <link href="/cssLight/homePage.css" rel="stylesheet">
+      <link href="/cssLight/actionItems.css" rel="stylesheet">
+      <link href="/cssLight/createMinute.css" rel="stylesheet">
+      <link href="/cssLight/minutesContent.css" rel="stylesheet">
+      <%}%>
+        <link rel="icon" type="image/x-icon" href="https://myadp.adpcorp.com/themes/custom/customadp/favicon.ico">
+</head>
+
+<body>
+  <div class="col col-12" id="loginDiv">
+    <div class="landing-page">
+      <div class="container">
+        <div class="header-area">
+          <div class="logo">Hi <b id="heading">
+              <%=userName%>
+            </b></div>
+          <ul class="links">
+            <a href="/manager/home/<%=userToken%>/<%=flag%>">
+              <li>Home</li>
+            </a>
+            <a href="/manager/team/<%=userToken%>/<%=flag%>">
+              <li>Team</li>
+            </a>
+            <a href="/manager/meet/<%=userToken%>/<%=flag%>">
+              <li id="highlight">Meet</li>
+            </a>
+            <a href="/manager/minutes/content/<%=userToken%>/<%=flag%>">
+              <li>Meet History</li>
+            </a>
+            <a href="/manager/queries/<%=userToken%>/<%=flag%>">
+              <li>Queries</li>
+            </a>
+            <a href="/manager/actionitems/<%=userToken%>/<%=flag%>">
+              <li>Action Items</li>
+            </a>
+            <a href="/logout/<%=userToken%>">
+              <li>Logout</li>
+            </a>
+          </ul>
+        </div>
+        <div id="subHeader-area">
+          <ul id="sublinks">
+            <a href="/manager/meet/<%=userToken%>/<%=flag%>">
+              <li class="subli" id="highlight">Minutes Entry</li>
+            </a>
+            <a href="/manager/meet/editActionItem/<%=userToken%>/<%=flag%>">
+              <li class="subli">Edit Action Items</li>
+            </a>
+          </ul>
+        </div>
+      </div>
+      <div class="col col-12" id="tableDiv">
+        <div class="query-box">
+          <h2 style="margin-bottom: 50px;" id="cardTitle">Add Hyper Links or Document's Drive Links</h2>
+          <form action="/manager/meet/addLink/<%=teamName%>/<%=userToken%>/<%=flag%>" method="POST">
+            <input class="addNewTask" type="text" name="content" placeholder="  Add link content..." autocomplete="off">
+            <input class="addNewTask" type="text" name="link" placeholder="  Add link..." autocomplete="off">
+            <button id="deleteBtn">Add Link</button>
+          </form>
+          <ul id="taskList">
+            <% for( var i=0; i < links.length; i++){ %>
+              <div class="col-12 col">
+                <% if(links[i].teamName==teamName) { %>
+                  <li>
+                    <form id="removeLink" action="/manager/meet/removeLink/<%=teamName%>/<%=userToken%>/<%=flag%>"
+                      method="POST">
+                      <input name="link" value="<%= links[i].link %>" hidden>
+                      <div class="col-6 col">
+                        <label>
+                          <%= links[i].content %>
+                        </label>
+                        <label id="spacing"> : </label>
+                        <label>
+                          <%= links[i].link %>
+                        </label>
+                      </div>
+                      <div class="col-6 col">
+                        <button id="deleteBtn">Remove Link</button>
+                      </div>
+                    </form>
+                  </li>
+                  <% } %>
+              </div>
+              <% } %>
+          </ul>
+          <form action="/manager/meet/<%=userToken%>/<%=flag%>" method="GET">
+            <button id="querySubmit">
+              <a>
+                <span></span>
+                <span></span>
+                <span></span>
+                <span></span>
+                Submit
+              </a>
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+</body>
+
+</html>

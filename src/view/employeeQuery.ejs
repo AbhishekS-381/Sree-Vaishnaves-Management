@@ -1,0 +1,78 @@
+<html>
+
+<head>
+  <title>Minutes of Meet</title>
+  <link href="/css/layout.css" rel="stylesheet">
+  <% if(flag==1){%>
+    <link href="/css/homePage.css" rel="stylesheet">
+    <link href="/css/raiseQuery.css" rel="stylesheet">
+    <%}else{%>
+      <link href="/cssLight/homePage.css" rel="stylesheet">
+      <link href="/cssLight/raiseQuery.css" rel="stylesheet">
+      <%}%>
+        <link rel="icon" type="image/x-icon" href="https://myadp.adpcorp.com/themes/custom/customadp/favicon.ico">
+</head>
+
+<body>
+  <div class="col col-12" id="queryDiv">
+    <div class="landing-page">
+      <div class="container">
+        <div class="header-area">
+          <div class="logo">Hi <b id="heading">
+              <%=userName%>
+            </b></div>
+          <ul class="links">
+            <a href="/employee/home/<%=userToken%>/<%=flag%>">
+              <li>Home</li>
+            </a>
+            <a href="/employee/minutes/content/<%=userToken%>/<%=flag%>">
+              <li>Meet History</li>
+            </a>
+            <a href="/employee/queries/<%=userToken%>/<%=flag%>">
+              <li id="highlight">Raise Query</li>
+            </a>
+            <a href="/employee/actionitems/<%=userToken%>/<%=flag%>">
+              <li>Action Items</li>
+            </a>
+            <a href="/logout/<%=userToken%>">
+              <li>Logout</li>
+            </a>
+          </ul>
+        </div>
+        <div class="col col-12">
+          <div class="query-box">
+            <h2 id="cardTitle">Enter the Query</h2>
+            <form id="addQuery" action="/employee/queries/addQuery/<%=userToken%>/<%=flag%>" method="POST">
+              <div class="user-box">
+                <input type="text" list="brow" name="team" required="" placeholder="Team Name" autocomplete="off">
+                <datalist id="brow">
+                  <% for( var i=0; i < team.length; i++){ %>
+                    <option value="<%= team[i].teamName %>"></option>
+                    <%}%>
+                </datalist>
+              </div>
+              <div class="user-box">
+                <input type="text" name="querySubject" required="" autocomplete="off">
+                <label>Query Subject</label>
+              </div>
+              <div class="user-box">
+                <input type="text" name="queryDetails" required="" autocomplete="off">
+                <label>Detailed explanation of Query</label>
+              </div>
+              <button id="querySubmit">
+                <a>
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                  Submit
+                </a>
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+</body>
+
+</html>
