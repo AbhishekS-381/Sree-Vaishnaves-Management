@@ -1,6 +1,6 @@
-var mysql = require('mysql2');
-require('dotenv').config();
-const { QUERIES } = require('../constants/index')
+var mysql = require("mysql2");
+require("dotenv").config();
+const { QUERIES } = require("../constants/index");
 
 let connectionCreated = null;
 let connectionFailed = null;
@@ -8,51 +8,34 @@ let connectionFailed = null;
 const connectionPromise = new Promise((res, rej) => {
   connectionCreated = res;
   connectionFailed = rej;
-})
-var con = mysql.createConnection({
-  host: "sql207.epizy.com",
-  port: 3306,
-  user: "epiz_33257278",
-  password: "mdpziqDVBon",
-  database: "epiz_33257278_HotelSreeVaishnaves	"
 });
+var con = mysql.createConnection(process.env.DATABASE_URL_DEVELOP);
 
 con.connect(function (err) {
   if (err) {
     connectionFailed(err);
     return;
-  }
-  else {
+  } else {
     try {
-      con.query('CREATE DATABASE IF NOT EXISTS sql6529296', function (err, result) {
+      con.query(QUERIES.CREATE_USER_DETAILS, function (err, result) {
         if (err) throw err;
-        con.query(QUERIES.CREATE_USER_DETAILS, function (err, result) {
-          if (err) throw err;
-        });
-        con.query(QUERIES.CREATE_TEAM_DETAILS, function (err, result) {
-          if (err) throw err;
-        });
-        con.query(QUERIES.CREATE_TEAM_MAPPING, function (err, result) {
-          if (err) throw err;
-        });
-        con.query(QUERIES.CREATE_ACTION_ITEMS, function (err, result) {
-          if (err) throw err;
-        });
-        con.query(QUERIES.CREATE_MEET_SUMMARY, function (err, result) {
-          if (err) throw err;
-        });
-        con.query(QUERIES.CREATE_QUERY_DETAILS, function (err, result) {
-          if (err) throw err;
-        });
-        con.query(QUERIES.CREATE_MINUTE_LINK, function (err, result) {
-          if (err) throw err;
-        });
-        con.query(QUERIES.CREATE_SESSION_CHECK, function (err, result) {
-          if (err) throw err;
-        });
       });
-    }
-    catch (e) {
+      con.query(QUERIES.CREATE_EMPLOYEE_DETAILS, function (err, result) {
+        if (err) throw err;
+      });
+      con.query(QUERIES.CREATE_STOCK_DETAILS, function (err, result) {
+        if (err) throw err;
+      });
+      con.query(QUERIES.CREATE_STOCK_HISTORY, function (err, result) {
+        if (err) throw err;
+      });
+      con.query(QUERIES.CREATE_FEEDBACK_DETAILS, function (err, result) {
+        if (err) throw err;
+      });
+      con.query(QUERIES.CREATE_SESSION_CHECK, function (err, result) {
+        if (err) throw err;
+      });
+    } catch (e) {
       console.log(e);
     }
     connectionCreated();
@@ -64,7 +47,11 @@ var startTime;
 function createNewUser(id, name, token, password, email, type, callback) {
   connectionPromise
     .then(() => {
-      con.query(QUERIES.CREATE_NEW_USER, [id, name, token, password, email, type], callback);
+      con.query(
+        QUERIES.CREATE_NEW_USER,
+        [id, name, token, password, email, type],
+        callback
+      );
     })
     .catch((err) => callback(err));
 }
@@ -176,7 +163,11 @@ function getLinkDesc(callback) {
 function addNewTeam(name, details, id, empName, callback) {
   connectionPromise
     .then(() => {
-      con.query(QUERIES.CREATE_NEW_TEAM, [name, details, id, empName], callback);
+      con.query(
+        QUERIES.CREATE_NEW_TEAM,
+        [name, details, id, empName],
+        callback
+      );
     })
     .catch((err) => callback(err));
 }
@@ -312,7 +303,11 @@ function getTime(team, callback) {
 function newQuery(id, name, team, manager, date, subject, details, callback) {
   connectionPromise
     .then(() => {
-      con.query(QUERIES.CREATE_NEW_QUERY, [id, name, team, manager, date, subject, details], callback);
+      con.query(
+        QUERIES.CREATE_NEW_QUERY,
+        [id, name, team, manager, date, subject, details],
+        callback
+      );
     })
     .catch((err) => callback(err));
 }
@@ -320,15 +315,48 @@ function newQuery(id, name, team, manager, date, subject, details, callback) {
 function newMinute(team, start, manager, content, end, callback) {
   connectionPromise
     .then(() => {
-      con.query(QUERIES.CREATE_NEW_MINUTE, [team, start, manager, content, end], callback);
+      con.query(
+        QUERIES.CREATE_NEW_MINUTE,
+        [team, start, manager, content, end],
+        callback
+      );
     })
     .catch((err) => callback(err));
 }
 
 module.exports = {
-  createNewUser, forLogin, getEmpDetail, getManager, getteamName, startTime, getLinkDesc, getAllLink,
-  getMinutes, getAllMinutes, getTeam, newQuery, newMinute, addNewTeam, getQuery, getActionItem, addNewMember,
-  getmembers, removeTeamMember, removeTeam, removeTeamAndMembers, addNewTask, getAllTask, removeActionItem,
-  addNewLink, removeMinuteLink, getTime, getManagerMinutes, addSession, getStatus, createSession, endSession,
-  updatePassword, getallmembers
+  createNewUser,
+  forLogin,
+  getEmpDetail,
+  getManager,
+  getteamName,
+  startTime,
+  getLinkDesc,
+  getAllLink,
+  getMinutes,
+  getAllMinutes,
+  getTeam,
+  newQuery,
+  newMinute,
+  addNewTeam,
+  getQuery,
+  getActionItem,
+  addNewMember,
+  getmembers,
+  removeTeamMember,
+  removeTeam,
+  removeTeamAndMembers,
+  addNewTask,
+  getAllTask,
+  removeActionItem,
+  addNewLink,
+  removeMinuteLink,
+  getTime,
+  getManagerMinutes,
+  addSession,
+  getStatus,
+  createSession,
+  endSession,
+  updatePassword,
+  getallmembers,
 };
