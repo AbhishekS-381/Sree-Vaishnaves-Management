@@ -6,6 +6,10 @@ async function loginRedirect(req, res) {
   res.redirect("/login");
 }
 
+async function checkHealth(req, res) {
+  res.writeHead(200, {'Content-Type': 'text/plain'});
+}
+
 async function logout(req, res) {
   try {
     dal.endSession(req.params.userToken, async function (err, status) {
@@ -333,5 +337,5 @@ async function removeLink(req, res) {
 module.exports = {
   loginRedirect, addUser, homepageRender, addQuery, addMinute, createTeam, addMember,
   removeMember, removeTeam, addNewActionItem, removeTask, addLink, removeLink, logout,
-  manageAccount
+  manageAccount, checkHealth
 }

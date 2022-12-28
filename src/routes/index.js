@@ -9,6 +9,7 @@ router.get("/error/:userToken", ViewController.errorRender);
 router.get("/", ApiController.loginRedirect);
 router.get("/logout/:userToken", ApiController.logout);
 router.get("/reset", ViewController.resetRender);
+router.get("/health", ApiController.checkHealth);
 
 router.post("/signup", ApiController.addUser);
 router.post("/home", ApiController.homepageRender);
