@@ -1,0 +1,72 @@
+<html>
+
+<head>
+  <title>Hotel Sree Vaishnaves</title>
+  <link href="../public/commingSoon.css" type="text/css" rel="stylesheet" />
+  <link rel="icon" type="image/x-icon"
+    href="https://lh6.googleusercontent.com/-xYGDz4Ggy-o/AAAAAAAAAAI/AAAAAAAAAAA/hYXgSShQ83I/s60-c-k-mo/photo.jpg" />
+</head>
+
+<body>
+  <div class="container">
+    <img style="width:30%; " src="../public/images/commingSoon.png" class="logo" />
+    <div class="content">
+      <p>Website Is Getting Ready</p>
+      <h1>We're <span>Launching</span> Soon</h1>
+      <div class="launch-time">
+        <div>
+          <p id="days">00</p>
+          <span>Days</span>
+        </div>
+        <div>
+          <p id="hours">00</p>
+          <span>Hours</span>
+        </div>
+        <div>
+          <p id="minutes">00</p>
+          <span>Minutes</span>
+        </div>
+        <div>
+          <p id="seconds">00</p>
+          <span>Seconds</span>
+        </div>
+      </div>
+      <button type="button">
+        <a style="color: white;"
+          href="https://www.google.com/search?q=Hotel+Sree+Vaishnaves&rlz=1C1EJFC_enIN856IN856&oq=hotel&aqs=chrome.0.69i59j69i57j69i59j35i39j0i131i433i512j69i65l2j69i60.1551j0j7&sourceid=chrome&ie=UTF-8">
+          Learn More </a>
+      </button>
+    </div>
+    <img src="https://i.postimg.cc/PfwZ6bDk/rocket.png" class="rocket" />
+  </div>
+</body>
+
+<script>
+  var countDownDate = new Date("Feb 23, 2023 00:00:00").getTime();
+  var x = setInterval(function () {
+    var now = new Date().getTime();
+    var distance = countDownDate - now;
+
+    var days = Math.floor(distance / (1000 * 60 * 60 * 24));
+    var hours = Math.floor(
+      (distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
+    );
+    var minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+    var seconds = Math.floor((distance % (1000 * 60)) / 1000);
+
+    document.getElementById("days").innerHTML = days;
+    document.getElementById("hours").innerHTML = hours;
+    document.getElementById("minutes").innerHTML = minutes;
+    document.getElementById("seconds").innerHTML = seconds;
+
+    if (distance < 0) {
+      clearInterval(x);
+      document.getElementById("days").innerHTML = "00";
+      document.getElementById("hours").innerHTML = "00";
+      document.getElementById("minutes").innerHTML = "00";
+      document.getElementById("seconds").innerHTML = "00";
+    }
+  }, 1000);
+</script>
+
+</html>
