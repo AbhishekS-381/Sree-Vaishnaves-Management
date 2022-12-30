@@ -7,7 +7,7 @@ async function loginRedirect(req, res) {
 }
 
 async function checkHealth(req, res) {
-  res.writeHead(200, {'Content-Type': 'text/plain'});
+  res.sendStatus(200);
 }
 
 async function logout(req, res) {

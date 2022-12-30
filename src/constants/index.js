@@ -1,4 +1,5 @@
 const QUERIES = {
+  CREATE_DATABASE: "CREATE DATABASE IF NOT EXISTS VaishnavesDB",
   CREATE_USER_DETAILS: "CREATE TABLE IF NOT EXISTS user_details (employeeID INT PRIMARY KEY, employeeName VARCHAR(255), userToken VARCHAR(255), employeePassword VARCHAR(255), userType VARCHAR(255), current_status INT)",
   CREATE_EMPLOYEE_DETAILS: "CREATE TABLE IF NOT EXISTS employee_details (employeeID INT PRIMARY KEY, employeeName VARCHAR(255), userToken VARCHAR(255), mobile INT, _address TEXT, salary INT, empType VARCHAR(255), joined DATETIME)",
   CREATE_STOCK_DETAILS: "CREATE TABLE IF NOT EXISTS stock_details (stockName VARCHAR(255), available INT, unit VARCHAR(255), stockType VARCHAR(255))",

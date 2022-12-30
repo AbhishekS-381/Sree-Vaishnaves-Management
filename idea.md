@@ -27,6 +27,12 @@ Employees->
       2. Feedback page
       3. Respective details
 
+Cashier->
+  1. Login with cashiers credentials
+  2. Available pages -
+      1. History of bills
+      2. Billing page
+
 Database required ->
   1. user_details
   2. employee_details
