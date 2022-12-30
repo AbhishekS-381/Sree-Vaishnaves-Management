@@ -9,6 +9,7 @@ const connectionPromise = new Promise((res, rej) => {
   connectionCreated = res;
   connectionFailed = rej;
 });
+
 var con = mysql.createConnection(process.env.DATABASE_URL_DEVELOP);
 
 con.connect(function (err) {
@@ -16,29 +17,8 @@ con.connect(function (err) {
     connectionFailed(err);
     return;
   } else {
-    try {
-      con.query(QUERIES.CREATE_USER_DETAILS, function (err, result) {
-        if (err) throw err;
-      });
-      con.query(QUERIES.CREATE_EMPLOYEE_DETAILS, function (err, result) {
-        if (err) throw err;
-      });
-      con.query(QUERIES.CREATE_STOCK_DETAILS, function (err, result) {
-        if (err) throw err;
-      });
-      con.query(QUERIES.CREATE_STOCK_HISTORY, function (err, result) {
-        if (err) throw err;
-      });
-      con.query(QUERIES.CREATE_FEEDBACK_DETAILS, function (err, result) {
-        if (err) throw err;
-      });
-      con.query(QUERIES.CREATE_SESSION_CHECK, function (err, result) {
-        if (err) throw err;
-      });
-    } catch (e) {
-      console.log(e);
-    }
     connectionCreated();
+    console.log("Connection established with databse !!!");
   }
 });
 
