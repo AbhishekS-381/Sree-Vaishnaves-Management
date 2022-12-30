@@ -6,7 +6,7 @@ const router = express.Router();
 
 router.get("/login", ViewController.loginRender);
 router.get("/error/:userToken", ViewController.errorRender);
-router.get("/", ApiController.loginRedirect);
+router.get("/", ViewController.loginRender);
 router.get("/logout/:userToken", ApiController.logout);
 router.get("/reset", ViewController.resetRender);
 router.get("/health", ApiController.checkHealth);
@@ -26,19 +26,19 @@ router.post("/manager/meet/removeLink/:teamName/:userToken/:flag", ApiController
 router.post("/manager/meet/addLink/:teamName/:userToken/:flag", ApiController.addLink);
 
 router.get("/manager/home/:userToken/:flag", ViewController.managerHomeRender);
-router.get("/manager/team/:userToken/:flag", ViewController.managerTeamRender);
-router.get("/manager/meet/:userToken/:flag", ViewController.managerMeetRender);
-router.get("/manager/link/:userToken/:teamName/:flag", ViewController.managerLinkRender);
-router.get("/manager/minutes/content/:userToken/:flag", ViewController.managerContentRender);
-router.get("/manager/meet/editActionItem/:userToken/:flag", ViewController.editActionItems);
-router.get("/manager/minutes/links/:userToken/:flag", ViewController.managerLinksRender);
-router.get("/manager/queries/:userToken/:flag", ViewController.managerQueryRender);
-router.get("/manager/actionitems/:userToken/:flag", ViewController.managerActionItemRender);
+// router.get("/manager/team/:userToken/:flag", ViewController.managerTeamRender);
+// router.get("/manager/meet/:userToken/:flag", ViewController.managerMeetRender);
+// router.get("/manager/link/:userToken/:teamName/:flag", ViewController.managerLinkRender);
+// router.get("/manager/minutes/content/:userToken/:flag", ViewController.managerContentRender);
+// router.get("/manager/meet/editActionItem/:userToken/:flag", ViewController.editActionItems);
+// router.get("/manager/minutes/links/:userToken/:flag", ViewController.managerLinksRender);
+// router.get("/manager/queries/:userToken/:flag", ViewController.managerQueryRender);
+// router.get("/manager/actionitems/:userToken/:flag", ViewController.managerActionItemRender);
 
-router.get("/employee/home/:userToken/:flag", ViewController.employeeHomeRender);
-router.get("/employee/minutes/content/:userToken/:flag", ViewController.employeeMinutesRender);
-router.get("/employee/minutes/links/:userToken/:flag", ViewController.employeeLinksRender);
-router.get("/employee/queries/:userToken/:flag", ViewController.employeeQueryRender);
-router.get("/employee/actionitems/:userToken/:flag", ViewController.employeeActionItemsRender);
+// router.get("/employee/home/:userToken/:flag", ViewController.employeeHomeRender);
+// router.get("/employee/minutes/content/:userToken/:flag", ViewController.employeeMinutesRender);
+// router.get("/employee/minutes/links/:userToken/:flag", ViewController.employeeLinksRender);
+// router.get("/employee/queries/:userToken/:flag", ViewController.employeeQueryRender);
+// router.get("/employee/actionitems/:userToken/:flag", ViewController.employeeActionItemsRender);
 
 module.exports = router;
