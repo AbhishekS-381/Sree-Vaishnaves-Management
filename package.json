@@ -3,9 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "netlify dev",
+    "build": "next build && npm run db:seed",
     "start": "next build && next start",
+    "db:seed": "npx tsx db/seed.ts",
     "lint": "eslint",
     "test": "cross-env NODE_OPTIONS=--max-old-space-size=4096 vitest run",
     "test:watch": "vitest",
