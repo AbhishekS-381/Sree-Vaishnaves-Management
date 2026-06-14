@@ -1,0 +1,62 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { addMenuCategory, updateMenuCategory, deleteMenuCategory } from '@/app/actions/menu_categories'
+import * as db from '@/lib/db'
+
+vi.mock('@/lib/db', () => ({
+  withTransaction: vi.fn(),
+  DB_FILES: new Proxy({}, { get: () => 'mock.json' })
+}))
+vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
+
+describe('Menu Categories Actions', () => {
+  beforeEach(() => { vi.resetAllMocks() })
+
+  it('addMenuCategory validates name+branch', async () => {
+    const res = await addMenuCategory({}, { get: () => null } as any)
+    expect(res).toEqual({ error: 'Name is required' })
+  })
+
+  it('addMenuCategory succeeds', async () => {
+    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => { await cb([]); return true })
+    const res = await addMenuCategory({}, { get: () => 'test' } as any)
+    expect(res).toEqual({ success: true })
+  })
+
+  it('addMenuCategory handles transaction failure', async () => {
+    vi.mocked(db.withTransaction).mockResolvedValue(false)
+    const res = await addMenuCategory({}, { get: () => 'test' } as any)
+    expect(res).toEqual({ error: 'Failed to add menu category' })
+  })
+
+  it('updateMenuCategory validates missing fields', async () => {
+    const res = await updateMenuCategory({}, { get: () => null } as any)
+    expect(res).toEqual({ error: 'Invalid data' })
+  })
+
+  it('updateMenuCategory handles not found', async () => {
+    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => { await cb([]); return true })
+    const res = await updateMenuCategory({}, { get: () => 'test' } as any)
+    expect(res).toEqual({ error: 'Not found' })
+  })
+
+  it('updateMenuCategory succeeds', async () => {
+    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
+      await cb([{ id: 'test', name: 'Old', branchId: 'b1' }])
+      return true
+    })
+    const res = await updateMenuCategory({}, { get: () => 'test' } as any)
+    expect(res).toEqual({ success: true })
+  })
+
+  it('deleteMenuCategory succeeds', async () => {
+    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => { await cb([{ id: 'mc1' }]); return true })
+    const res = await deleteMenuCategory('mc1')
+    expect(res).toEqual({ success: true })
+  })
+
+  it('deleteMenuCategory handles transaction failure', async () => {
+    vi.mocked(db.withTransaction).mockResolvedValue(false)
+    const res = await deleteMenuCategory('mc1')
+    expect(res).toEqual({ error: 'Failed to delete menu category' })
+  })
+})
