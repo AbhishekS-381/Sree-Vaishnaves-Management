@@ -15,10 +15,11 @@
     "test:all": "cross-env NODE_OPTIONS=--max-old-space-size=4096 vitest run && playwright test"
   },
   "dependencies": {
+    "@netlify/database": "^1.0.0",
     "clsx": "^2.1.1",
+    "drizzle-orm": "^1.0.0-beta.22",
     "jose": "^6.2.3",
     "lucide-react": "^0.562.0",
-    "mysql2": "^3.20.0",
     "next": "16.1.3",
     "react": "19.2.3",
     "react-dom": "19.2.3",
@@ -36,6 +37,7 @@
     "@vitejs/plugin-react": "^6.0.1",
     "@vitest/coverage-v8": "^4.1.5",
     "cross-env": "^10.1.0",
+    "drizzle-kit": "^1.0.0-beta.22",
     "eslint": "^9",
     "eslint-config-next": "16.1.3",
     "jsdom": "^27.0.1",
