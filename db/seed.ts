@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { db } from './index';
 import { jsonStore } from './schema';
 import { seedData } from './seed-data';

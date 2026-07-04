@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build && npm run db:seed",
     "start": "next build && next start",
-    "db:seed": "npx tsx --env-file=.env db/seed.ts",
+    "db:seed": "npx tsx db/seed.ts",
     "lint": "eslint",
     "test": "cross-env NODE_OPTIONS=--max-old-space-size=4096 vitest run",
     "test:watch": "vitest",
