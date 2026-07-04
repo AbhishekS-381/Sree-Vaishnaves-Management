@@ -5,6 +5,7 @@ import { addStaff, updateStaff } from '@/app/actions/staff'
 import { X, Loader2 } from 'lucide-react'
 import { useDraft } from '@/lib/useDraft'
 import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 
 type Props = {
   isOpen: boolean
@@ -32,6 +33,7 @@ export function StaffModal({ isOpen, onClose, editData, preselectedPositionId, r
   const [salary, setSalary] = useState<string | number>(editData?.monthlySalary || '')
   const [startTime, setStartTime] = useState<string>(editData?.startTime || '')
   const [endTime, setEndTime] = useState<string>(editData?.endTime || '')
+  const router = useRouter()
 
   useEffect(() => {
     if (isOpen) {
@@ -152,6 +154,7 @@ export function StaffModal({ isOpen, onClose, editData, preselectedPositionId, r
         setError(result.error)
       } else {
         if (!editData) clearDraft('add')
+        router.refresh()
         onClose()
       }
     } catch (err) {

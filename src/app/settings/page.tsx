@@ -1,6 +1,6 @@
 import { readJSON, DB_FILES } from '@/lib/db'
 import SettingsClientPage from './SettingsClientPage'
-import { cookies } from 'next/headers'
+import { getSessionRole } from '@/app/actions/auth'
 
 export default async function SettingsPage() {
   const roles = await readJSON<any>(DB_FILES.ROLES)
@@ -18,9 +18,9 @@ export default async function SettingsPage() {
     reports: true
   }
 
-  const sessionRole = (await cookies()).get('session_role')?.value
+  const sessionRole = await getSessionRole()
 
   return (
-    <SettingsClientPage roles={roles} departments={depts} categories={categories} config={config} users={users} sessionRole={sessionRole} />
+    <SettingsClientPage roles={roles} departments={depts} categories={categories} config={config} users={users} sessionRole={sessionRole as string} />
   )
 }

@@ -1,5 +1,4 @@
 ### Adhoc Todo items -
-- Data migration tools for both way json <-> mysql
 - Restaurant currently has static websites hosted currently, need to come up with a plan to migrate them to this application
 
 

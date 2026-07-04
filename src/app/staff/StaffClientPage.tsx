@@ -8,6 +8,7 @@ import { StaffModal } from '@/components/StaffModal'
 import { StaffRequirements } from '@/components/StaffRequirements'
 import { ScheduleTimeline } from '@/components/ScheduleTimeline'
 import { useStaffFilters } from '@/hooks/useStaffFilters'
+import { useRouter } from 'next/navigation'
 
 type Staff = {
   id: string
@@ -40,6 +41,7 @@ export default function StaffClientPage({ initialStaff, branches, departments, r
   const [preselectedPositionId, setPreselectedPositionId] = useState<string | null>(null)
 
   const { filters, setFilters, filteredStaff } = useStaffFilters(initialStaff)
+  const router = useRouter()
 
   // Helpers
   const getRole = (id: string) => roles.find(r => r.id === id)?.name || id
@@ -213,6 +215,7 @@ export default function StaffClientPage({ initialStaff, branches, departments, r
                         onClick={async () => {
                           if (confirm('Are you sure you want to delete this staff member? This action cannot be undone.')) {
                             await deleteStaff(s.id)
+                            router.refresh()
                           }
                         }}
                         className="p-2 hover:bg-red-900/20 rounded-lg text-slate-400 hover:text-red-400 transition-colors"

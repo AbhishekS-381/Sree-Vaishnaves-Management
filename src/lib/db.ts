@@ -1,5 +1,3 @@
-import fs from 'fs/promises';
-import path from 'path';
 import { db } from '../../db/index';
 import { jsonStore } from '../../db/schema';
 import { eq } from 'drizzle-orm';
@@ -37,10 +35,6 @@ function getMutex(filename: string) {
   return fileMutexes[filename];
 }
 
-export const DATA_DIR = process.env.NODE_ENV === 'test'
-  ? path.join(process.cwd(), 'test-db')
-  : path.join(process.cwd(), 'data');
-
 export const DB_FILES = {
   BRANCHES: 'branches.json',
   DEPARTMENTS: 'departments.json',
@@ -65,19 +59,6 @@ export const DB_FILES = {
 };
 
 export async function readJSON<T>(filename: string): Promise<T[]> {
-  if (process.env.NODE_ENV === 'test') {
-    const filePath = path.join(DATA_DIR, filename);
-    try {
-      let data = await fs.readFile(filePath, 'utf-8');
-      if (data.charCodeAt(0) === 0xFEFF) {
-        data = data.slice(1);
-      }
-      return JSON.parse(data) as T[];
-    } catch {
-      return [];
-    }
-  }
-
   try {
     const rows = await db.select().from(jsonStore).where(eq(jsonStore.filename, filename));
     if (rows.length > 0) {
@@ -91,17 +72,6 @@ export async function readJSON<T>(filename: string): Promise<T[]> {
 }
 
 export async function writeJSON<T>(filename: string, data: T[]): Promise<boolean> {
-  if (process.env.NODE_ENV === 'test') {
-    const filePath = path.join(DATA_DIR, filename);
-    try {
-      await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8');
-      return true;
-    } catch (error) {
-      console.error(`Error writing ${filename}:`, error);
-      return false;
-    }
-  }
-
   try {
     const jsonString = JSON.stringify(data);
     await db.insert(jsonStore)
