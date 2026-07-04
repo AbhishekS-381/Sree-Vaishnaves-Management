@@ -2,7 +2,9 @@
 
 import { useState, useMemo, useRef, useEffect } from 'react'
 import { updateRequirementSchedules, Shift, PositionSchedule } from '@/app/actions/staff_requirements'
-import { X, Save, Loader2 } from 'lucide-react'
+import { X, Save, Loader2, Wand2 } from 'lucide-react'
+import { AutoScheduleModal } from './AutoScheduleModal'
+import { generateSchedules } from '@/lib/scheduleGenerator'
 
 type Props = {
   staff: any[]
@@ -189,11 +191,12 @@ export function ScheduleTimeline({ requirements, branches, departments, roles }:
   const [selectedBranch, setSelectedBranch] = useState(branches[0]?.id || '')
   const [selectedDept, setSelectedDept] = useState('')
   const [savingReqId, setSavingReqId] = useState<string | null>(null)
+  const [autoScheduleReq, setAutoScheduleReq] = useState<any>(null)
 
   const branch = branches.find(b => b.id === selectedBranch)
   
-  const startMins = timeToMins(branch?.internalStartTime || '00:00')
-  const endMins = timeToMins(branch?.internalEndTime || '24:00')
+  const startMins = timeToMins(branch?.internalStartTime || '05:00')
+  const endMins = timeToMins(branch?.internalEndTime || '23:00')
   let totalDuration = endMins - startMins
   if (totalDuration <= 0) totalDuration += 24 * 60
 
@@ -221,6 +224,12 @@ export function ScheduleTimeline({ requirements, branches, departments, roles }:
     setSavingReqId(null)
   }
 
+  const handleAutoGenerate = async (req: any, generatedSchedules: PositionSchedule[]) => {
+    setSavingReqId(req.id)
+    await updateRequirementSchedules(req.id, generatedSchedules)
+    setSavingReqId(null)
+  }
+
   // Filter requirements
   const filteredReqs = useMemo(() => {
     return requirements.filter(r => 
@@ -228,6 +237,25 @@ export function ScheduleTimeline({ requirements, branches, departments, roles }:
       (!selectedDept || r.departmentId === selectedDept)
     )
   }, [requirements, selectedBranch, selectedDept])
+
+  // Internal Auto-Trigger for mismatching position counts
+  useEffect(() => {
+    filteredReqs.forEach(req => {
+      const currentSchedulesCount = req.schedules ? req.schedules.length : 0
+      if (req.requiredCount > 0 && currentSchedulesCount !== req.requiredCount && !savingReqId) {
+        // Automatically generate with default baseline params if count changed
+        const generated = generateSchedules({
+          positionCount: req.requiredCount,
+          branchStartTime: branch?.internalStartTime || '05:00',
+          branchEndTime: branch?.internalEndTime || '23:00',
+          maxHours: 10,
+          minSegmentHours: 2,
+          maxBreaks: 2
+        })
+        handleAutoGenerate(req, generated)
+      }
+    })
+  }, [filteredReqs, branch, savingReqId])
 
   const groupedByRole = useMemo(() => {
     const map = new Map<string, any[]>()
@@ -296,7 +324,15 @@ export function ScheduleTimeline({ requirements, branches, departments, roles }:
                   <div key={req.id} className="flex">
                     <div className="w-48 shrink-0 p-4 border-r border-[#3b3054] bg-[#1a1726] flex flex-col justify-center">
                       <h4 className="font-bold text-white text-sm">{roleName}</h4>
-                      <p className="text-xs text-slate-500 mt-1">{req.requiredCount} Positions</p>
+                      <p className="text-xs text-slate-500 mt-1 mb-3">{req.requiredCount} Positions</p>
+                      {req.requiredCount > 0 && (
+                        <button 
+                          onClick={() => setAutoScheduleReq(req)}
+                          className="w-full py-1.5 px-2 bg-[#252033] hover:bg-[#3b3054] text-[#c084fc] text-[10px] font-bold rounded flex items-center justify-center gap-1 transition-colors border border-[#3b3054]"
+                        >
+                          <Wand2 className="h-3 w-3" /> Auto-Schedule
+                        </button>
+                      )}
                     </div>
                     <div className="flex-1 relative bg-[#1e1b2e] flex flex-col justify-center">
                       {/* Hour grid lines */}
@@ -340,6 +376,20 @@ export function ScheduleTimeline({ requirements, branches, departments, roles }:
           </div>
         </div>
       </div>
+
+      <AutoScheduleModal 
+        isOpen={!!autoScheduleReq}
+        onClose={() => setAutoScheduleReq(null)}
+        roleName={autoScheduleReq ? (roles.find(r => r.id === autoScheduleReq.roleId)?.name || autoScheduleReq.roleId) : ''}
+        positionCount={autoScheduleReq?.requiredCount || 0}
+        branchStartTime={branch?.internalStartTime || '05:00'}
+        branchEndTime={branch?.internalEndTime || '23:00'}
+        onGenerate={(schedules) => {
+          if (autoScheduleReq) {
+            handleAutoGenerate(autoScheduleReq, schedules)
+          }
+        }}
+      />
     </div>
   )
 }
