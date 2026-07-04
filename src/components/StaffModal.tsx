@@ -33,6 +33,7 @@ export function StaffModal({ isOpen, onClose, editData, preselectedPositionId, r
   const [salary, setSalary] = useState<string | number>(editData?.monthlySalary || '')
   const [startTime, setStartTime] = useState<string>(editData?.startTime || '')
   const [endTime, setEndTime] = useState<string>(editData?.endTime || '')
+  const [shiftType, setShiftType] = useState<string>(editData?.shiftType || draftData?.shiftType || 'full')
   const router = useRouter()
 
   useEffect(() => {
@@ -366,12 +367,23 @@ export function StaffModal({ isOpen, onClose, editData, preselectedPositionId, r
               <label className="block text-sm font-medium text-slate-400 mb-1.5">Shift Type</label>
               <select
                 name="shiftType"
-                defaultValue={editData?.shiftType || draftData?.shiftType || 'full'}
+                value={shiftType}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setShiftType(val);
+                  if (val === 'morning') {
+                    setStartTime('06:00'); setEndTime('14:00');
+                  } else if (val === 'evening') {
+                    setStartTime('14:00'); setEndTime('22:00');
+                  } else if (val === 'full') {
+                    setStartTime('09:00'); setEndTime('21:00');
+                  }
+                }}
                 className="w-full px-4 py-2.5 rounded-xl bg-[#131018] border border-[#3b3054] text-white focus:border-[#c084fc] outline-none"
               >
-                <option value="morning">Morning Shift</option>
-                <option value="evening">Evening Shift</option>
-                <option value="full">Full Day</option>
+                <option value="morning">Morning Shift (06:00 - 14:00)</option>
+                <option value="evening">Evening Shift (14:00 - 22:00)</option>
+                <option value="full">Full Day (09:00 - 21:00)</option>
               </select>
             </div>
 

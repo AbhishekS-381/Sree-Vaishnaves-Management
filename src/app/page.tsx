@@ -1,20 +1,41 @@
 import { readJSON, DB_FILES } from '@/lib/db'
 import { Users, Store, IndianRupee, TrendingUp } from 'lucide-react'
 
+import { getSession } from '@/app/actions/auth'
+
 // Basic types for local use
 type Branch = { id: string; name: string; status?: string }
 type Staff = { id: string; branchId: string; isActive: boolean }
 
 export default async function Dashboard() {
-  const branches = await readJSON<Branch>(DB_FILES.BRANCHES)
-  const staff = await readJSON<Staff>(DB_FILES.STAFF)
-  const eod = await readJSON<any>(DB_FILES.EOD).catch(() => [])
-  const expenses = await readJSON<any>(DB_FILES.EXPENSES).catch(() => [])
-  const inventory = await readJSON<any>(DB_FILES.INVENTORY).catch(() => [])
-  const attendance = await readJSON<any>(DB_FILES.ATTENDANCE).catch(() => [])
-  const payroll = await readJSON<any>(DB_FILES.PAYROLL).catch(() => [])
-  const configList = await readJSON<any>(DB_FILES.CONFIG).catch(() => [])
+  const session = await getSession();
+  const isGlobalAdmin = session?.isGlobalAdmin;
+  const userBranchId = session?.branchId;
+
+  let [branches, staff, eod, expenses, inventory, attendance, payroll, configList] = await Promise.all([
+    readJSON<Branch>(DB_FILES.BRANCHES),
+    readJSON<Staff>(DB_FILES.STAFF),
+    readJSON<any>(DB_FILES.EOD).catch(() => []),
+    readJSON<any>(DB_FILES.EXPENSES).catch(() => []),
+    readJSON<any>(DB_FILES.INVENTORY).catch(() => []),
+    readJSON<any>(DB_FILES.ATTENDANCE).catch(() => []),
+    readJSON<any>(DB_FILES.PAYROLL).catch(() => []),
+    readJSON<any>(DB_FILES.CONFIG).catch(() => [])
+  ]);
   const config = configList[0] || { attendance: true, payroll: true, vendors: true, inventory: true, menu: true, reports: true }
+
+  if (!isGlobalAdmin && userBranchId) {
+    branches = branches.filter((b: any) => b.id === userBranchId);
+    staff = staff.filter((s: any) => s.branchId === userBranchId);
+    eod = eod.filter((e: any) => e.branchId === userBranchId);
+    expenses = expenses.filter((e: any) => e.branchId === userBranchId);
+    inventory = inventory.filter((i: any) => i.branchId === userBranchId);
+    // Attendance and payroll usually have branchId attached if generated correctly,
+    // but typically they are linked to staffId. We might need to filter based on staff branch.
+    // For now, assume they have branchId if they are branch-scoped.
+    attendance = attendance.filter((a: any) => a.branchId === userBranchId);
+    payroll = payroll.filter((p: any) => p.branchId === userBranchId);
+  }
 
   const activeStaff = staff.filter(s => s.isActive).length
 

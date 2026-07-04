@@ -3,6 +3,8 @@
 import { withTransaction, readJSON, writeJSON, DB_FILES } from '@/lib/db'
 import { randomUUID } from 'crypto'
 import { revalidatePath } from 'next/cache'
+import { requireBranchAccess, getSession } from './auth'
+import { logAction } from '@/lib/audit'
 
 export type Expense = {
   id: string
@@ -40,6 +42,11 @@ export async function saveEODEntry(
   entryData: Omit<EODEntry, 'id' | 'createdAt' | 'updatedAt' | 'status'>,
   expensesOut: Omit<Expense, 'id' | 'createdAt' | 'source'>[]
 ) {
+  try {
+    entryData.branchId = await requireBranchAccess(entryData.branchId);
+  } catch (err: any) {
+    return { error: err.message };
+  }
   const now = new Date().toISOString()
   
   let isLocked = false;
@@ -47,10 +54,16 @@ export async function saveEODEntry(
   const success = await withTransaction<EODEntry>(DB_FILES.EOD, async (allEOD) => {
     const existingEODIndex = allEOD.findIndex(e => e.date === entryData.date && e.branchId === entryData.branchId)
     
-    // If exists and locked, block
-    if (existingEODIndex >= 0 && allEOD[existingEODIndex].status === 'locked') {
-      isLocked = true;
-      return allEOD;
+    // If exists and locked (or > 24 hours old), block non-owners
+    if (existingEODIndex >= 0) {
+      const existing = allEOD[existingEODIndex];
+      const isPast24Hours = (new Date().getTime() - new Date(existing.createdAt).getTime()) > 24 * 60 * 60 * 1000;
+      
+      const session = await getSession();
+      if ((existing.status === 'locked' || isPast24Hours) && !session?.isGlobalAdmin) {
+        isLocked = true;
+        return allEOD;
+      }
     }
 
     if (existingEODIndex >= 0) {
@@ -105,6 +118,16 @@ export async function saveEODEntry(
   if (isLocked) return { error: 'EOD for this date is already locked.' }
   if (!success) return { error: 'Transaction failed' }
   
+  const session = await getSession();
+  await logAction({
+    userId: session?.userId || 'system',
+    action: 'SAVE_EOD',
+    entity: 'EOD',
+    entityId: entryData.date,
+    branchId: entryData.branchId,
+    details: { income: entryData.income }
+  });
+
   revalidatePath('/eod')
   revalidatePath('/expenses')
   revalidatePath('/')
@@ -113,11 +136,15 @@ export async function saveEODEntry(
 }
 
 export async function getEODByDate(date: string, branchId: string) {
+  const enforcedBranchId = await requireBranchAccess(branchId).catch(() => null);
+  if (!enforcedBranchId) return null;
   const allEOD = await readJSON<EODEntry>(DB_FILES.EOD)
-  return allEOD.find(e => e.date === date && e.branchId === branchId) || null
+  return allEOD.find(e => e.date === date && e.branchId === enforcedBranchId) || null
 }
 
 export async function getExpensesByDate(date: string, branchId: string) {
+  const enforcedBranchId = await requireBranchAccess(branchId).catch(() => null);
+  if (!enforcedBranchId) return [];
   const allExpenses = await readJSON<Expense>(DB_FILES.EXPENSES)
-  return allExpenses.filter(e => e.date === date && e.branchId === branchId)
+  return allExpenses.filter(e => e.date === date && e.branchId === enforcedBranchId)
 }

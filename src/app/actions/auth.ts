@@ -55,3 +55,17 @@ export async function getSessionRole() {
   const session = await getSession();
   return session?.role || null;
 }
+
+export async function requireBranchAccess(targetBranchId?: string) {
+  const session = await getSession();
+  if (!session) throw new Error('Unauthorized');
+  
+  if (!session.isGlobalAdmin) {
+    if (targetBranchId && targetBranchId !== session.branchId) {
+      throw new Error('Forbidden: You can only access your assigned branch.');
+    }
+    return session.branchId as string; // Return their enforced branch ID
+  }
+  
+  return targetBranchId || session.branchId as string || '';
+}

@@ -3,12 +3,19 @@ import SettingsClientPage from './SettingsClientPage'
 import { getSessionRole } from '@/app/actions/auth'
 
 export default async function SettingsPage() {
-  const roles = await readJSON<any>(DB_FILES.ROLES)
-  const depts = await readJSON<any>(DB_FILES.DEPARTMENTS)
-  const categories = await readJSON<any>(DB_FILES.CATEGORIES).catch(() => [])
-  const users = await readJSON<any>(DB_FILES.USERS).catch(() => [])
+  let [[roles, depts, categories, rawUsers], configList] = await Promise.all([
+    Promise.all([
+      readJSON<any>(DB_FILES.ROLES),
+      readJSON<any>(DB_FILES.DEPARTMENTS),
+      readJSON<any>(DB_FILES.CATEGORIES).catch(() => []),
+      readJSON<any>(DB_FILES.USERS).catch(() => [])
+    ]),
+    readJSON<any>(DB_FILES.CONFIG).catch(() => [])
+  ]);
+
+  // Sanitize users to avoid leaking passwords to the client
+  const users = rawUsers.map(({ password, ...u }: any) => u)
   
-  let configList = await readJSON<any>(DB_FILES.CONFIG).catch(() => [])
   let config = configList[0] || {
     attendance: true,
     payroll: true,

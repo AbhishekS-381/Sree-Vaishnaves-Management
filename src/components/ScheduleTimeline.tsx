@@ -65,7 +65,7 @@ function PositionRow({
     const x = e.clientX - rect.left
     const perc = Math.max(0, Math.min(1, x / rect.width))
     const mins = startMins + (perc * totalDuration)
-    return Math.round(mins / 60) * 60 // Snap to hour
+    return Math.round(mins / 15) * 15 // Snap to 15 mins
   }
 
   const handlePointerDown = (e: React.PointerEvent, type: 'create' | 'resize-start' | 'resize-end', shiftId?: string) => {
@@ -99,9 +99,9 @@ function PositionRow({
       let newEndMins = normalizeMins(timeToMins(shiftSnapshot.end), startMins)
       
       if (type === 'resize-start') {
-        newStartMins = Math.min(mins, newEndMins - 60) // Min 1 hr duration
+        newStartMins = Math.min(mins, newEndMins - 15) // Min 15 min duration
       } else if (type === 'resize-end') {
-        newEndMins = Math.max(mins, newStartMins + 60)
+        newEndMins = Math.max(mins, newStartMins + 15)
       }
       return { ...s, start: minsToTime(newStartMins), end: minsToTime(newEndMins) }
     }))

@@ -1,8 +1,10 @@
 'use server'
 
-import { withTransaction, DB_FILES } from '@/lib/db'
+import { withTransaction, DB_FILES, readJSON } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'crypto'
+import { getSession, requireBranchAccess } from './auth'
+import { logAction } from '@/lib/audit'
 
 type Staff = {
   id: string
@@ -26,7 +28,7 @@ type Staff = {
 export async function addStaff(prevState: any, formData: FormData) {
   const name = formData.get('name') as string
   const phone = formData.get('phone') as string
-  const branchId = formData.get('branchId') as string
+  let branchId = formData.get('branchId') as string
   const departmentId = formData.get('departmentId') as string
   const roleId = formData.get('roleId') as string
   const label = formData.get('label') as string
@@ -37,6 +39,12 @@ export async function addStaff(prevState: any, formData: FormData) {
   const positionId = formData.get('positionId') as string || undefined
   const startTime = formData.get('startTime') as string || undefined
   const endTime = formData.get('endTime') as string || undefined
+
+  try {
+    branchId = await requireBranchAccess(branchId)
+  } catch (err: any) {
+    return { error: err.message }
+  }
 
   if (!name || !phone || !branchId || !departmentId || !roleId) {
     return { error: 'All fields are required' }
@@ -69,6 +77,16 @@ export async function addStaff(prevState: any, formData: FormData) {
     return { error: 'Failed to save data' }
   }
 
+  const session = await getSession();
+  await logAction({
+    userId: session?.userId || 'system',
+    action: 'CREATE_STAFF',
+    entity: 'Staff',
+    entityId: newStaff.id,
+    branchId: branchId,
+    details: { name, roleId }
+  });
+
   revalidatePath('/staff')
   return { success: true }
 }
@@ -77,7 +95,7 @@ export async function updateStaff(prevState: any, formData: FormData) {
   const id = formData.get('id') as string
   const name = formData.get('name') as string
   const phone = formData.get('phone') as string
-  const branchId = formData.get('branchId') as string
+  let branchId = formData.get('branchId') as string
   const departmentId = formData.get('departmentId') as string
   const roleId = formData.get('roleId') as string
   const label = formData.get('label') as string
@@ -93,11 +111,24 @@ export async function updateStaff(prevState: any, formData: FormData) {
 
   if (!id || !name) return { error: 'Invalid ID or Name' }
 
+  try {
+    branchId = await requireBranchAccess(branchId)
+  } catch (err: any) {
+    return { error: err.message }
+  }
+
   let notFound = false
+  let forbidden = false
   const success = await withTransaction<Staff>(DB_FILES.STAFF, (staffList) => {
     const index = staffList.findIndex(s => s.id === id)
     if (index === -1) {
       notFound = true
+      return staffList
+    }
+    
+    // Check if branch manager is trying to edit staff from another branch
+    if (staffList[index].branchId !== branchId) {
+      forbidden = true
       return staffList
     }
     
@@ -123,17 +154,26 @@ export async function updateStaff(prevState: any, formData: FormData) {
   })
 
   if (notFound) return { error: 'Staff not found' }
+  if (forbidden) return { error: 'Forbidden: Cannot edit staff from another branch' }
   if (!success) return { error: 'Transaction failed' }
   revalidatePath('/staff')
   return { success: true }
 }
 
 export async function toggleStaffStatus(id: string, currentlyActive: boolean) {
+  const session = await getSession();
+  if (!session) return { error: 'Unauthorized' };
+
   let notFound = false
+  let forbidden = false
   const success = await withTransaction<Staff>(DB_FILES.STAFF, (staffList) => {
     const index = staffList.findIndex(s => s.id === id)
     if (index === -1) {
       notFound = true
+      return staffList
+    }
+    if (!session.isGlobalAdmin && staffList[index].branchId !== session.branchId) {
+      forbidden = true
       return staffList
     }
     staffList[index].isActive = !currentlyActive
@@ -141,12 +181,18 @@ export async function toggleStaffStatus(id: string, currentlyActive: boolean) {
   })
 
   if (notFound) return { error: 'Staff not found' }
+  if (forbidden) return { error: 'Forbidden: Cannot edit staff from another branch' }
   if (!success) return { error: 'Transaction failed' }
   revalidatePath('/staff')
   return { success: true }
 }
 
 export async function deleteStaff(id: string) {
+  const session = await getSession();
+  if (!session?.isGlobalAdmin) {
+    return { error: 'Forbidden: Only owners can delete staff' };
+  }
+
   let notFound = false
   const success = await withTransaction<Staff>(DB_FILES.STAFF, (staffList) => {
     const newList = staffList.filter(s => s.id !== id)
@@ -158,6 +204,14 @@ export async function deleteStaff(id: string) {
 
   if (notFound) return { error: 'Staff not found' }
   if (!success) return { error: 'Transaction failed' }
+  
+  await logAction({
+    userId: session.userId,
+    action: 'DELETE_STAFF',
+    entity: 'Staff',
+    entityId: id
+  });
+
   revalidatePath('/staff')
   return { success: true }
 }

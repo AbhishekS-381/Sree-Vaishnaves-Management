@@ -2,15 +2,12 @@ import { readJSON, DB_FILES } from '@/lib/db'
 import PayrollClientPage from './PayrollClientPage'
 
 export default async function PayrollPage() {
-  console.log("Loading Payroll Page...");
   try {
-    const staff = await readJSON<any>(DB_FILES.STAFF)
-    console.log("Staff loaded:", Array.isArray(staff) ? staff.length : typeof staff);
-
-    const payroll = await readJSON<any>(DB_FILES.PAYROLL)
-    console.log("Payroll loaded:", Array.isArray(payroll) ? payroll.length : typeof payroll);
-
-    const attendance = await readJSON<any>(DB_FILES.ATTENDANCE).catch(() => [])
+    const [staff, payroll, attendance] = await Promise.all([
+      readJSON<any>(DB_FILES.STAFF),
+      readJSON<any>(DB_FILES.PAYROLL),
+      readJSON<any>(DB_FILES.ATTENDANCE).catch(() => [])
+    ]);
 
     return (
       <PayrollClientPage

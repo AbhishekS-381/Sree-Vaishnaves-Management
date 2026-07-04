@@ -3,10 +3,14 @@ import { getSessionRole } from '@/app/actions/auth'
 import AttendanceClientPage from './AttendanceClientPage'
 
 export default async function AttendancePage() {
-  const staff = await readJSON<any>(DB_FILES.STAFF)
-  const branches = await readJSON<any>(DB_FILES.BRANCHES)
-  const roles = await readJSON<any>(DB_FILES.ROLES)
-  const userRole = await getSessionRole()
+  const [[staff, branches, roles], userRole] = await Promise.all([
+    Promise.all([
+      readJSON<any>(DB_FILES.STAFF),
+      readJSON<any>(DB_FILES.BRANCHES),
+      readJSON<any>(DB_FILES.ROLES)
+    ]),
+    getSessionRole()
+  ]);
 
   return (
     <AttendanceClientPage
