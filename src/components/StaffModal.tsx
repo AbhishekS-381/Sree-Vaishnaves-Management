@@ -169,7 +169,7 @@ export function StaffModal({ isOpen, onClose, editData, preselectedPositionId, r
     <div className="fixed inset-0 z-[100]">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="absolute inset-0 flex items-center justify-center p-4 pointer-events-none md:pl-72">
+      <div className="absolute inset-0 flex items-center justify-center p-4 pointer-events-none">
         <div className="relative w-full max-w-lg max-h-[90vh] flex flex-col bg-[#1e1b2e] rounded-2xl border border-[#3b3054] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 pointer-events-auto">
           <div className="flex items-center justify-between p-6 border-b border-[#3b3054] shrink-0">
             <h2 className="text-xl font-bold text-white">
