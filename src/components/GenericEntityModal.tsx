@@ -44,8 +44,8 @@ export function GenericEntityModal({ isOpen, onClose, title, fields, addAction, 
     <div className="fixed inset-0 z-[100]">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="absolute inset-0 flex items-center justify-center p-4 pointer-events-none md:pl-72">
-        <div className="relative w-full max-w-md bg-[#1e1b2e] rounded-2xl border border-[#3b3054] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 pointer-events-auto">
+      <div className="absolute inset-0 flex items-center justify-center p-4 pointer-events-none">
+        <div className="relative w-full max-w-md max-h-[90vh] flex flex-col bg-[#1e1b2e] rounded-2xl border border-[#3b3054] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 pointer-events-auto">
           <div className="flex items-center justify-between p-6 border-b border-[#3b3054]">
             <h2 className="text-xl font-bold text-white">
               {isEditing ? `Edit ${title}` : `Add New ${title}`}
@@ -55,7 +55,7 @@ export function GenericEntityModal({ isOpen, onClose, title, fields, addAction, 
             </button>
           </div>
 
-          <form action={formAction} className="p-6 space-y-4">
+          <form action={formAction} className="p-6 space-y-4 flex-1 overflow-y-auto">
             {isEditing && <input type="hidden" name="id" value={editData.id} />}
             {hiddenFields && Object.entries(hiddenFields).map(([key, val]) => (
                <input key={key} type="hidden" name={key} value={val} />
