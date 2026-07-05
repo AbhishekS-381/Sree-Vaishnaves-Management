@@ -42,7 +42,7 @@ export default async function Dashboard() {
 
   const activeStaff = staff.filter(s => s.isActive).length
 
-  const todayStr = new Date().toLocaleDateString('en-CA') // YYYY-MM-DD local
+  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) // YYYY-MM-DD local
   
   const todayEOD = Array.isArray(eod) ? eod.filter(e => e.date === todayStr) : [];
   let todaysCollection = 0;

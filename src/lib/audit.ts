@@ -15,16 +15,19 @@ export interface AuditLogEntry {
 
 export async function logAction(action: string, entityType: string, details: string, entityId?: string) {
   try {
-    const session = await getSession();
-    if (!session) return; // Silent failure if no session
-
+    let session = null;
+    try {
+      session = await getSession();
+    } catch (e) {}
+    
+    
     const logs = await readJSON<AuditLogEntry>(DB_FILES.AUDIT_LOGS).catch(() => [] as AuditLogEntry[]);
     
     logs.push({
-      id: `audit_${randomUUID().split('-')[0]}`,
+      id: randomUUID(),
       timestamp: new Date().toISOString(),
-      userId: session.userId,
-      userName: session.name,
+      userId: session?.userId ?? 'system',
+      userName: session?.name ?? 'system',
       action,
       entityType,
       entityId,

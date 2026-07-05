@@ -16,7 +16,10 @@ type Department = {
 export async function addDepartment(prevState: any, formData: FormData) {
   const name = formData.get('name') as string
 
-  if (!name) return { error: 'Name is required' }
+  import { z } from 'zod';
+  const schema = z.object({ name: z.string().min(1).max(100).trim() });
+  const parsed = schema.safeParse({ name });
+  if (!parsed.success) return { error: parsed.error.issues[0].message }
 
   const newDept: Department = {
     id: `dept_${randomUUID().split('-')[0]}`,
@@ -37,7 +40,9 @@ export async function updateDepartment(prevState: any, formData: FormData) {
   const id = formData.get('id') as string
   const name = formData.get('name') as string
 
-  if (!id || !name) return { error: 'Invalid data' }
+  const schema = z.object({ name: z.string().min(1).max(100).trim() });
+  const parsed = schema.safeParse({ name });
+  if (!id || !parsed.success) return { error: parsed.success ? 'Invalid data' : parsed.error.issues[0].message }
 
   let notFound = false
   const success = await withTransaction<Department>(DB_FILES.DEPARTMENTS, (list) => {
@@ -94,7 +99,9 @@ export async function addRole(prevState: any, formData: FormData) {
   const isChef = formData.get('isChef') === 'on'
   const departmentIds = formData.getAll('departmentIds') as string[]
 
-  if (!name) return { error: 'Name is required' }
+  const schema = z.object({ name: z.string().min(1).max(100).trim() });
+  const parsed = schema.safeParse({ name });
+  if (!parsed.success) return { error: parsed.error.issues[0].message }
 
   const newItem: Role = {
     id: `role_${randomUUID().split('-')[0]}`,
@@ -121,7 +128,9 @@ export async function updateRole(prevState: any, formData: FormData) {
   const isChef = formData.get('isChef') === 'on'
   const departmentIds = formData.getAll('departmentIds') as string[]
 
-  if (!id || !name) return { error: 'Invalid data' }
+  const schema = z.object({ name: z.string().min(1).max(100).trim() });
+  const parsed = schema.safeParse({ name });
+  if (!id || !parsed.success) return { error: parsed.success ? 'Invalid data' : parsed.error.issues[0].message }
 
   let notFound = false
   const success = await withTransaction<Role>(DB_FILES.ROLES, (list) => {

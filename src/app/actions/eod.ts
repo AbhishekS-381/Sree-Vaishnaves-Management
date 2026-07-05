@@ -38,15 +38,38 @@ export type EODEntry = {
   updatedAt: string
 }
 
+import { z } from 'zod'
+
 export async function saveEODEntry(
   entryData: Omit<EODEntry, 'id' | 'createdAt' | 'updatedAt' | 'status'>,
   expensesOut: Omit<Expense, 'id' | 'createdAt' | 'source'>[]
 ) {
+  const incomeSchema = z.object({
+    dineInCash: z.number().int().min(0),
+    dineInUpi: z.number().int().min(0),
+    takeawayCash: z.number().int().min(0),
+    takeawayUpi: z.number().int().min(0),
+  });
+  const eodSchema = z.object({
+    branchId: z.string().min(1),
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    income: incomeSchema,
+    notes: z.string().max(2000).optional(),
+  });
+  const parsed = eodSchema.safeParse(entryData);
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
+
   try {
     entryData.branchId = await requireBranchAccess(entryData.branchId);
   } catch (err: any) {
     return { error: err.message };
   }
+  
+  const todayIST = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  if (entryData.date > todayIST) {
+    return { error: 'EOD entry cannot be submitted for a future date' };
+  }
+
   const now = new Date().toISOString()
   
   let isLocked = false;
@@ -89,41 +112,38 @@ export async function saveEODEntry(
         updatedAt: now
       })
     }
-
-    // Handle nested expense save
-    const expSuccess = await withTransaction<Expense>(DB_FILES.EXPENSES, (allExpenses) => {
-      const otherExpenses = allExpenses.filter(ex => !(ex.date === entryData.date && ex.branchId === entryData.branchId && ex.source === 'eod'))
-      const newExpenses = expensesOut.map(ex => ({
-        id: `exp_${randomUUID().split('-')[0]}`,
-        branchId: ex.branchId,
-        amount: ex.amount,
-        category: ex.category,
-        source: 'eod' as const,
-        date: ex.date,
-        notes: ex.notes || '',
-        createdAt: now
-      }))
-      return [...otherExpenses, ...newExpenses]
-    })
-
-    if (!expSuccess) {
-       // if it failed, returning original array. Though withTransaction might not cleanly rollback,
-       // we log error.
-       throw new Error("Failed to write expenses");
-    }
-
     return allEOD;
   })
 
   if (isLocked) return { error: 'EOD for this date is already locked.' }
   if (!success) return { error: 'Transaction failed' }
-  
+
+  // Handle expense save separately to avoid nested transactions
+  const expSuccess = await withTransaction<Expense>(DB_FILES.EXPENSES, (allExpenses) => {
+    const otherExpenses = allExpenses.filter(ex => !(ex.date === entryData.date && ex.branchId === entryData.branchId && ex.source === 'eod'))
+    const newExpenses = expensesOut.map(ex => ({
+      id: `exp_${randomUUID().split('-')[0]}`,
+      branchId: ex.branchId,
+      amount: ex.amount,
+      category: ex.category,
+      source: 'eod' as const,
+      date: ex.date,
+      notes: ex.notes || '',
+      createdAt: now
+    }))
+    return [...otherExpenses, ...newExpenses]
+  })
+
   const session = await getSession();
   await logAction('SAVE_EOD', 'EOD', JSON.stringify({ income: entryData.income }), entryData.date);
 
   revalidatePath('/eod')
   revalidatePath('/expenses')
   revalidatePath('/')
+  
+  if (!expSuccess) {
+    return { success: true, warning: 'EOD saved, but failed to write expenses.' }
+  }
   
   return { success: true }
 }

@@ -136,10 +136,10 @@ export default function StaffClientPage({ initialStaff, branches, departments, r
             <thead className="bg-[#252033] border-b border-[#3b3054] text-accent text-xs uppercase font-semibold tracking-wider">
               <tr>
                 <th className="px-6 py-4">Name</th>
-                <th className="px-6 py-4">Role</th>
-                <th className="px-6 py-4">Department</th>
-                <th className="px-6 py-4 hidden md:table-cell">Branch</th>
-                <th className="px-6 py-4">Salary</th>
+                <th className="px-6 py-4 hidden sm:table-cell">Role</th>
+                <th className="px-6 py-4 hidden md:table-cell">Department</th>
+                <th className="px-6 py-4 hidden lg:table-cell">Branch</th>
+                <th className="px-6 py-4 hidden sm:table-cell">Salary</th>
                 <th className="px-6 py-4">Status</th>
                 <th className="px-6 py-4 text-right">Actions</th>
               </tr>
@@ -173,7 +173,7 @@ export default function StaffClientPage({ initialStaff, branches, departments, r
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-sm text-slate-300">
+                  <td className="px-6 py-4 text-sm text-slate-300 hidden sm:table-cell">
                     {getRole(s.roleId)}
                     {s.specialtyId && (
                        <div className="mt-1 inline-block bg-rose-500/10 text-rose-400 text-[10px] px-2 py-0.5 rounded-full font-bold border border-rose-500/20 whitespace-nowrap">
@@ -181,13 +181,13 @@ export default function StaffClientPage({ initialStaff, branches, departments, r
                        </div>
                     )}
                   </td>
-                  <td className="px-6 py-4 text-sm text-slate-300">
+                  <td className="px-6 py-4 text-sm text-slate-300 hidden md:table-cell">
                     {getDept(s.departmentId)}
                   </td>
-                  <td className="px-6 py-4 text-sm text-slate-300 hidden md:table-cell">
+                  <td className="px-6 py-4 text-sm text-slate-300 hidden lg:table-cell">
                     {getBranch(s.branchId)}
                   </td>
-                  <td className="px-6 py-4 text-sm text-emerald-400 font-medium">
+                  <td className="px-6 py-4 text-sm text-emerald-400 font-medium hidden sm:table-cell">
                     {s.monthlySalary ? `₹${s.monthlySalary.toLocaleString()}` : '-'}
                   </td>
                   <td className="px-6 py-4">

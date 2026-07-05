@@ -58,19 +58,17 @@ export async function updateCategory(prevState: any, formData: FormData) {
   if (!success) return { error: 'Transaction failed' }
 
   if (oldName && oldName !== name) {
-     // Update existing expenses with new category name transactionally
-     await withTransaction<Expense>(DB_FILES.EXPENSES, (expenses) => {
-        let updated = false
-        expenses.forEach(ex => {
-           if (ex.category === oldName) {
-              ex.category = name;
-              updated = true;
-           }
-        })
-        return updated ? expenses : expenses; // Even if not updated, returning expenses writes the same data (safe). 
-        // Wait, withTransaction always writes. We can optimize it to skip writing if no update needed.
-        // But for simplicity, we just return the array.
-     })
+     const expenses = await readJSON<Expense>(DB_FILES.EXPENSES).catch(() => []);
+     let updated = false;
+     expenses.forEach(ex => {
+        if (ex.category === oldName) {
+           ex.category = name;
+           updated = true;
+        }
+     });
+     if (updated) {
+        await writeJSON(DB_FILES.EXPENSES, expenses);
+     }
   }
 
   revalidatePath('/settings')

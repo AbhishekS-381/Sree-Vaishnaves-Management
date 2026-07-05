@@ -7,6 +7,10 @@ vi.mock('@/lib/db', () => ({
   DB_FILES: new Proxy({}, { get: () => 'mock.json' })
 }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
+vi.mock('@/app/actions/auth', () => ({
+  getSession: vi.fn(() => ({ isGlobalAdmin: true, branchId: 'b1' })),
+  requireBranchAccess: vi.fn(async (b) => b || 'b1')
+}))
 
 describe('Staff Requirements Actions', () => {
   beforeEach(() => { vi.resetAllMocks() })

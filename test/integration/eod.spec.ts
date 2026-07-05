@@ -2,7 +2,12 @@ import { test, expect } from '@playwright/test';
 
 test.describe('EOD Scenarios', () => {
   test('should load the EOD page', async ({ page }) => {
-    // Assuming no auth required or mocked for local dev, or we just test if the page loads
+    await page.goto('/login');
+    await page.fill('input[name="name"]', 'Abhishek');
+    await page.fill('input[name="password"]', 'Hpab522tx@');
+    await page.click('button[type="submit"]');
+    await page.waitForURL('/');
+
     await page.goto('/eod');
     
     // Expect the title to be present
@@ -18,6 +23,12 @@ test.describe('EOD Scenarios', () => {
   });
 
   test('should allow adding an expense row', async ({ page }) => {
+    await page.goto('/login');
+    await page.fill('input[name="name"]', 'Abhishek');
+    await page.fill('input[name="password"]', 'Hpab522tx@');
+    await page.click('button[type="submit"]');
+    await page.waitForURL('/');
+
     await page.goto('/eod');
 
     const addExpenseBtn = page.getByRole('button', { name: 'Add Expense' });

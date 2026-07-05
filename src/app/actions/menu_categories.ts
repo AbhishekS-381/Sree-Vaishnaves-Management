@@ -9,9 +9,13 @@ type MenuCategory = {
   name: string
 }
 
-export async function addMenuCategory(prevState: any, formData: FormData) {
-  const name = formData.get('name') as string
+import { getSession } from '@/app/actions/auth';
 
+export async function addMenuCategory(prevState: any, formData: FormData) {
+  const session = await getSession();
+  if (!session?.isGlobalAdmin) return { error: 'Forbidden: Owner access required' };
+
+  const name = formData.get('name') as string
   if (!name) return { error: 'Name is required' }
 
   const newItem = {
@@ -32,6 +36,9 @@ export async function addMenuCategory(prevState: any, formData: FormData) {
 }
 
 export async function updateMenuCategory(prevState: any, formData: FormData) {
+  const session = await getSession();
+  if (!session?.isGlobalAdmin) return { error: 'Forbidden: Owner access required' };
+
   const id = formData.get('id') as string
   const name = formData.get('name') as string
 
@@ -57,6 +64,9 @@ export async function updateMenuCategory(prevState: any, formData: FormData) {
 }
 
 export async function deleteMenuCategory(id: string) {
+  const session = await getSession();
+  if (!session?.isGlobalAdmin) return { error: 'Forbidden: Owner access required' };
+
   const success = await withTransaction<MenuCategory>(DB_FILES.MENU_CATEGORIES, (list) => {
     return list.filter(c => c.id !== id)
   })

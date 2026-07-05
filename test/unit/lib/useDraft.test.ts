@@ -14,12 +14,13 @@ describe('useDraft hook', () => {
     act(() => {
       result.current.saveDraft('add', { name: 'Pizza' })
     })
-    const stored = JSON.parse(window.localStorage.getItem('draft_test_add')!)
-    expect(stored).toEqual({ name: 'Pizza' })
+    const stored = JSON.parse(window.localStorage.getItem('rms_draft_test_add')!)
+    expect(stored.data).toEqual({ name: 'Pizza' })
+    expect(stored.savedAt).toBeDefined()
   })
 
   it('loadDraft retrieves stored data', () => {
-    window.localStorage.setItem('draft_test_edit', JSON.stringify({ name: 'Burger' }))
+    window.localStorage.setItem('rms_draft_test_edit', JSON.stringify({ data: { name: 'Burger' }, savedAt: Date.now() }))
     const { result } = renderHook(() => useDraft('test'))
     let loaded: any
     act(() => {
@@ -38,12 +39,12 @@ describe('useDraft hook', () => {
   })
 
   it('clearDraft removes data from localStorage', () => {
-    window.localStorage.setItem('draft_test_add', JSON.stringify({ name: 'Pizza' }))
+    window.localStorage.setItem('rms_draft_test_add', JSON.stringify({ data: { name: 'Pizza' }, savedAt: Date.now() }))
     const { result } = renderHook(() => useDraft('test'))
     act(() => {
       result.current.clearDraft('add')
     })
-    expect(window.localStorage.getItem('draft_test_add')).toBeNull()
+    expect(window.localStorage.getItem('rms_draft_test_add')).toBeNull()
   })
 
   it('saveDraft handles localStorage errors gracefully', () => {
@@ -56,7 +57,7 @@ describe('useDraft hook', () => {
   })
 
   it('loadDraft handles localStorage errors gracefully (returns null)', () => {
-    window.localStorage.setItem('draft_test_bad', 'invalid-json{{{')
+    window.localStorage.setItem('rms_draft_test_bad', 'invalid-json{{{')
     const { result } = renderHook(() => useDraft('test'))
     let loaded: any
     act(() => {

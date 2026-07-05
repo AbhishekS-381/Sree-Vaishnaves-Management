@@ -4,6 +4,8 @@ import * as db from '@/lib/db'
 
 vi.mock('@/lib/db', () => ({
   withTransaction: vi.fn(),
+  readJSON: vi.fn(),
+  writeJSON: vi.fn(),
   DB_FILES: new Proxy({}, { get: () => 'mock.json' })
 }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))

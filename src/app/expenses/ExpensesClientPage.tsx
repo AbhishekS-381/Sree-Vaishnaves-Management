@@ -220,7 +220,7 @@ export default function ExpensesClientPage({ branches, expenses, userRole }: { b
                 <label className="block text-sm font-medium text-slate-400 mb-1">Amount (₹)</label>
                 <input 
                   type="number" 
-                  step="0.01"
+                  step="1" min="0"
                   value={editingExpense.amount}
                   onChange={e => setEditingExpense({...editingExpense, amount: Number(e.target.value)})}
                   className="w-full px-4 py-2.5 bg-[#131018] border border-white/10 rounded-xl text-slate-200 focus:ring-2 focus:ring-primary focus:outline-none"

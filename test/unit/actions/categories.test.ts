@@ -61,18 +61,21 @@ describe('Categories Actions', () => {
     expect(res).toEqual({ success: true })
   })
 
-  it('updateCategory succeeds with name change (cascades to expenses)', async () => {
     vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
-      // First call: categories, second call: expenses cascade
+      // First call: categories
       await cb([{ id: 'test', name: 'OldName' }])
       return true
     })
+    vi.mocked(db.readJSON).mockResolvedValue([{ id: 'exp1', category: 'OldName' }])
+    
     const res = await updateCategory({}, {
       get: (k: string) => k === 'id' ? 'test' : 'NewName'
     } as any)
     expect(res).toEqual({ success: true })
-    // Should have been called twice (categories + expenses)
-    expect(db.withTransaction).toHaveBeenCalledTimes(2)
+    
+    expect(db.withTransaction).toHaveBeenCalledTimes(1)
+    expect(db.readJSON).toHaveBeenCalled()
+    expect(db.writeJSON).toHaveBeenCalled()
   })
 
   it('updateCategory handles transaction failure', async () => {

@@ -19,5 +19,5 @@ seedData['roles.json'] = `[{"id":"role_owner","name":"Owner/Admin","isAdmin":tru
 seedData['staff.json'] = `[]`;
 seedData['staff_requirements.json'] = `[]`;
 seedData['stock_adjustments.json'] = `[]`;
-seedData['users.json'] = `[{"id":"u_owner_default","name":"Abhishek","password":"Hpab522tx@","role":"owner"}]`;
+seedData['users.json'] = `[{"id":"u_owner_default","name":"Abhishek","password":"$2b$10$dhprGNq0tklhM.Q90uS0ke82tyLy0EnzW.9hbchzK6.Ii2yqbdMUy","role":"owner"}]`;
 seedData['vendors.json'] = `[]`;

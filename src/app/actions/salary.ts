@@ -28,7 +28,8 @@ export async function savePayroll(prevState: any, formData: FormData) {
   const month = Number(formData.get('month'))
   const year = Number(formData.get('year'))
 
-  if (!month || !year) return { error: 'Invalid Date Selection' }
+  if (!Number.isInteger(month) || month < 1 || month > 12) return { error: 'Invalid month' };
+  if (!Number.isInteger(year) || year < 2020 || year > 2100) return { error: 'Invalid year' };
 
   // Extract dynamic fields: staff_{id}_days, staff_{id}_notes
   const entries: SalaryRecord[] = []

@@ -61,6 +61,8 @@ export async function addVendorBill(prevState: any, formData: FormData) {
   if (!vendorId || !amount || !category || !date || !branchId) {
      return { error: 'Please fill all required bill fields' }
   }
+  
+  if (!Number.isInteger(amount) || amount <= 0) return { error: 'Amount must be a positive whole number' };
 
   try {
     branchId = await requireBranchAccess(branchId)

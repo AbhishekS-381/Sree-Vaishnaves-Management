@@ -32,9 +32,14 @@ export async function addBranch(prevState: any, formData: FormData) {
   const customerStartTime = formData.get('customerStartTime') as string
   const customerEndTime = formData.get('customerEndTime') as string
 
-  if (!name || !address || !phone) {
-    return { error: 'All fields are required' }
-  }
+  import { z } from 'zod';
+  const schema = z.object({
+    name: z.string().min(1).max(100).trim(),
+    address: z.string().min(1).max(200).trim(),
+    phone: z.string().min(1).max(50).trim(),
+  });
+  const parsed = schema.safeParse({ name, address, phone });
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
 
   const success = await withTransaction<Branch>(DB_FILES.BRANCHES, (list) => {
     list.push({
@@ -72,7 +77,10 @@ export async function updateBranch(prevState: any, formData: FormData) {
   const customerStartTime = formData.get('customerStartTime') as string
   const customerEndTime = formData.get('customerEndTime') as string
 
-  if (!id || !name) return { error: 'Invalid data' }
+  import { z } from 'zod';
+  const schema = z.object({ name: z.string().min(1).max(100).trim() });
+  const parsed = schema.safeParse({ name });
+  if (!id || !parsed.success) return { error: parsed.success ? 'Invalid data' : parsed.error.issues[0].message }
 
   let notFound = false
   const success = await withTransaction<Branch>(DB_FILES.BRANCHES, (list) => {

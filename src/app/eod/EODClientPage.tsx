@@ -76,17 +76,21 @@ export default function EODClientPage({ branches, categories }: { branches: any[
     }
 
     // Draft check after server load
-    const draft = loadDraft(`${selectedBranch}_${date}`)
-    if (draft && eod?.status !== 'locked') {
-      if (window.confirm("You have an unsaved draft for this date and branch. Restore it?")) {
-        setIncome(draft.income || { dineInCash: 0, dineInUpi: 0, takeawayCash: 0, takeawayUpi: 0 })
-        setExpenses(draft.expenses || [])
-        setNotes(draft.notes || '')
-        setOpeningFloat(draft.openingFloat || '')
-        setActualClosingFloat(draft.actualClosingFloat || '')
-      } else {
-        clearDraft(`${selectedBranch}_${date}`)
+    if (!eod) {
+      const draft = loadDraft(`${selectedBranch}_${date}`)
+      if (draft) {
+        if (window.confirm("You have an unsaved draft for this date and branch. Restore it?")) {
+          setIncome(draft.income || { dineInCash: 0, dineInUpi: 0, takeawayCash: 0, takeawayUpi: 0 })
+          setExpenses(draft.expenses || [])
+          setNotes(draft.notes || '')
+          setOpeningFloat(draft.openingFloat || '')
+          setActualClosingFloat(draft.actualClosingFloat || '')
+        } else {
+          clearDraft(`${selectedBranch}_${date}`)
+        }
       }
+    } else {
+      clearDraft(`${selectedBranch}_${date}`)
     }
     
     setLoadingInitial(false)
@@ -156,6 +160,7 @@ export default function EODClientPage({ branches, categories }: { branches: any[
             type="date"
             value={date}
             onChange={e => setDate(e.target.value)}
+            max={new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })}
             className="bg-transparent border-none text-slate-200 outline-none p-2 font-medium"
             lang="en-IN"
             disabled={locked}
@@ -195,7 +200,7 @@ export default function EODClientPage({ branches, categories }: { branches: any[
                <h2 className="text-xl font-bold text-slate-100">Income Overview</h2>
              </div>
 
-             <div className="grid grid-cols-2 gap-6">
+             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                <div className="space-y-4">
                  <h3 className="font-semibold text-slate-400 text-sm uppercase tracking-wider">Dine-In</h3>
                  <div className="space-y-1">
