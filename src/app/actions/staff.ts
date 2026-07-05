@@ -3,7 +3,7 @@
 import { withTransaction, DB_FILES, readJSON } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'crypto'
-import { getSession, requireBranchAccess } from './auth'
+import { getSession, requireBranchAccess } from '@/app/actions/auth'
 import { logAction } from '@/lib/audit'
 
 type Staff = {
@@ -78,14 +78,7 @@ export async function addStaff(prevState: any, formData: FormData) {
   }
 
   const session = await getSession();
-  await logAction({
-    userId: session?.userId || 'system',
-    action: 'CREATE_STAFF',
-    entity: 'Staff',
-    entityId: newStaff.id,
-    branchId: branchId,
-    details: { name, roleId }
-  });
+  await logAction('CREATE_STAFF', 'Staff', JSON.stringify({ name, roleId }), newStaff.id);
 
   revalidatePath('/staff')
   return { success: true }
@@ -205,12 +198,7 @@ export async function deleteStaff(id: string) {
   if (notFound) return { error: 'Staff not found' }
   if (!success) return { error: 'Transaction failed' }
   
-  await logAction({
-    userId: session.userId,
-    action: 'DELETE_STAFF',
-    entity: 'Staff',
-    entityId: id
-  });
+  await logAction('DELETE_STAFF', 'Staff', 'Deleted staff member', id);
 
   revalidatePath('/staff')
   return { success: true }

@@ -35,9 +35,9 @@ Staff management covers employee profiles scoped per branch. Payroll covers mont
   "branchId": "uuid",
   "name": "Murugan K",
   "phone": "9876543210",
-  "role": "head_cook",
-  "shift": "full",
-  "baseSalary": 18000,
+  "roleId": "uuid",
+  "departmentId": "uuid",
+  "monthlySalary": 18000,
   "joinedAt": "2025-01-15",
   "notes": null,
   "isActive": true,
@@ -46,10 +46,10 @@ Staff management covers employee profiles scoped per branch. Payroll covers mont
 ```
 
 ### Allowed role values
-`head_cook`, `assistant_cook`, `waiter`, `cashier`, `cleaner`, `delivery`, `manager`, `other`
+Values are now stored in `roles.json` as UUIDs.
 
-### Allowed shift values
-`morning`, `evening`, `full`
+### Allowed department values
+Values are now stored in `departments.json` as UUIDs.
 
 ---
 
@@ -103,10 +103,10 @@ When `POST /payroll/:month/generate` is called:
       - `half_days` = count of `status = 'half_day'`
       - `days_holiday` = count of `status = 'holiday'`
    b. Get `working_days` from branch config for that month (default 26)
-   c. Get `base_salary` from current staff record (snapshot it)
+   c. Get `monthly_salary` from current staff record (snapshot it)
    d. Calculate:
       ```
-      gross_salary = ROUND((days_present + 0.5 * half_days) / working_days * base_salary)
+      gross_salary = ROUND((days_present + 0.5 * half_days) / working_days * monthly_salary)
       ```
    e. Sum all `salary_advances` for this staff for this month where `is_deducted = false`
       → `total_advances`
@@ -198,9 +198,9 @@ The owner can override this per month before generating payroll (e.g. if the res
 const createStaffSchema = z.object({
   name: z.string().min(2).max(100),
   phone: z.string().length(10).optional(),
-  role: z.enum(['head_cook','assistant_cook','waiter','cashier','cleaner','delivery','manager','other']),
-  shift: z.enum(['morning','evening','full']),
-  baseSalary: z.number().int().positive(),
+  roleId: z.string().uuid(),
+  departmentId: z.string().uuid(),
+  monthlySalary: z.number().int().positive(),
   joinedAt: z.string().date().optional()
 })
 

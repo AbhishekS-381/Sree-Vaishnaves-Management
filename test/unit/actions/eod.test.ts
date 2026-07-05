@@ -9,8 +9,14 @@ vi.mock('@/lib/db', () => ({
 }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 
+import * as auth from '@/app/actions/auth'
+
 describe('EOD Actions', () => {
-  beforeEach(() => { vi.resetAllMocks() })
+  beforeEach(() => { 
+    vi.resetAllMocks() 
+    vi.spyOn(auth, 'getSession').mockResolvedValue({ userId: 'test-user', role: 'owner', isGlobalAdmin: true, branchId: 'b1' } as any)
+    vi.spyOn(auth, 'requireBranchAccess').mockImplementation(async (b) => (b as string) || 'b1')
+  })
 
   it('getEODByDate returns single match', async () => {
     vi.mocked(db.readJSON).mockResolvedValue([
@@ -32,6 +38,7 @@ describe('EOD Actions', () => {
   })
 
   it('saveEODEntry returns error if locked', async () => {
+    vi.spyOn(auth, 'getSession').mockResolvedValueOnce({ userId: 'test-user', role: 'manager', isGlobalAdmin: false, branchId: 'b1' } as any)
     vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
       await cb([{ date: '2023-10-01', branchId: 'b1', status: 'locked' }])
       return true

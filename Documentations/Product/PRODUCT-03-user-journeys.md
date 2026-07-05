@@ -100,7 +100,7 @@ A reminder banner appears on the dashboard: "Payroll for Branch 1 — March 2026
 The owner taps it. He's taken to the payroll screen for Branch 1, March 2026.
 
 He taps "Generate payroll." The system calculates every salary based on March attendance records. A table appears — all 35 staff listed with their:
-- Base salary
+- Monthly salary
 - Days present / half days / absent
 - Advances taken this month
 - Calculated net payable

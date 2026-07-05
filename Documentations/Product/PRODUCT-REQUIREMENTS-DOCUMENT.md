@@ -117,7 +117,7 @@ The modules are:
 Every month, 35 salaries are calculated by hand. There is no record of how a number was arrived at. Advances given during the month are tracked mentally or in a notebook and sometimes forgotten. Staff receive no payslip — just a cash or transfer with a number. When a staff member questions their salary, there is no paper trail to refer to.
 
 ### What the module does
-This module is the complete record of every person who works at the restaurant. It knows their name, their role, their base salary, and which branch they work at. Every day their attendance is marked in this system. Every advance given to them mid-month is recorded here. At the end of the month, the system calculates each person's salary automatically — counting how many days they worked, applying half-day weightage, subtracting all advances — and presents the owner with a table of all 35 salaries for review.
+This module is the complete record of every person who works at the restaurant. It knows their name, their role, their monthly salary, and which branch they work at. Every day their attendance is marked in this system. Every advance given to them mid-month is recorded here. At the end of the month, the system calculates each person's salary automatically — counting how many days they worked, applying half-day weightage, subtracting all advances — and presents the owner with a table of all 35 salaries for review.
 
 The owner reviews the table, can override any individual amount if needed, and approves the entire month's payroll with one action. After approval, the records are locked. Each staff member's salary slip can be printed or saved as a PDF.
 
@@ -134,7 +134,7 @@ After: can see attendance records and salary drafts, flag anything that looks wr
 ## Module 2 — Attendance
 
 ### The problem it solves
-Attendance is currently marked in a physical register. At the end of the month, the owner counts entries manually to calculate working days per staff member. There is no record of who marked attendance, when, or whether it was edited. With 35 staff members across two shifts, the register is cluttered and error-prone.
+Attendance is currently marked in a physical register. At the end of the month, the owner counts entries manually to calculate working days per staff member. There is no record of who marked attendance, when, or whether it was edited. With 35 staff members across multiple departments, the register is cluttered and error-prone.
 
 ### What the module does
 Each morning, the manager or owner opens the attendance screen. Instead of tapping 35 individual entries, they tap "Mark all present" — the system marks every active staff member as present in one action. Then they tap only the exceptions: who is absent, who came for half a day, who is on leave.

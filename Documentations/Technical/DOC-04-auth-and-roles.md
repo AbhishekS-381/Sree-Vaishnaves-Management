@@ -122,26 +122,13 @@ Hashes the refresh token and deletes the matching row from `refresh_tokens`. The
 | `branch_manager` | Assigned branch only | No | No | No | No |
 | `super_admin` | Everything | Yes | Yes | Yes | Yes |
 
-### `requireRole` middleware
+### Backend Authorization (`requireBranchAccess`)
+
+All API actions now rely on `requireBranchAccess(branchId)` to enforce that the `branchId` from the session context matches the requested operation. Global admins bypass this automatically.
 
 ```js
-// Usage in routes
-router.delete('/:id', requireRole('owner'), controller.softDelete)
-router.get('/', requireRole('owner', 'branch_manager'), controller.list)
-```
-
-### `branchScope` middleware
-
-Runs after JWT verification on all data routes. Logic:
-
-```
-if user.role === 'owner' or 'super_admin':
-  allow any branch_id in request
-  allow null branch_id for cross-branch queries
-else if user.role === 'branch_manager':
-  if requested branch_id !== user.branchId:
-    return 403 FORBIDDEN
-  inject req.branchId = user.branchId
+// Usage in Server Actions
+const enforcedBranchId = await requireBranchAccess(branchId);
 ```
 
 ---
@@ -153,7 +140,7 @@ else if user.role === 'branch_manager':
 - `refreshToken` → stored in `localStorage` under key `rms_refresh_token`
 - `user` object → stored in Zustand + localStorage for persistence
 
-### Axios interceptors
+### Client-side API Calls
 
 **Request interceptor:** Attach `Authorization: Bearer <accessToken>` to every request.
 

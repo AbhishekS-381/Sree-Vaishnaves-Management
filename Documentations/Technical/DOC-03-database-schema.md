@@ -94,13 +94,9 @@ CREATE TABLE staff (
   branch_id     UUID NOT NULL REFERENCES branches(id),
   name          VARCHAR(100) NOT NULL,
   phone         VARCHAR(20),
-  role          VARCHAR(50) NOT NULL,
-  -- Allowed values (enforced at app level, not DB):
-  -- 'head_cook', 'assistant_cook', 'waiter', 'cashier',
-  -- 'cleaner', 'delivery', 'manager', 'other'
-  shift         VARCHAR(20) NOT NULL DEFAULT 'full',
-  -- Allowed values: 'morning', 'evening', 'full'
-  base_salary   INTEGER NOT NULL CHECK (base_salary > 0),
+  department_id UUID NOT NULL,
+  role_id       UUID NOT NULL,
+  monthly_salary INTEGER NOT NULL CHECK (monthly_salary > 0),
   -- Monthly base salary in INR rupees (integer)
   joined_at     DATE NOT NULL DEFAULT CURRENT_DATE,
   notes         TEXT DEFAULT NULL,
@@ -202,10 +198,10 @@ CREATE TABLE payroll_records (
   days_present      INTEGER NOT NULL DEFAULT 0,
   half_days         INTEGER NOT NULL DEFAULT 0,
   days_holiday      INTEGER NOT NULL DEFAULT 0,
-  base_salary       INTEGER NOT NULL,
-  -- Snapshot of base_salary at time of payroll — in case it changes later
+  monthly_salary    INTEGER NOT NULL,
+  -- Snapshot of monthly_salary at time of payroll — in case it changes later
   gross_salary      INTEGER NOT NULL,
-  -- Calculated: ROUND((days_present + 0.5 * half_days) / working_days * base_salary)
+  -- Calculated: ROUND((days_present + 0.5 * half_days) / working_days * monthly_salary)
   total_advances    INTEGER NOT NULL DEFAULT 0,
   net_payable       INTEGER NOT NULL,
   -- net_payable = gross_salary - total_advances (floor at 0)
@@ -226,7 +222,7 @@ CREATE INDEX idx_payroll_branch_month ON payroll_records(branch_id, month);
 
 **Salary formula:**
 ```
-gross_salary = ROUND((days_present + 0.5 * half_days) / working_days * base_salary)
+gross_salary = ROUND((days_present + 0.5 * half_days) / working_days * monthly_salary)
 net_payable  = MAX(0, gross_salary - total_advances)
 ```
 

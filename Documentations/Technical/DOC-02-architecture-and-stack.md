@@ -8,128 +8,38 @@
 
 | Layer | Technology | Notes |
 |-------|-----------|-------|
-| Frontend | React 18 | Vite as build tool |
+| Frontend | Next.js App Router | React 18, Server Components |
 | Styling | Tailwind CSS | Utility-first, mobile-first |
-| State management | Zustand | Lightweight, no Redux |
-| API client | Axios | With interceptors for JWT |
-| Backend | Node.js + Express | REST API |
-| Database | PostgreSQL 15+ | Hosted on Railway or Render |
-| Auth | JWT (jsonwebtoken) | Access token + refresh token |
+| State management | React Context / Server Actions | Server Actions handle logic |
+| Backend | Next.js Server Actions | Local Server actions only |
+| Database | Local JSON | Simulated using `src/lib/db.ts` |
+| Auth | JWT (jose) | Stored in `session` cookie |
 | Validation | Zod | Both frontend and backend |
-| File generation | pdfkit | Salary slips, monthly reports |
-| Excel export | exceljs | Monthly data dumps |
-| Password hashing | bcrypt | saltRounds = 12 |
-| Offline drafts | localStorage | EOD entry drafts only |
+| Testing | Vitest | Used with `vi.spyOn(auth)` for mocking |
 
 ---
 
 ## Folder structure
 
-### Backend (`/server`)
+### Project (`/src`)
 ```
-/server
-  /src
-    /config
-      db.js              # PostgreSQL pool setup
-      env.js             # Validated env vars (zod)
-    /middleware
-      auth.js            # JWT verify middleware
-      requireRole.js     # Role-based access control
-      branchScope.js     # Injects branch_id from token, validates access
-      auditLog.js        # Wraps responses to write audit entries
-      errorHandler.js    # Global error handler
-    /modules
-      /auth
-        auth.routes.js
-        auth.controller.js
-        auth.service.js
-      /branches
-        branches.routes.js
-        branches.controller.js
-        branches.service.js
-      /staff
-        staff.routes.js
-        staff.controller.js
-        staff.service.js
-      /attendance
-        attendance.routes.js
-        attendance.controller.js
-        attendance.service.js
-      /payroll
-        payroll.routes.js
-        payroll.controller.js
-        payroll.service.js
-      /eod
-        eod.routes.js
-        eod.controller.js
-        eod.service.js
-      /expenses
-        expenses.routes.js
-        expenses.controller.js
-        expenses.service.js
-      /menu
-        menu.routes.js
-        menu.controller.js
-        menu.service.js
-      /dashboard
-        dashboard.routes.js
-        dashboard.controller.js
-        dashboard.service.js
-    /utils
-      pagination.js
-      dateHelpers.js     # UTC <-> IST conversions
-      formatCurrency.js
-    app.js               # Express app setup, middleware, routes
-    server.js            # Entry point, starts server
-  /migrations            # SQL migration files (numbered)
-  /seeds                 # Seed data for development
-  .env.example
-  package.json
-```
-
-### Frontend (`/client`)
-```
-/client
-  /src
-    /api
-      axios.js           # Axios instance with interceptors
-      auth.api.js
-      staff.api.js
-      attendance.api.js
-      payroll.api.js
-      eod.api.js
-      expenses.api.js
-      menu.api.js
-      dashboard.api.js
-    /components
-      /ui                # Reusable primitives: Button, Input, Badge, Card, Modal
-      /layout            # AppShell, Sidebar, TopBar, BranchSelector
-      /shared            # Shared domain components across modules
-    /modules
-      /auth              # Login page, auth guards
-      /dashboard         # Home screen
-      /staff             # Staff list, profile, add/edit
-      /attendance        # Daily attendance screen
-      /payroll           # Payroll table, approval, salary slip
-      /eod               # EOD entry form
-      /expenses          # Expense list view
-      /menu              # Menu management
-    /store
-      authStore.js       # Zustand: user, token, role, branch
-      uiStore.js         # Zustand: sidebar, alerts, loading states
-    /utils
-      formatDate.js      # IST display helpers
-      formatCurrency.js  # ₹ formatting with en-IN locale
-      offlineDraft.js    # localStorage draft helpers for EOD
-    /hooks
-      useAuth.js
-      useBranch.js
-      useDebounce.js
-    App.jsx
-    main.jsx
-  index.html
-  vite.config.js
-  tailwind.config.js
+/src
+  /app
+    /actions           # Next.js Server Actions (staff.ts, eod.ts, auth.ts)
+    /api               # Next.js API Routes (if any)
+    /dashboard         # App Router pages
+    /staff
+    /login
+    layout.tsx
+    page.tsx
+  /components
+    /ui                # Reusable primitives: Button, Input, Badge, Card, Modal
+    /layout            # AppShell, Sidebar, TopBar, BranchSelector
+  /lib
+    db.ts              # Local JSON database wrapper with locks
+    auth.ts            # JWT verification and utilities
+    audit.ts           # Audit log wrapper
+  /hooks               # Custom React hooks
 ```
 
 ---
@@ -188,29 +98,11 @@ Authorization: Bearer <access_token>
 
 ---
 
-## Branch scoping middleware
+## Authorization via Server Actions
 
-Every protected route runs `branchScope` middleware after JWT verification. This middleware:
-
-1. Reads `branch_id` from the route param, query string, or request body
-2. If the user is `owner` — allows any branch, also allows `null` branch_id for consolidated queries
-3. If the user is `branch_manager` — checks that the requested `branch_id` matches their assigned `branch_id` from the JWT payload. Rejects with `FORBIDDEN` if it doesn't match.
-4. Injects `req.branchId` for use in controllers
-
-Never skip this middleware on any route that returns branch-scoped data.
-
----
-
-## Role middleware
-
-Use `requireRole(...roles)` middleware to restrict routes:
-
-```js
-// Only owner can access
-router.delete('/:id', requireRole('owner'), controller.delete)
-
-// Both owner and branch_manager can access
-router.get('/', requireRole('owner', 'branch_manager'), controller.list)
+Instead of middleware, all restricted Server Actions enforce access via `requireBranchAccess(branchId)`.
+```typescript
+const enforcedBranchId = await requireBranchAccess(branchId);
 ```
 
 ---
@@ -235,7 +127,7 @@ Audit entry must include:
 
 ```env
 # Database
-DATABASE_URL=postgresql://user:password@host:5432/restaurant_db
+DATABASE_URL=file:./data/db.json
 
 # Auth
 JWT_SECRET=<long-random-string>
@@ -256,13 +148,7 @@ TZ=UTC
 
 ## Coding conventions
 
-- Use `async/await` — no raw Promise chains
-- All DB queries go in the service layer, never in controllers
-- Controllers only handle request/response — no business logic
+- Use `async/await` in Server Actions
+- DB queries use `src/lib/db.ts`
 - Validate all inputs with Zod schemas before processing
-- Never return a password hash in any response
-- Use named exports, not default exports, for services and controllers
-- Use `camelCase` for JS variables and function names
-- Use `snake_case` for all database column names and table names
-- All IDs are UUIDs (`uuid_generate_v4()`) — never use integer auto-increment IDs
-- All React components use functional components with hooks — no class components
+- Use `vi.spyOn` to mock `requireBranchAccess` and `getSession` during unit testing

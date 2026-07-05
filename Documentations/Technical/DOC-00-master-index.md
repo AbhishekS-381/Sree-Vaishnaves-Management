@@ -26,7 +26,7 @@ This is a modular documentation set designed to be fed to AI coding assistants (
 |-----|------|---------|------------|
 | DOC-01 | `DOC-01-project-overview.md` | App identity, goals, constraints, user roles | Always |
 | DOC-02 | `DOC-02-architecture-and-stack.md` | Tech stack, folder structure, conventions, API patterns | Always |
-| DOC-03 | `DOC-03-database-schema.md` | Full PostgreSQL schema, all tables, constraints, indexes | Always |
+| DOC-03 | `DOC-03-database-schema.md` | Full JSON schema, all tables, constraints, indexes | Always |
 
 ### Phase 1 module docs — 0 to 6 months
 | Doc | File | Purpose | Feed when building... |

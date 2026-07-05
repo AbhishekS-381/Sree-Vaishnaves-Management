@@ -30,13 +30,13 @@ This document describes the system architecture of the Restaurant Management Sys
 │              RESTAURANT MANAGEMENT SYSTEM                │
 │                                                          │
 │   ┌─────────────┐        ┌──────────────────────────┐   │
-│   │  Web App    │◄──────►│      API Server          │   │
-│   │  (React)    │  REST  │      (Node.js)            │   │
+│   │  Web App    │◄──────►│   Server Actions         │   │
+│   │  (Next.js)  │  RPC   │   (Next.js App Router)   │   │
 │   └─────────────┘        └────────────┬─────────────┘   │
 │                                       │                  │
 │                          ┌────────────▼─────────────┐   │
 │                          │      Database            │   │
-│                          │    (PostgreSQL)           │   │
+│                          │  (Local JSON Store)      │   │
 │                          └──────────────────────────┘   │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -53,10 +53,10 @@ The system is built in three layers. Each layer has one job and talks only to th
 A React application running in the browser. It handles all user interaction — forms, buttons, navigation, charts. It never talks directly to the database. All data comes from the API.
 
 **Layer 2 — The API Server (the brain)**
-A Node.js server that receives requests from the web app, applies all business rules and permissions, and talks to the database. This layer is where all decisions are made — who is allowed to see what, how salary is calculated, when an entry should be locked.
+Next.js Server Actions that receive RPC calls from the web app components, apply all business rules and permissions, and talk to the data store. This layer is where all decisions are made — who is allowed to see what, how salary is calculated, when an entry should be locked.
 
 **Layer 3 — The Database (the memory)**
-A PostgreSQL database that stores everything permanently. It enforces data integrity — making sure, for example, that you cannot have two attendance records for the same person on the same day.
+A Local JSON Store (Phase 1) that stores everything permanently via the file system. It enforces data integrity natively in the app layer — making sure, for example, that you cannot have two attendance records for the same person on the same day via strict validation.
 
 ---
 

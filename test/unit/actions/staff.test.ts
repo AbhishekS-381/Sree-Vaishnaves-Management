@@ -8,12 +8,18 @@ vi.mock('@/lib/db', () => ({
 }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 
+import * as auth from '@/app/actions/auth'
+
 const mockFd = (overrides: Record<string, string> = {}) => ({
   get: (k: string) => overrides[k] ?? 'test_value'
 } as any as FormData)
 
 describe('Staff Actions', () => {
-  beforeEach(() => { vi.resetAllMocks() })
+  beforeEach(() => { 
+    vi.resetAllMocks() 
+    vi.spyOn(auth, 'getSession').mockResolvedValue({ userId: 'test-user', role: 'owner', isGlobalAdmin: true, branchId: 'b1' } as any)
+    vi.spyOn(auth, 'requireBranchAccess').mockImplementation(async (b) => (b as string) || 'b1')
+  })
 
   // ─── addStaff ──────────────────────────────────────────────────────────────
   it('addStaff validates missing fields', async () => {
@@ -47,10 +53,10 @@ describe('Staff Actions', () => {
 
   it('updateStaff succeeds', async () => {
     vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
-      await cb([{ id: 'test_value', name: 'Old', isActive: false }])
+      await cb([{ id: 'test_value', name: 'Old', isActive: false, branchId: 'b1' }])
       return true
     })
-    const res = await updateStaff({}, mockFd({ status: 'active' }))
+    const res = await updateStaff({}, mockFd({ status: 'active', branchId: 'b1' }))
     expect(res).toEqual({ success: true })
   })
 

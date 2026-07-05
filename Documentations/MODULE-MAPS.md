@@ -92,7 +92,7 @@ How data moves between modules from input to output.
 
 ```mermaid
 flowchart TD
-  STAFF["Staff profiles\n(name · role · base salary)"]
+  STAFF["Staff profiles\n(name · department · role · monthly salary)"]
   ATT["Daily attendance\n(present / absent / half-day / holiday)"]
   ADV["Salary advances\n(recorded any time in month)"]
   EOD_INC["EOD income entry\n(dine-in + takeaway · cash + UPI)"]
@@ -187,7 +187,7 @@ Full lifecycle of a staff member in the system.
 
 ```mermaid
 flowchart TD
-  ADD["Add staff member\n(name · role · salary · shift · branch)"]
+  ADD["Add staff member\n(name · department · role · salary · branch)"]
   PROFILE["Staff profile\n(active record in DB)"]
   EDIT["Edit profile\n(owner or branch manager)"]
   DEACTIVATE["Deactivate\n(is_active = false · soft delete)"]
@@ -198,7 +198,7 @@ flowchart TD
   PROFILE --> HISTORY
 
   PROFILE --> ATT_FEED["Feeds attendance roster\n(appears in daily marking)"]
-  PROFILE --> PAY_FEED["Feeds payroll generation\n(base salary snapshot)"]
+  PROFILE --> PAY_FEED["Feeds payroll generation\n(monthly salary snapshot)"]
   DEACTIVATE --> HIDDEN["Hidden from active lists\nHistory preserved in DB"]
 
   subgraph ROLES["Staff role categories"]
@@ -212,15 +212,15 @@ flowchart TD
     R8["other"]
   end
 
-  subgraph SHIFTS["Shift types"]
-    SH1["morning"]
-    SH2["evening"]
-    SH3["full"]
+  subgraph DEPARTMENTS["Departments"]
+    SH1["kitchen"]
+    SH2["service"]
+    SH3["management"]
   end
 
   subgraph FILTERS["List filters"]
-    F1["By role"]
-    F2["By shift"]
+    F1["By department"]
+    F2["By role"]
     F3["Search by name"]
     F4["Include inactive (owner only)"]
   end
@@ -294,9 +294,9 @@ flowchart TD
     C2["Count half_days"]
     C3["Count holiday days (excluded)"]
     C4["Get working_days from branch config (default 26)"]
-    C5["Snapshot base_salary from staff profile"]
+    C5["Snapshot monthly_salary from staff profile"]
     C6["Sum advances where is_deducted = false"]
-    C7["gross = ROUND((present + 0.5×half) ÷ working × base)"]
+    C7["gross = ROUND((present + 0.5×half) ÷ working × monthly_salary)"]
     C8["net = MAX(0, gross − advances)"]
     C1 --> C7
     C2 --> C7

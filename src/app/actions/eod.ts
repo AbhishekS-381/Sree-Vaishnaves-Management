@@ -3,7 +3,7 @@
 import { withTransaction, readJSON, writeJSON, DB_FILES } from '@/lib/db'
 import { randomUUID } from 'crypto'
 import { revalidatePath } from 'next/cache'
-import { requireBranchAccess, getSession } from './auth'
+import { requireBranchAccess, getSession } from '@/app/actions/auth'
 import { logAction } from '@/lib/audit'
 
 export type Expense = {
@@ -119,14 +119,7 @@ export async function saveEODEntry(
   if (!success) return { error: 'Transaction failed' }
   
   const session = await getSession();
-  await logAction({
-    userId: session?.userId || 'system',
-    action: 'SAVE_EOD',
-    entity: 'EOD',
-    entityId: entryData.date,
-    branchId: entryData.branchId,
-    details: { income: entryData.income }
-  });
+  await logAction('SAVE_EOD', 'EOD', JSON.stringify({ income: entryData.income }), entryData.date);
 
   revalidatePath('/eod')
   revalidatePath('/expenses')

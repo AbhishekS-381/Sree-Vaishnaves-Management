@@ -45,13 +45,20 @@ Without the dashboard, every other module is a form you open deliberately. With 
 # MODULE 2 — Staff Management
 
 ## What is the problem right now?
-Staff records live in the owner's memory and scattered across phone contacts, WhatsApp, and maybe a notebook. There is no reliable place to check: what is Murugan's salary? When did Selvi join? How many waiters do we have on the morning shift? When a staff member leaves, that information just disappears.
+Staff records live in the owner's memory and scattered across phone contacts, WhatsApp, and maybe a notebook. There is no reliable place to check: what is Murugan's salary? When did Selvi join? How many waiters do we have in the kitchen department? When a staff member leaves, that information just disappears.
 
 ## What does this module do?
-It maintains a clean, permanent record of every staff member — their role, salary, shift, and joining date. Staff can be deactivated when they leave (their history stays, they just stop appearing in active lists). The list can be filtered by role or shift. Each person has a profile showing their complete history: salary changes, attendance record, advances taken.
+It maintains a clean, permanent record of every staff member — their role, department, salary, and joining date. Staff can be deactivated when they leave (their history stays, they just stop appearing in active lists). The list can be filtered by department or role. Each person has a profile showing their complete history: salary changes, attendance record, advances taken.
 
 ## What does the owner experience?
-Adding a new staff member takes one minute — name, role, salary, shift. That's all. From that point on, that person appears in attendance, payroll, and analytics automatically. When someone leaves, the owner taps "deactivate" and they're gone from active views but their entire history is preserved.
+Adding a new staff member takes one minute — name, department, role, salary. That's all. From that point on, that person appears in attendance, payroll, and analytics automatically. When someone leaves, the owner taps "deactivate" and they're gone from active views but their entire history is preserved.
+
+### Shift Scheduling Constraints
+- Manager can Auto-Generate schedules based on requirements.
+- Max 3 segments (2 breaks).
+- Min 1-hour break between segments.
+- Total hours exactly 10.
+- Operates between 05:00 and 23:00.
 
 The staff list groups people by role — all cooks together, all waiters together — making it easy to scan a large team.
 
@@ -106,7 +113,7 @@ Every staff member's salary slip can be downloaded as a PDF.
 What used to take 2–3 hours of manual calculation now takes 10–15 minutes of review and approval. The owner's job shifts from calculating to verifying — which is a much better use of his expertise.
 
 The salary formula is transparent and consistent:
-> *Final salary = (days present + half days × 0.5) ÷ working days × base salary − advances*
+> *Final salary = (days present + half days × 0.5) ÷ working days × monthly salary − advances*
 
 If the restaurant was closed for a festival, those days are excluded from the denominator automatically — staff are not penalised for a closure the owner decided.
 
