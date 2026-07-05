@@ -2,11 +2,12 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { jwtVerify } from 'jose'
 
-if (!process.env.JWT_SECRET) {
-  throw new Error('JWT_SECRET environment variable is required');
+function getSecretKey() {
+  if (!process.env.JWT_SECRET) {
+    throw new Error('JWT_SECRET environment variable is required');
+  }
+  return new TextEncoder().encode(process.env.JWT_SECRET);
 }
-const secretKey = process.env.JWT_SECRET;
-const key = new TextEncoder().encode(secretKey);
 
 export async function middleware(request: NextRequest) {
   const token = request.cookies.get('session')?.value
@@ -16,7 +17,7 @@ export async function middleware(request: NextRequest) {
   
   if (token) {
     try {
-      await jwtVerify(token, key);
+      await jwtVerify(token, getSecretKey());
       isValidSession = true;
     } catch (e) {
       // Invalid token

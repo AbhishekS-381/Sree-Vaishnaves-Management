@@ -1,10 +1,11 @@
 import { SignJWT, jwtVerify, JWTPayload } from 'jose';
 
-if (!process.env.JWT_SECRET) {
-  throw new Error('JWT_SECRET environment variable is required');
+function getSecretKey() {
+  if (!process.env.JWT_SECRET) {
+    throw new Error('JWT_SECRET environment variable is required');
+  }
+  return new TextEncoder().encode(process.env.JWT_SECRET);
 }
-const secretKey = process.env.JWT_SECRET;
-const key = new TextEncoder().encode(secretKey);
 
 export interface CustomJWTPayload extends JWTPayload {
   userId: string;
@@ -19,12 +20,12 @@ export async function signToken(payload: CustomJWTPayload): Promise<string> {
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime('7d')
-    .sign(key);
+    .sign(getSecretKey());
 }
 
 export async function verifyToken(token: string): Promise<CustomJWTPayload | null> {
   try {
-    const { payload } = await jwtVerify(token, key);
+    const { payload } = await jwtVerify(token, getSecretKey());
     return payload as CustomJWTPayload;
   } catch (error) {
     return null;
