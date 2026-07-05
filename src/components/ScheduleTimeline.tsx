@@ -238,11 +238,15 @@ export function ScheduleTimeline({ requirements, branches, departments, roles }:
     )
   }, [requirements, selectedBranch, selectedDept])
 
+  const attemptedAutoGenerations = useRef(new Set<string>())
+
   // Internal Auto-Trigger for mismatching position counts
   useEffect(() => {
     filteredReqs.forEach(req => {
       const currentSchedulesCount = req.schedules ? req.schedules.length : 0
-      if (req.requiredCount > 0 && currentSchedulesCount !== req.requiredCount && !savingReqId) {
+      const attemptKey = `${req.id}-${req.requiredCount}`
+      if (req.requiredCount > 0 && currentSchedulesCount !== req.requiredCount && !savingReqId && !attemptedAutoGenerations.current.has(attemptKey)) {
+        attemptedAutoGenerations.current.add(attemptKey)
         // Automatically generate with default baseline params if count changed
         const generated = generateSchedules({
           positionCount: req.requiredCount,
