@@ -39,17 +39,38 @@ export function generateSchedules({
 
   for (let p = 0; p < positionCount; p++) {
     let myStartMins = restStartMins + (p * (totalRestMins / Math.max(positionCount, 1)) * 0.5)
-    myStartMins = Math.round(myStartMins / 15) * 15 // Snap to 15m
+    myStartMins = Math.round(myStartMins / 30) * 30 // Snap to 30m
     
     const shifts: Shift[] = []
     const segments = Math.min(3, maxBreaks + 1)
-    const hrsPerSegment = maxHours / segments
-    let segmentMins = hrsPerSegment * 60
-    if (segmentMins < minSegmentHours * 60) segmentMins = minSegmentHours * 60
     
+    // Distribute maxHours into segments chunks of 30 mins
+    let totalMinsToDistribute = maxHours * 60
+    const segmentMinsList = []
+    for (let i = 0; i < segments; i++) {
+        if (i === segments - 1) {
+             segmentMinsList.push(totalMinsToDistribute)
+        } else {
+             let share = Math.round((totalMinsToDistribute / (segments - i)) / 30) * 30
+             if (share < minSegmentHours * 60) share = minSegmentHours * 60
+             segmentMinsList.push(share)
+             totalMinsToDistribute -= share
+        }
+    }
+    
+    // Prevent truncation by clamping the start time
+    const totalRequiredMins = (maxHours * 60) + ((segments - 1) * 60)
+    let maxStartMins = restEndMins - totalRequiredMins
+    // Snap maxStartMins to 30m as well just in case
+    maxStartMins = Math.floor(maxStartMins / 30) * 30
+    
+    if (myStartMins > maxStartMins) myStartMins = maxStartMins
+    if (myStartMins < restStartMins) myStartMins = restStartMins
+
     let currentMarker = myStartMins
 
     for (let s = 0; s < segments; s++) {
+      let segmentMins = segmentMinsList[s]
       let endMarker = currentMarker + segmentMins
       if (endMarker > restEndMins) endMarker = restEndMins
       
