@@ -35,7 +35,7 @@ export default function AttendanceClientPage({ staff, branches, roles, userRole 
     const draft = loadDraft(`${selectedBranch}_${date}`)
     if (draft && Object.keys(draft).length > 0 && !isLocked) {
       if (window.confirm("You have an unsaved draft for this date and branch. Restore it?")) {
-        setLogs(draft)
+        setLogs(draft as Record<string, AttendanceLog>)
         setLoadingInitial(false)
         return
       } else {

@@ -63,7 +63,7 @@ export default function PayrollClientPage({ staff, savedRecords, attendanceLogs 
     const draft = loadDraft(`${year}_${month}`)
     if (draft && Object.keys(draft).length > 0) {
       if (window.confirm(`You have an unsaved draft for ${month}/${year}. Restore it?`)) {
-        setEntries(draft)
+        setEntries(draft as any)
         return
       } else {
         clearDraft(`${year}_${month}`)
@@ -191,7 +191,65 @@ export default function PayrollClientPage({ staff, savedRecords, attendanceLogs 
         <input type="hidden" name="year" value={year} />
 
         <div className="bg-card rounded-2xl border border-card shadow-lg shadow-black/20 overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* Mobile card layout */}
+          <div className="block md:hidden space-y-3 p-4">
+            {visibleStaff.map(s => {
+              const record = currentPayroll.find(r => r.staffId === s.id)
+              const entry = entries[s.id] || { days: 30, notes: '', advances: 0 }
+              const pay = calculatePay(s.monthlySalary || 0, entry.days, entry.advances)
+              const isPaid = record?.status === 'PAID'
+              return (
+                <div key={s.id} className="bg-[#1e1b2e] rounded-xl border border-[#3b3054] p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold text-white">{s.name}</p>
+                      <p className="text-xs text-slate-400">{s.phone}</p>
+                    </div>
+                    {isPaid ? (
+                      <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded-full">PAID</span>
+                    ) : (
+                      <span className="text-xs font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-1 rounded-full">PENDING</span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p className="text-xs text-slate-500 mb-1">Monthly Salary</p>
+                      <p className="text-slate-300">{s.monthlySalary ? `₹${s.monthlySalary.toLocaleString()}` : '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 mb-1">Payable</p>
+                      <p className="font-bold text-emerald-400">₹{pay.toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 mb-1">Days Worked</p>
+                      <input type="number" name={`staff_${s.id}_days`} value={entry.days}
+                        onChange={e => handleDaysChange(s.id, Math.min(31, Math.max(0, Number(e.target.value))))}
+                        max={31} min={0} disabled={isPaid}
+                        className="w-full px-2 py-1 rounded-lg bg-[#131018] border border-[#3b3054] text-white text-center text-sm focus:border-[#c084fc] outline-none disabled:opacity-50"
+                      />
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 mb-1">Advances (₹)</p>
+                      <input type="number" name={`staff_${s.id}_advances`} value={entry.advances}
+                        onChange={e => handleAdvancesChange(s.id, Math.max(0, Number(e.target.value)))}
+                        min={0} disabled={isPaid}
+                        className="w-full px-2 py-1 rounded-lg bg-[#131018] border border-[#3b3054] text-amber-400 text-center text-sm focus:border-[#c084fc] outline-none disabled:opacity-50"
+                      />
+                    </div>
+                  </div>
+                  {!isPaid && record && (
+                    <button type="button" onClick={() => handleMarkPaid(record.id)}
+                      className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg transition-colors">
+                      Mark as Paid
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Desktop table layout */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead className="bg-[#252033] border-b border-[#3b3054] text-accent text-xs uppercase font-semibold tracking-wider">
                 <tr>

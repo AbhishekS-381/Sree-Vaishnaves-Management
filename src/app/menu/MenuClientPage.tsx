@@ -22,7 +22,7 @@ export default function MenuClientPage({ branches, initialMenu, categories }: { 
   const { saveDraft, loadDraft, clearDraft } = useDraft('menu')
 
   const handleOpenAdd = () => {
-     const draft = loadDraft('add')
+     const draft = loadDraft('add') as any
      if (draft && draft.name) {
        if (window.confirm("You have an unsaved draft for a new menu item. Restore it?")) {
          setAddDraftState(draft)

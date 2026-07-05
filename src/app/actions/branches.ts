@@ -4,6 +4,7 @@ import { withTransaction, DB_FILES } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'crypto'
 import { getSession } from './auth'
+import { z } from 'zod'
 
 type Branch = {
   id: string
@@ -32,7 +33,6 @@ export async function addBranch(prevState: any, formData: FormData) {
   const customerStartTime = formData.get('customerStartTime') as string
   const customerEndTime = formData.get('customerEndTime') as string
 
-  import { z } from 'zod';
   const schema = z.object({
     name: z.string().min(1).max(100).trim(),
     address: z.string().min(1).max(200).trim(),
@@ -77,7 +77,6 @@ export async function updateBranch(prevState: any, formData: FormData) {
   const customerStartTime = formData.get('customerStartTime') as string
   const customerEndTime = formData.get('customerEndTime') as string
 
-  import { z } from 'zod';
   const schema = z.object({ name: z.string().min(1).max(100).trim() });
   const parsed = schema.safeParse({ name });
   if (!id || !parsed.success) return { error: parsed.success ? 'Invalid data' : parsed.error.issues[0].message }

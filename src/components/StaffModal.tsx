@@ -48,7 +48,7 @@ export function StaffModal({ isOpen, onClose, editData, preselectedPositionId, r
         setStartTime(editData.startTime || '')
         setEndTime(editData.endTime || '')
       } else {
-        const d = loadDraft('add')
+        const d = loadDraft('add') as any
         if (d && Object.keys(d).length > 0) {
           if (window.confirm("You have an unsaved draft for a new staff member. Restore it?")) {
              setDraftData(d)

@@ -4,7 +4,7 @@ import { getSession } from '@/app/actions/auth'
 
 export default async function StaffPage() {
   const session = await getSession();
-  const [staff, roles, depts, branches, requirements, menuCategories] = await Promise.all([
+  let [staff, roles, depts, branches, requirements, menuCategories] = await Promise.all([
     readJSON<any>(DB_FILES.STAFF),
     readJSON<any>(DB_FILES.ROLES),
     readJSON<any>(DB_FILES.DEPARTMENTS),

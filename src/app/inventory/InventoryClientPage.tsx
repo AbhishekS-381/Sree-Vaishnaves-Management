@@ -19,7 +19,7 @@ export default function InventoryClientPage({ branches, inventory }: { branches:
   const { saveDraft, loadDraft, clearDraft } = useDraft('inventory')
 
   const handleOpenAdd = () => {
-     const draft = loadDraft('add')
+     const draft = loadDraft('add') as any
      if (draft && draft.name) {
        if (window.confirm("You have an unsaved draft for a new item. Restore it?")) {
          setAddDraftState(draft)

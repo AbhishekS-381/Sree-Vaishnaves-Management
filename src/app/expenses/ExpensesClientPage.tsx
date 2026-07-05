@@ -27,7 +27,7 @@ export default function ExpensesClientPage({ branches, expenses, userRole }: { b
     const draft = loadDraft(ex.id)
     if (draft) {
       if (window.confirm("You have an unsaved draft for editing this expense. Restore it?")) {
-        setEditingExpense(draft)
+        setEditingExpense(draft as any)
         return
       } else {
         clearDraft(ex.id)

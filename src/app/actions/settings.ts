@@ -3,6 +3,8 @@
 import { withTransaction, readJSON, writeJSON, DB_FILES } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'crypto'
+import { z } from 'zod'
+import { getSession } from '@/app/actions/auth'
 
 // --- Departments ---
 
@@ -14,9 +16,11 @@ type Department = {
 }
 
 export async function addDepartment(prevState: any, formData: FormData) {
+  const session = await getSession()
+  if (session?.role !== 'owner' && session?.role !== 'admin') return { error: 'Forbidden' }
+
   const name = formData.get('name') as string
 
-  import { z } from 'zod';
   const schema = z.object({ name: z.string().min(1).max(100).trim() });
   const parsed = schema.safeParse({ name });
   if (!parsed.success) return { error: parsed.error.issues[0].message }
@@ -37,6 +41,9 @@ export async function addDepartment(prevState: any, formData: FormData) {
 }
 
 export async function updateDepartment(prevState: any, formData: FormData) {
+  const session = await getSession()
+  if (session?.role !== 'owner' && session?.role !== 'admin') return { error: 'Forbidden' }
+
   const id = formData.get('id') as string
   const name = formData.get('name') as string
 
@@ -62,6 +69,9 @@ export async function updateDepartment(prevState: any, formData: FormData) {
 }
 
 export async function deleteDepartment(id: string) {
+  const session = await getSession()
+  if (session?.role !== 'owner' && session?.role !== 'admin') return { error: 'Forbidden' }
+
   let notFound = false
   const success = await withTransaction<Department>(DB_FILES.DEPARTMENTS, (list) => {
     const index = list.findIndex(d => d.id === id)
@@ -94,6 +104,9 @@ type Role = {
 }
 
 export async function addRole(prevState: any, formData: FormData) {
+  const session = await getSession()
+  if (session?.role !== 'owner' && session?.role !== 'admin') return { error: 'Forbidden' }
+
   const name = formData.get('name') as string
   const isAdmin = formData.get('isAdmin') === 'on'
   const isChef = formData.get('isChef') === 'on'
@@ -122,6 +135,9 @@ export async function addRole(prevState: any, formData: FormData) {
 }
 
 export async function updateRole(prevState: any, formData: FormData) {
+  const session = await getSession()
+  if (session?.role !== 'owner' && session?.role !== 'admin') return { error: 'Forbidden' }
+
   const id = formData.get('id') as string
   const name = formData.get('name') as string
   const isAdmin = formData.get('isAdmin') === 'on'
@@ -150,6 +166,9 @@ export async function updateRole(prevState: any, formData: FormData) {
 }
 
 export async function deleteRole(id: string) {
+  const session = await getSession()
+  if (session?.role !== 'owner' && session?.role !== 'admin') return { error: 'Forbidden' }
+
   let notFound = false
   const success = await withTransaction<Role>(DB_FILES.ROLES, (list) => {
     const index = list.findIndex(r => r.id === id)

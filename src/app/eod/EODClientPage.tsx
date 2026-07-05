@@ -80,11 +80,12 @@ export default function EODClientPage({ branches, categories }: { branches: any[
       const draft = loadDraft(`${selectedBranch}_${date}`)
       if (draft) {
         if (window.confirm("You have an unsaved draft for this date and branch. Restore it?")) {
-          setIncome(draft.income || { dineInCash: 0, dineInUpi: 0, takeawayCash: 0, takeawayUpi: 0 })
-          setExpenses(draft.expenses || [])
-          setNotes(draft.notes || '')
-          setOpeningFloat(draft.openingFloat || '')
-          setActualClosingFloat(draft.actualClosingFloat || '')
+          const parsedDraft = draft as any;
+          setIncome(parsedDraft.income || { dineInCash: 0, dineInUpi: 0, takeawayCash: 0, takeawayUpi: 0 })
+          setExpenses(parsedDraft.expenses || [])
+          setNotes(parsedDraft.notes || '')
+          setOpeningFloat(parsedDraft.openingFloat || '')
+          setActualClosingFloat(parsedDraft.actualClosingFloat || '')
         } else {
           clearDraft(`${selectedBranch}_${date}`)
         }

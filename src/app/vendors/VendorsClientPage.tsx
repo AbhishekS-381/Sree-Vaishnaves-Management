@@ -23,7 +23,7 @@ export default function VendorsClientPage({ branches, vendors, expenses, categor
   const [billDraftState, setBillDraftState] = useState<any>({})
 
   const handleOpenAdd = () => {
-     const draft = loadDraft('add')
+     const draft = loadDraft('add') as any
      if (draft && draft.name) {
        if (window.confirm("You have an unsaved draft for a new vendor. Restore it?")) {
          setAddDraftState(draft)
@@ -38,7 +38,7 @@ export default function VendorsClientPage({ branches, vendors, expenses, categor
   }
 
   const handleOpenBill = (vendor: any) => {
-     const draft = loadDraft('bill_' + vendor.id)
+     const draft = loadDraft('bill_' + vendor.id) as any
      if (draft && draft.amount) {
        if (window.confirm("You have an unsaved draft for a bill for this vendor. Restore it?")) {
          setBillDraftState(draft)
