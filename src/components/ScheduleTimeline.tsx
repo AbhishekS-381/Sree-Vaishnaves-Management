@@ -220,13 +220,19 @@ export function ScheduleTimeline({ requirements, branches, departments, roles }:
       existingSchedules.push({ positionIndex, shifts })
     }
     
-    await updateRequirementSchedules(req.id, existingSchedules)
+    const result = await updateRequirementSchedules(req.id, existingSchedules)
+    if (result && result.error) {
+      alert("Error saving schedules: " + result.error)
+    }
     setSavingReqId(null)
   }
 
   const handleAutoGenerate = async (req: any, generatedSchedules: PositionSchedule[]) => {
     setSavingReqId(req.id)
-    await updateRequirementSchedules(req.id, generatedSchedules)
+    const result = await updateRequirementSchedules(req.id, generatedSchedules)
+    if (result && result.error) {
+      alert("Error generating schedules: " + result.error)
+    }
     setSavingReqId(null)
   }
 
