@@ -7,7 +7,7 @@ import { z } from 'zod'
 
 import { readJSON, writeJSON, DB_FILES } from '@/lib/db'
 import { signToken, verifyToken } from '@/lib/jwt'
-import { checkRateLimit } from '@/lib/rate-limit'
+import { checkRateLimit, resetRateLimit, pruneRateLimits } from '@/lib/rate-limit'
 
 const loginSchema = z.object({
   name: z.string().min(1, 'Username is required'),
@@ -49,6 +49,14 @@ export async function login(prevState: any, formData: FormData) {
   }
 
   if (user && isValidPassword) {
+    // Clear rate limit counter on successful login
+    await resetRateLimit(ip);
+
+    // Prune stale rate limit rows ~1% of logins — fire and forget
+    if (Math.random() < 0.01) {
+      pruneRateLimits().catch(() => {});
+    }
+
     const isGlobalAdmin = user.role === 'admin' || user.role === 'owner';
     const token = await signToken({
       userId: user.id || user.name,

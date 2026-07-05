@@ -14,7 +14,7 @@ The application utilizes **Next.js App Router Server Actions** for authenticatio
 ## Authentication Flow
 
 ### Login Action (`src/app/actions/auth.ts`)
-1. **Rate Limiting**: The client's IP is extracted via `next/headers` and verified against the in-house JSON-backed rate limiter (`rate_limits.json`). Limited to 5 attempts per 5 minutes.
+1. **Rate Limiting**: The client's IP is extracted via `next/headers` and verified against the Postgres `rate_limit` table via a single atomic upsert. Limited to 10 attempts per 1 minute window, with a 5 minute block.
 2. **Validation**: Input is strictly validated using Zod:
    - Password must be at least 8 characters, with 1 uppercase, 1 lowercase, 1 number, and 1 special character.
 3. **Password Verification**: Compares the provided password with the hashed password in `users.json` using `bcrypt.compare()`.
@@ -71,7 +71,7 @@ Pages fetch the session on the server via `getSession()`. Users with invalid rol
 ## Security Rules
 
 1. **No Hard Deletion**: The application strictly enforces soft-deletion using `isActive: false` and `deletedAt`. Data is never wiped from the database.
-2. **Rate Limiting**: Built-in 5-attempt / 5-minute sliding window lockout per IP to stop brute-forcing.
+2. **Rate Limiting**: Built-in 10-attempt / 1-minute sliding window lockout per IP to stop brute-forcing, backed by the Postgres `rate_limit` table.
 3. **Password Integrity**: Passwords are one-way hashed using `bcryptjs`.
 4. **Cookie Security**: Tokens are inaccessible to client-side JavaScript (`HttpOnly`).
 5. **Session Fallback Removed**: No hardcoded JWT secrets are permitted; `JWT_SECRET` must be sourced from the environment.

@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { checkRateLimit, RateLimitEntry } from '@/lib/rate-limit'
-import * as db from '@/lib/db'
+import { checkRateLimit, resetRateLimit, pruneRateLimits } from '@/lib/rate-limit'
+import { db } from '../../../db/index'
 
-vi.mock('@/lib/db', () => ({
-  withTransaction: vi.fn(),
-  DB_FILES: new Proxy({}, { get: () => 'mock.json' })
+vi.mock('../../../db/index', () => ({
+  db: {
+    execute: vi.fn(),
+  }
 }))
 
 describe('Rate Limit Utility', () => {
@@ -18,10 +19,15 @@ describe('Rate Limit Utility', () => {
   })
 
   it('allows new IP and adds it', async () => {
-    vi.mocked(db.withTransaction).mockImplementation(async (file: string, cb: any) => {
-      const result = await cb([]);
-      return result;
-    })
+    vi.mocked(db.execute).mockResolvedValue({
+      rows: [
+        {
+          attempts: 1,
+          window_start: Date.now(),
+          blocked_until: 0
+        }
+      ]
+    } as any)
     
     const res = await checkRateLimit('127.0.0.1');
     expect(res.success).toBe(true);
@@ -29,25 +35,47 @@ describe('Rate Limit Utility', () => {
 
   it('blocks IP if attempts exceed limit', async () => {
     const now = Date.now();
-    vi.mocked(db.withTransaction).mockImplementation(async (file: string, cb: any) => {
-      const result = await cb([{ ip: '127.0.0.1', attempts: 5, resetAt: now + 50000 }]);
-      return result;
-    })
+    vi.mocked(db.execute).mockResolvedValue({
+      rows: [
+        {
+          attempts: 10,
+          window_start: now - 10000,
+          blocked_until: now + 300000
+        }
+      ]
+    } as any)
     
     const res = await checkRateLimit('127.0.0.1');
     expect(res.success).toBe(false);
-    expect(res.error).toBeDefined();
+    expect((res as any).error).toMatch(/Too many login attempts/);
+    expect((res as any).retryAfterMs).toBe(300000);
   })
 
   it('allows IP if previous limit is expired', async () => {
     const now = Date.now();
-    vi.mocked(db.withTransaction).mockImplementation(async (file: string, cb: any) => {
-      // The old limit expired 1 second ago
-      const result = await cb([{ ip: '127.0.0.1', attempts: 5, resetAt: now - 1000 }]);
-      return result;
-    })
+    vi.mocked(db.execute).mockResolvedValue({
+      rows: [
+        {
+          attempts: 1,
+          window_start: now,
+          blocked_until: 0
+        }
+      ]
+    } as any)
     
     const res = await checkRateLimit('127.0.0.1');
     expect(res.success).toBe(true);
+  })
+
+  it('resetRateLimit executes delete', async () => {
+    vi.mocked(db.execute).mockResolvedValue({} as any)
+    await resetRateLimit('127.0.0.1');
+    expect(db.execute).toHaveBeenCalled();
+  })
+
+  it('pruneRateLimits executes delete', async () => {
+    vi.mocked(db.execute).mockResolvedValue({} as any)
+    await pruneRateLimits();
+    expect(db.execute).toHaveBeenCalled();
   })
 })

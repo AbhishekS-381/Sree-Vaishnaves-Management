@@ -12,13 +12,13 @@ A custom `withTransaction` in `src/lib/db.ts` acts as an in-memory Mutex to prev
 
 ### DB Files
 - `users.json`, `staff.json`, `branches.json`
-- `rate_limits.json` (Handles in-house sliding-window rate limiting)
+- Postgres `rate_limit` table (Handles in-house sliding-window rate limiting)
 - `audit_logs.json` (Logs all destructive actions or modifications)
 
 ## Authentication
 Authentication is fully stateless and built strictly on Next.js Server Actions:
 1. `auth.ts` intercepts `/login` actions.
-2. Checks IP rate limits via `rate_limits.json`.
+2. Checks IP rate limits via the Postgres `rate_limit` table.
 3. Verifies bcrypt hashed passwords.
 4. Drops an HttpOnly `session` cookie.
 
