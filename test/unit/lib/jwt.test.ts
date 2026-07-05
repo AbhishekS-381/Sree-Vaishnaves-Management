@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
 import * as jose from 'jose'
 
+process.env.JWT_SECRET = 'test-secret'
+
 // Mock jose — SignJWT must be a real class (constructor function)
 vi.mock('jose', async () => {
   function MockSignJWT(this: any) {

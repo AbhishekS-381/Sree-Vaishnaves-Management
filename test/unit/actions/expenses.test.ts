@@ -16,7 +16,7 @@ vi.mock('@/app/actions/auth', () => ({
 describe('Expenses Actions', () => {
   beforeEach(() => {
     vi.resetAllMocks()
-    vi.mocked(auth.getSession).mockResolvedValue({ role: 'Admin', branchId: 'b1' } as any)
+    vi.mocked(auth.getSession).mockResolvedValue({ role: 'admin', branchId: 'b1' } as any)
   })
 
   it('updateExpense validates auth (no session)', async () => {

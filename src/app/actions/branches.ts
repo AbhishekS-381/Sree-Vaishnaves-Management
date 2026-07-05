@@ -3,6 +3,7 @@
 import { withTransaction, DB_FILES } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'crypto'
+import { getSession } from './auth'
 
 type Branch = {
   id: string
@@ -14,9 +15,14 @@ type Branch = {
   internalEndTime?: string
   customerStartTime?: string
   customerEndTime?: string
+  isActive?: boolean
+  deletedAt?: string
 }
 
 export async function addBranch(prevState: any, formData: FormData) {
+  const session = await getSession()
+  if (session?.role !== 'owner' && session?.role !== 'admin') return { error: 'Forbidden' }
+
   const name = formData.get('name') as string
   const address = formData.get('address') as string
   const phone = formData.get('phone') as string
@@ -40,7 +46,8 @@ export async function addBranch(prevState: any, formData: FormData) {
       internalStartTime,
       internalEndTime,
       customerStartTime,
-      customerEndTime
+      customerEndTime,
+      isActive: true
     })
     return list
   })
@@ -52,6 +59,9 @@ export async function addBranch(prevState: any, formData: FormData) {
 }
 
 export async function updateBranch(prevState: any, formData: FormData) {
+  const session = await getSession()
+  if (session?.role !== 'owner' && session?.role !== 'admin') return { error: 'Forbidden' }
+
   const id = formData.get('id') as string
   const name = formData.get('name') as string
   const address = formData.get('address') as string
@@ -94,11 +104,19 @@ export async function updateBranch(prevState: any, formData: FormData) {
 }
 
 export async function deleteBranch(id: string) {
+  const session = await getSession()
+  if (session?.role !== 'owner' && session?.role !== 'admin') return { error: 'Forbidden' }
+
   let notFound = false
   const success = await withTransaction<Branch>(DB_FILES.BRANCHES, (list) => {
-    const newList = list.filter(b => b.id !== id)
-    if (newList.length === list.length) notFound = true
-    return newList
+    const index = list.findIndex(b => b.id === id)
+    if (index === -1) {
+      notFound = true
+      return list
+    }
+    list[index].isActive = false
+    list[index].deletedAt = new Date().toISOString()
+    return list
   })
 
   if (notFound) return { error: 'Branch not found' }

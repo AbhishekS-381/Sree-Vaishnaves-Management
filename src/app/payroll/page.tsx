@@ -1,13 +1,23 @@
 import { readJSON, DB_FILES } from '@/lib/db'
 import PayrollClientPage from './PayrollClientPage'
+import { getSession } from '@/app/actions/auth'
 
 export default async function PayrollPage() {
+  const session = await getSession();
   try {
-    const [staff, payroll, attendance] = await Promise.all([
+    let [staff, payroll, attendance] = await Promise.all([
       readJSON<any>(DB_FILES.STAFF),
       readJSON<any>(DB_FILES.PAYROLL),
       readJSON<any>(DB_FILES.ATTENDANCE).catch(() => [])
     ]);
+
+    if (!session?.isGlobalAdmin) {
+      staff = staff.filter((s: any) => s.branchId === session?.branchId)
+      payroll = payroll.filter((p: any) => p.branchId === session?.branchId)
+      attendance = attendance.filter((a: any) => a.branchId === session?.branchId)
+    }
+    
+    staff = staff.filter((s: any) => s.isActive !== false)
 
     return (
       <PayrollClientPage

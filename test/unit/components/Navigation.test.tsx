@@ -14,7 +14,7 @@ vi.mock('@/app/actions/auth', () => ({ logout: vi.fn() }))
 describe('Navigation component', () => {
   it('renders the owner portal label', () => {
     const { container } = render(<Navigation role="owner" config={{}} />)
-    expect(container.textContent).toContain('Owner Portal')
+    expect(container.textContent).toContain('Admin Portal')
   })
 
   it('renders manager portal when role=readonly', () => {

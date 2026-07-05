@@ -3,10 +3,12 @@
 import { withTransaction, readJSON, DB_FILES } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'crypto'
+import { getSession } from './auth'
 
 type SalaryRecord = {
   id: string
   staffId: string
+  branchId?: string
   name: string
   month: number
   year: number
@@ -20,6 +22,9 @@ type SalaryRecord = {
 }
 
 export async function savePayroll(prevState: any, formData: FormData) {
+  const session = await getSession()
+  if (!session) return { error: 'Unauthorized' }
+
   const month = Number(formData.get('month'))
   const year = Number(formData.get('year'))
 
@@ -30,7 +35,10 @@ export async function savePayroll(prevState: any, formData: FormData) {
   const rawData = Object.fromEntries(formData.entries())
 
   // We need current staff list to map IDs -> Names/Base Salary
-  const staffList = await readJSON<any>(DB_FILES.STAFF) // Avoid circular dep if possible, but safe here
+  let staffList = await readJSON<any>(DB_FILES.STAFF)
+  if (!session.isGlobalAdmin) {
+    staffList = staffList.filter(s => s.branchId === session.branchId)
+  }
 
   for (const key in rawData) {
     if (key.startsWith('staff_') && key.endsWith('_days')) {
@@ -49,6 +57,7 @@ export async function savePayroll(prevState: any, formData: FormData) {
       const record: SalaryRecord = {
         id: `pay_${month}_${year}_${staffId}`,
         staffId,
+        branchId: staffMember.branchId,
         name: staffMember.name,
         month,
         year,
@@ -76,6 +85,9 @@ export async function savePayroll(prevState: any, formData: FormData) {
 }
 
 export async function markAsPaid(id: string) {
+  const session = await getSession()
+  if (!session?.isGlobalAdmin) return { error: 'Forbidden' }
+
   let notFound = false;
   const success = await withTransaction<SalaryRecord>(DB_FILES.PAYROLL, (payrollDB) => {
     const index = payrollDB.findIndex(p => p.id === id)

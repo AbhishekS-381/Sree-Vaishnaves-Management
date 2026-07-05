@@ -1,7 +1,9 @@
 import { readJSON, DB_FILES } from '@/lib/db'
 import StaffClientPage from './StaffClientPage'
+import { getSession } from '@/app/actions/auth'
 
 export default async function StaffPage() {
+  const session = await getSession();
   const [staff, roles, depts, branches, requirements, menuCategories] = await Promise.all([
     readJSON<any>(DB_FILES.STAFF),
     readJSON<any>(DB_FILES.ROLES),
@@ -10,6 +12,14 @@ export default async function StaffPage() {
     readJSON<any>(DB_FILES.STAFF_REQUIREMENTS),
     readJSON<any>(DB_FILES.MENU_CATEGORIES).catch(() => [])
   ]);
+
+  if (!session?.isGlobalAdmin) {
+    staff = staff.filter((s: any) => s.branchId === session?.branchId)
+    requirements = requirements.filter((r: any) => r.branchId === session?.branchId)
+  }
+
+  staff = staff.filter((s: any) => s.isActive !== false)
+  requirements = requirements.filter((r: any) => r.isActive !== false)
 
   return (
     <StaffClientPage

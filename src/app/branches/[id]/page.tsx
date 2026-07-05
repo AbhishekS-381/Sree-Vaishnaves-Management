@@ -1,9 +1,15 @@
 import { readJSON, DB_FILES } from '@/lib/db'
 import { MapPin, Phone, Users, User } from 'lucide-react'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
+import { getSession } from '@/app/actions/auth'
 
 export default async function BranchDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  
+  const session = await getSession()
+  if (!session?.isGlobalAdmin && session?.branchId !== id) {
+    redirect('/')
+  }
 
   const branches = await readJSON<any>(DB_FILES.BRANCHES)
   const staff = await readJSON<any>(DB_FILES.STAFF)

@@ -40,10 +40,10 @@ CREATE TABLE stock_items (
   -- e.g. 'kg', 'litres', 'pieces', 'packets'
   current_quantity  NUMERIC(10,2) NOT NULL DEFAULT 0,
   low_stock_threshold NUMERIC(10,2) NOT NULL DEFAULT 0,
-  is_active         BOOLEAN NOT NULL DEFAULT TRUE,
+  isActive         BOOLEAN NOT NULL DEFAULT TRUE,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  deleted_at        TIMESTAMPTZ DEFAULT NULL
+  deletedAt        TIMESTAMPTZ DEFAULT NULL
 );
 
 CREATE TABLE stock_adjustments (

@@ -43,10 +43,10 @@ CREATE TABLE vendors (
   supply_type   VARCHAR(100),
   -- e.g. 'vegetables', 'dairy', 'gas', 'packaging'
   notes         TEXT,
-  is_active     BOOLEAN NOT NULL DEFAULT TRUE,
+  isActive     BOOLEAN NOT NULL DEFAULT TRUE,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  deleted_at    TIMESTAMPTZ DEFAULT NULL
+  deletedAt    TIMESTAMPTZ DEFAULT NULL
 );
 ```
 

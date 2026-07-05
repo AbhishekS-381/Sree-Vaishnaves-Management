@@ -55,7 +55,8 @@ export const DB_FILES = {
   USERS: 'users.json',
   STAFF_REQUIREMENTS: 'staff_requirements.json',
   MENU_CATEGORIES: 'menu_categories.json',
-  AUDIT_LOGS: 'audit_logs.json'
+  AUDIT_LOGS: 'audit_logs.json',
+  RATE_LIMITS: 'rate_limits.json'
 };
 
 export async function readJSON<T>(filename: string): Promise<T[]> {

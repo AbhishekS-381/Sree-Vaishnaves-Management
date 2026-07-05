@@ -11,7 +11,7 @@ export async function updateExpense(id: string, updates: Partial<Expense>) {
   if (!session) return { error: 'Unauthorized' }
 
   // Only Admins or SuperAdmins can edit older ledger expenses directly
-  if (session.role !== 'Admin' && session.role !== 'SuperAdmin' && session.role !== 'owner') {
+  if (session.role !== 'admin' && session.role !== 'owner') {
     return { error: 'Only administrators can edit ledger expenses.' }
   }
 
@@ -28,7 +28,7 @@ export async function updateExpense(id: string, updates: Partial<Expense>) {
       ...allExpenses[index],
       ...updates,
       id: allExpenses[index].id,
-      branchId: updates.branchId || allExpenses[index].branchId,
+      branchId: allExpenses[index].branchId, // Do not allow changing branchId
     }
     
     newData = allExpenses[index]

@@ -9,6 +9,8 @@ import { randomUUID } from 'crypto'
 type Department = {
   id: string
   name: string
+  isActive?: boolean
+  deletedAt?: string
 }
 
 export async function addDepartment(prevState: any, formData: FormData) {
@@ -16,9 +18,10 @@ export async function addDepartment(prevState: any, formData: FormData) {
 
   if (!name) return { error: 'Name is required' }
 
-  const newDept = {
+  const newDept: Department = {
     id: `dept_${randomUUID().split('-')[0]}`,
-    name
+    name,
+    isActive: true
   }
   const success = await withTransaction<Department>(DB_FILES.DEPARTMENTS, (list) => {
     list.push(newDept)
@@ -54,10 +57,19 @@ export async function updateDepartment(prevState: any, formData: FormData) {
 }
 
 export async function deleteDepartment(id: string) {
+  let notFound = false
   const success = await withTransaction<Department>(DB_FILES.DEPARTMENTS, (list) => {
-    return list.filter(d => d.id !== id)
+    const index = list.findIndex(d => d.id === id)
+    if (index === -1) {
+      notFound = true
+      return list
+    }
+    list[index].isActive = false
+    list[index].deletedAt = new Date().toISOString()
+    return list
   })
 
+  if (notFound) return { error: 'Department not found' }
   if (!success) return { error: 'Failed to delete department' }
 
   revalidatePath('/settings')
@@ -72,6 +84,8 @@ type Role = {
   isAdmin: boolean
   isChef?: boolean
   departmentIds?: string[]
+  isActive?: boolean
+  deletedAt?: string
 }
 
 export async function addRole(prevState: any, formData: FormData) {
@@ -82,12 +96,13 @@ export async function addRole(prevState: any, formData: FormData) {
 
   if (!name) return { error: 'Name is required' }
 
-  const newItem = {
+  const newItem: Role = {
     id: `role_${randomUUID().split('-')[0]}`,
     name,
     isAdmin,
     isChef,
-    departmentIds
+    departmentIds,
+    isActive: true
   }
   const success = await withTransaction<Role>(DB_FILES.ROLES, (list) => {
     list.push(newItem)
@@ -126,10 +141,19 @@ export async function updateRole(prevState: any, formData: FormData) {
 }
 
 export async function deleteRole(id: string) {
+  let notFound = false
   const success = await withTransaction<Role>(DB_FILES.ROLES, (list) => {
-    return list.filter(r => r.id !== id)
+    const index = list.findIndex(r => r.id === id)
+    if (index === -1) {
+      notFound = true
+      return list
+    }
+    list[index].isActive = false
+    list[index].deletedAt = new Date().toISOString()
+    return list
   })
 
+  if (notFound) return { error: 'Role not found' }
   if (!success) return { error: 'Failed to delete role' }
 
   revalidatePath('/settings')

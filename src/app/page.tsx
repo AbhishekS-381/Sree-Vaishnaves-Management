@@ -37,6 +37,9 @@ export default async function Dashboard() {
     payroll = payroll.filter((p: any) => p.branchId === userBranchId);
   }
 
+  branches = branches.filter((b: any) => b.isActive !== false);
+  staff = staff.filter((s: any) => s.isActive !== false);
+
   const activeStaff = staff.filter(s => s.isActive).length
 
   const todayStr = new Date().toLocaleDateString('en-CA') // YYYY-MM-DD local

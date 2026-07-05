@@ -10,7 +10,8 @@ vi.mock('@/lib/db', () => ({
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('@/lib/audit', () => ({ logAction: vi.fn() }))
 vi.mock('@/app/actions/auth', () => ({
-  getSession: vi.fn().mockResolvedValue({ role: 'Staff' })
+  getSession: vi.fn().mockResolvedValue({ role: 'Staff' }),
+  requireBranchAccess: vi.fn().mockResolvedValue('b1')
 }))
 
 describe('Attendance Actions', () => {
@@ -34,11 +35,12 @@ describe('Attendance Actions', () => {
   })
 
   it('saveAttendance creates and updates', async () => {
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
     vi.mocked(db.withTransaction).mockImplementation(async (f, cb) => {
-      await cb([{ date: new Date().toISOString(), staffId: 's1' }])
+      await cb([{ date: todayStr, staffId: 's1' }])
       return true
     })
-    const res = await saveAttendance([{ date: new Date().toISOString(), staffId: 's1' }, { date: new Date().toISOString(), staffId: 's2' }])
+    const res = await saveAttendance([{ date: todayStr, staffId: 's1' }, { date: todayStr, staffId: 's2' }])
     expect(res).toEqual({ success: true })
   })
 })

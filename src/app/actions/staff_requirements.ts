@@ -2,17 +2,20 @@
 
 import { withTransaction, DB_FILES } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
+import { randomUUID } from 'crypto'
+import { getSession, requireBranchAccess } from './auth'
 
 export async function saveRequirement(id: string | null, branchId: string, departmentId: string, roleId: string, requiredCount: number, specialtyId?: string, defaultSalary?: number, startTime?: string, endTime?: string, responsibility?: string) {
   try {
+    const enforcedBranchId = await requireBranchAccess(branchId)
     const success = await withTransaction<any>(DB_FILES.STAFF_REQUIREMENTS, (reqs) => {
       const existingIndex = reqs.findIndex((r: any) => 
         (id && r.id === id) || 
-        (!id && r.branchId === branchId && r.departmentId === departmentId && r.roleId === roleId && r.specialtyId === specialtyId)
+        (!id && r.branchId === enforcedBranchId && r.departmentId === departmentId && r.roleId === roleId && r.specialtyId === specialtyId)
       )
 
       if (existingIndex >= 0) {
-        reqs[existingIndex].branchId = branchId
+        reqs[existingIndex].branchId = enforcedBranchId
         reqs[existingIndex].departmentId = departmentId
         reqs[existingIndex].roleId = roleId
         reqs[existingIndex].requiredCount = requiredCount
@@ -23,8 +26,8 @@ export async function saveRequirement(id: string | null, branchId: string, depar
         reqs[existingIndex].responsibility = responsibility
       } else {
         reqs.push({
-          id: `req_${Date.now()}`,
-          branchId,
+          id: `req_${randomUUID()}`,
+          branchId: enforcedBranchId,
           departmentId,
           roleId,
           specialtyId,
@@ -48,9 +51,18 @@ export async function saveRequirement(id: string | null, branchId: string, depar
 }
 
 export async function deleteRequirement(id: string) {
+  const session = await getSession()
+  if (!session) return { error: 'Unauthorized' }
+
   try {
     const success = await withTransaction<any>(DB_FILES.STAFF_REQUIREMENTS, (reqs) => {
-      return reqs.filter((r: any) => r.id !== id)
+      return reqs.filter((r: any) => {
+        if (r.id === id) {
+          if (!session.isGlobalAdmin && r.branchId !== session.branchId) return true; // Keep it
+          return false; // Delete it
+        }
+        return true;
+      })
     })
     
     if (!success) throw new Error('Transaction failed')
@@ -79,6 +91,9 @@ function parseTime(t: string) {
 }
 
 export async function updateRequirementSchedules(id: string, schedules: PositionSchedule[]) {
+  const session = await getSession()
+  if (!session) return { error: 'Unauthorized' }
+
   try {
     for (const schedule of schedules) {
       if (schedule.shifts.length > 3) {
@@ -113,6 +128,7 @@ export async function updateRequirementSchedules(id: string, schedules: Position
     const success = await withTransaction<any>(DB_FILES.STAFF_REQUIREMENTS, (reqs) => {
       const index = reqs.findIndex((r: any) => r.id === id)
       if (index >= 0) {
+        if (!session.isGlobalAdmin && reqs[index].branchId !== session.branchId) return reqs; // Don't modify
         reqs[index].schedules = schedules
       }
       return reqs

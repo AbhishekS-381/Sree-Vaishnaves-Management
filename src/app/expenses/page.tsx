@@ -1,11 +1,19 @@
 import { readJSON, DB_FILES } from '@/lib/db'
-import { getSessionRole } from '@/app/actions/auth'
+import { getSessionRole, getSession } from '@/app/actions/auth'
 import ExpensesClientPage from './ExpensesClientPage'
 
 export default async function ExpensesPage() {
-  const branches = await readJSON<any>(DB_FILES.BRANCHES)
-  const expenses = await readJSON<any>(DB_FILES.EXPENSES)
-  const userRole = await getSessionRole()
+  let branches = await readJSON<any>(DB_FILES.BRANCHES)
+  let expenses = await readJSON<any>(DB_FILES.EXPENSES)
+  const session = await getSession()
+  const userRole = session?.role
+
+  if (!session?.isGlobalAdmin) {
+    branches = branches.filter((b: any) => b.id === session?.branchId)
+    expenses = expenses.filter((e: any) => e.branchId === session?.branchId)
+  }
+
+  branches = branches.filter((b: any) => b.isActive !== false)
 
   return (
     <ExpensesClientPage branches={branches} expenses={expenses} userRole={userRole || ''} />

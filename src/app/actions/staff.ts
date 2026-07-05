@@ -23,6 +23,7 @@ type Staff = {
   positionId?: string
   startTime?: string
   endTime?: string
+  deletedAt?: string
 }
 
 export async function addStaff(prevState: any, formData: FormData) {
@@ -188,11 +189,14 @@ export async function deleteStaff(id: string) {
 
   let notFound = false
   const success = await withTransaction<Staff>(DB_FILES.STAFF, (staffList) => {
-    const newList = staffList.filter(s => s.id !== id)
-    if (newList.length === staffList.length) {
+    const index = staffList.findIndex(s => s.id === id)
+    if (index === -1) {
       notFound = true
+      return staffList
     }
-    return newList
+    staffList[index].isActive = false
+    staffList[index].deletedAt = new Date().toISOString()
+    return staffList
   })
 
   if (notFound) return { error: 'Staff not found' }

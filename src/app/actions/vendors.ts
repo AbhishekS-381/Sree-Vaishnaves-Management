@@ -4,6 +4,7 @@ import { withTransaction, DB_FILES } from '@/lib/db'
 import { Expense } from './eod'
 import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'crypto'
+import { getSession, requireBranchAccess } from './auth'
 
 export type Vendor = {
   id: string
@@ -18,10 +19,16 @@ export async function addVendor(prevState: any, formData: FormData) {
   const name = formData.get('name') as string
   const phone = formData.get('phone') as string
   const supplyType = formData.get('supplyType') as string
-  const branchId = formData.get('branchId') as string
+  let branchId = formData.get('branchId') as string
 
   if (!name || !phone || !supplyType || !branchId) {
     return { error: 'Invalid input fields' }
+  }
+
+  try {
+    branchId = await requireBranchAccess(branchId)
+  } catch (e) {
+    return { error: 'Forbidden' }
   }
 
   const success = await withTransaction<Vendor>(DB_FILES.VENDORS, (vendors) => {
@@ -48,11 +55,17 @@ export async function addVendorBill(prevState: any, formData: FormData) {
   const category = formData.get('category') as string
   const date = formData.get('date') as string
   const invoiceRef = formData.get('invoiceRef') as string
-  const branchId = formData.get('branchId') as string
+  let branchId = formData.get('branchId') as string
   const isPaid = formData.get('isPaid') === 'on'
 
   if (!vendorId || !amount || !category || !date || !branchId) {
      return { error: 'Please fill all required bill fields' }
+  }
+
+  try {
+    branchId = await requireBranchAccess(branchId)
+  } catch (e) {
+    return { error: 'Forbidden' }
   }
 
   const notes = invoiceRef 
@@ -81,13 +94,24 @@ export async function addVendorBill(prevState: any, formData: FormData) {
 }
 
 export async function markVendorBillAsPaid(id: string) {
+  const session = await getSession()
+  if (!session) return { error: 'Unauthorized' }
+
   let notFound = false;
+  let forbidden = false;
   const success = await withTransaction<Expense>(DB_FILES.EXPENSES, (expenses) => {
     const index = expenses.findIndex(e => e.id === id)
     if (index === -1) { notFound = true; return expenses; }
+    
+    if (!session.isGlobalAdmin && expenses[index].branchId !== session.branchId) {
+      forbidden = true; return expenses;
+    }
+
     expenses[index].isPaid = true
     return expenses
   })
+
+  if (forbidden) return { error: 'Forbidden' }
 
   if (notFound) return { error: 'Bill not found' }
   if (!success) return { error: 'Transaction failed' }

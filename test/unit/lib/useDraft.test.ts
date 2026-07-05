@@ -6,6 +6,7 @@ import { useDraft } from '@/lib/useDraft'
 describe('useDraft hook', () => {
   beforeEach(() => {
     window.localStorage.clear()
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
   })
 
   it('saveDraft stores data in localStorage', () => {

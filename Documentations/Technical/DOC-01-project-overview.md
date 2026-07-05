@@ -96,7 +96,7 @@ Build only Phase 1 features now. Do not scaffold or stub Phase 2–4 features pr
 
 ## Key business rules (global)
 
-1. **Soft deletes only** — no hard deletes anywhere in the system. Use `deleted_at` timestamp or `is_active` boolean.
+1. **Soft deletes only** — no hard deletes anywhere in the system. Use `isActive: false` and `deletedAt`.
 2. **Audit everything** — every insert, update, and delete is logged in the `audit_logs` table with user ID, timestamp, old value, and new value.
 3. **Monetary values are integers** — store rupees as integers (e.g. ₹1,500 = `1500`). No decimals. No paise.
 4. **Timestamps in UTC, display in IST** — store all timestamps as UTC in the DB. Convert to IST (Asia/Kolkata, UTC+5:30) on the frontend.

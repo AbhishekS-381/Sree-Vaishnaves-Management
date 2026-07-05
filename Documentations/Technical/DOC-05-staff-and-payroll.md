@@ -20,7 +20,7 @@ Staff management covers employee profiles scoped per branch. Payroll covers mont
 | GET | `/api/v1/branches/:branchId/staff/:id` | owner, branch_manager | Get single staff profile with history |
 | POST | `/api/v1/branches/:branchId/staff` | owner, branch_manager | Add new staff member |
 | PUT | `/api/v1/branches/:branchId/staff/:id` | owner, branch_manager | Update staff profile |
-| DELETE | `/api/v1/branches/:branchId/staff/:id` | owner | Soft delete (set is_active=false, deleted_at) |
+| DELETE | `/api/v1/branches/:branchId/staff/:id` | owner | Soft delete (set isActive=false, deletedAt) |
 
 ### Staff list query params
 - `?role=waiter` — filter by role
@@ -221,7 +221,7 @@ const overridePayrollSchema = z.object({
 
 ## Business rules summary
 
-1. Staff with `is_active = false` are excluded from attendance marking and payroll generation
+1. Staff with `isActive = false` are excluded from attendance marking and payroll generation
 2. Base salary changes take effect from the next month's payroll — they do not retroactively affect past records
 3. Advances from previous months that were not yet deducted carry forward — they appear in the next generated payroll
 4. Net payable is floored at 0 — it can never be negative

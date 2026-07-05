@@ -154,7 +154,7 @@ Single-page PDF for accountant / physical filing. Contains:
 ## Business rules
 
 1. Reports only show locked EOD entries — draft or in-progress entries are excluded from P&L
-2. Deleted expenses (`deleted_at IS NOT NULL`) are excluded from all totals
+2. Deleted expenses (`deletedAt IS NOT NULL`) are excluded from all totals
 3. Cross-branch consolidated report is owner-only
 4. All exports are owner-only — branch manager has read-only access to report screens but cannot export
 5. Absenteeism rate = (days absent + days leave) / (working_days - days_holiday) × 100 per staff over a rolling period

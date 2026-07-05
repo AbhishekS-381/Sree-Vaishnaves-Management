@@ -25,7 +25,8 @@ const navItems = [
 export function Navigation({ role, config }: { role: string, config: any }) {
   const pathname = usePathname()
   const [isOpen, setIsOpen] = useState(false)
-  const isReadOnly = role === 'readonly'
+  const isGlobalAdmin = role === 'owner' || role === 'admin'
+  const isBranchManager = !isGlobalAdmin
 
   return (
     <>
@@ -58,9 +59,9 @@ export function Navigation({ role, config }: { role: string, config: any }) {
             </h1>
             <div className="flex items-center gap-2 mt-2">
               <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold">
-                {isReadOnly ? 'Manager Portal' : 'Owner Portal'}
+                {isBranchManager ? 'Manager Portal' : 'Admin Portal'}
               </p>
-              {isReadOnly && <Shield className="h-3 w-3 text-emerald-500" />}
+              {isBranchManager && <Shield className="h-3 w-3 text-emerald-500" />}
             </div>
           </div>
 
@@ -73,6 +74,7 @@ export function Navigation({ role, config }: { role: string, config: any }) {
               if (item.name === 'Attendance' && config?.attendance === false) return null;
               if (item.name === 'Payroll' && config?.payroll === false) return null;
               if (item.name === 'Reports' && config?.reports === false) return null;
+              if ((item.name === 'Branches' || item.name === 'Settings') && !isGlobalAdmin) return null;
 
               const Icon = item.icon
               const isActive = pathname === item.href
@@ -104,15 +106,15 @@ export function Navigation({ role, config }: { role: string, config: any }) {
             <div className="flex items-center gap-3 mb-3">
               <div className={cn(
                 "h-10 w-10 rounded-full flex items-center justify-center text-white shadow-md",
-                isReadOnly ? "bg-emerald-600" : "bg-primary"
+                isBranchManager ? "bg-emerald-600" : "bg-primary"
               )}>
-                <span className="font-bold text-sm">{isReadOnly ? 'MA' : 'OW'}</span>
+                <span className="font-bold text-sm">{isBranchManager ? 'MA' : 'AD'}</span>
               </div>
               <div>
                 <p className="text-sm font-semibold text-foreground">
-                  {isReadOnly ? 'Manager' : 'Owner'}
+                  {role === 'owner' ? 'Owner' : role === 'admin' ? 'Admin' : 'Manager'}
                 </p>
-                <p className="text-xs text-slate-400 capitalize">{isReadOnly ? 'Restricted Access' : 'Full Access'}</p>
+                <p className="text-xs text-slate-400 capitalize">{isBranchManager ? 'Restricted Access' : 'Full Access'}</p>
               </div>
             </div>
 

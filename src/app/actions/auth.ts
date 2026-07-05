@@ -1,22 +1,55 @@
 'use server'
 
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 import { redirect } from 'next/navigation'
+import bcrypt from 'bcryptjs'
+import { z } from 'zod'
 
-import { readJSON, DB_FILES } from '@/lib/db'
+import { readJSON, writeJSON, DB_FILES } from '@/lib/db'
 import { signToken, verifyToken } from '@/lib/jwt'
+import { checkRateLimit } from '@/lib/rate-limit'
+
+const loginSchema = z.object({
+  name: z.string().min(1, 'Username is required'),
+  password: z.string()
+    .min(8, 'Password must be at least 8 characters')
+    .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+    .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
+    .regex(/[0-9]/, 'Password must contain at least one number')
+    .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character')
+})
 
 export async function login(prevState: any, formData: FormData) {
+  const headersList = await headers();
+  const ip = headersList.get('x-forwarded-for') || headersList.get('x-real-ip') || 'unknown';
+  const rateLimit = await checkRateLimit(ip);
+  if (!rateLimit.success) {
+    return { error: rateLimit.error };
+  }
+
   const name = formData.get('name') as string
   const password = formData.get('password') as string
 
-  if (!name || !password) return { error: 'Username and Password required' }
+  const parsed = loginSchema.safeParse({ name, password });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0].message };
+  }
 
   const users = await readJSON<any>(DB_FILES.USERS).catch(() => [])
-  const user = users.find((u: any) => u.name.toLowerCase() === name.toLowerCase() && u.password === password)
+  const user = users.find((u: any) => u.name.toLowerCase() === name.toLowerCase())
 
-  if (user) {
-    const isGlobalAdmin = user.role === 'Admin' || user.role === 'SuperAdmin' || user.role === 'owner';
+  let isValidPassword = false;
+  if (user && user.password) {
+    if (user.password.startsWith('$2a$') || user.password.startsWith('$2b$')) {
+      isValidPassword = await bcrypt.compare(password, user.password);
+    } else {
+      // Fallback for unmigrated passwords
+      isValidPassword = user.password === password;
+    }
+  }
+
+  if (user && isValidPassword) {
+    const isGlobalAdmin = user.role === 'admin' || user.role === 'owner';
     const token = await signToken({
       userId: user.id || user.name,
       name: user.name,
@@ -68,4 +101,27 @@ export async function requireBranchAccess(targetBranchId?: string) {
   }
   
   return targetBranchId || session.branchId as string || '';
+}
+
+export async function migratePasswordsToHash() {
+  const session = await getSession();
+  if (session?.role !== 'owner' && session?.role !== 'admin') {
+    return { error: 'Forbidden' };
+  }
+  const users = await readJSON<any>(DB_FILES.USERS);
+  let updated = false;
+  const migratedUsers = await Promise.all(users.map(async (u) => {
+    if (u.password && !u.password.startsWith('$2a$') && !u.password.startsWith('$2b$')) {
+      const hash = await bcrypt.hash(u.password, 10);
+      updated = true;
+      return { ...u, password: hash };
+    }
+    return u;
+  }));
+
+  if (updated) {
+    await writeJSON(DB_FILES.USERS, migratedUsers);
+    return { success: true, message: 'Passwords migrated successfully' };
+  }
+  return { success: true, message: 'No passwords needed migration' };
 }

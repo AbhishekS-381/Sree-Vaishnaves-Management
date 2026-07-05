@@ -1,21 +1,28 @@
-# DOC-02 · Architecture & Stack
-**Version:** v1.0  
-**Last updated:** 2026-03-15
+# DOC-02 · Architecture & Tech Stack
 
----
+## Stack
+- Next.js (App Router)
+- Drizzle ORM (connected to Netlify DB)
+- Tailwind CSS
+- Vitest / Playwright
 
-## Tech stack
+## Data Storage
+The application utilizes a JSON-blob backend via Drizzle ORM. The `json_store` PostgreSQL table holds a `filename` and a `data` text column. The system parses this stringified JSON on read and stringifies it on write.
+A custom `withTransaction` in `src/lib/db.ts` acts as an in-memory Mutex to prevent race conditions when reading and writing these blobs.
 
-| Layer | Technology | Notes |
-|-------|-----------|-------|
-| Frontend | Next.js App Router | React 18, Server Components |
-| Styling | Tailwind CSS | Utility-first, mobile-first |
-| State management | React Context / Server Actions | Server Actions handle logic |
-| Backend | Next.js Server Actions | Local Server actions only |
-| Database | Local JSON | Simulated using `src/lib/db.ts` |
-| Auth | JWT (jose) | Stored in `session` cookie |
-| Validation | Zod | Both frontend and backend |
-| Testing | Vitest | Used with `vi.spyOn(auth)` for mocking |
+### DB Files
+- `users.json`, `staff.json`, `branches.json`
+- `rate_limits.json` (Handles in-house sliding-window rate limiting)
+- `audit_logs.json` (Logs all destructive actions or modifications)
+
+## Authentication
+Authentication is fully stateless and built strictly on Next.js Server Actions:
+1. `auth.ts` intercepts `/login` actions.
+2. Checks IP rate limits via `rate_limits.json`.
+3. Verifies bcrypt hashed passwords.
+4. Drops an HttpOnly `session` cookie.
+
+*No refresh tokens, localStorage, or Zustand are used for authentication.*
 
 ---
 
@@ -132,8 +139,6 @@ DATABASE_URL=file:./data/db.json
 # Auth
 JWT_SECRET=<long-random-string>
 JWT_EXPIRES_IN=15m
-JWT_REFRESH_SECRET=<different-long-random-string>
-JWT_REFRESH_EXPIRES_IN=7d
 
 # App
 NODE_ENV=development

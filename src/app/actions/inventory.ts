@@ -3,6 +3,7 @@
 import { withTransaction, DB_FILES } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'crypto'
+import { requireBranchAccess } from './auth'
 
 export type InventoryItem = {
   id: string
@@ -29,10 +30,16 @@ export async function addInventoryItem(prevState: any, formData: FormData) {
   const unit = formData.get('unit') as string
   const quantity = Number(formData.get('quantity'))
   const threshold = Number(formData.get('threshold'))
-  const branchId = formData.get('branchId') as string
+  let branchId = formData.get('branchId') as string
 
   if (!name || !unit || quantity < 0 || threshold < 0 || !branchId) {
     return { error: 'Invalid input' }
+  }
+
+  try {
+    branchId = await requireBranchAccess(branchId)
+  } catch (e) {
+    return { error: 'Forbidden' }
   }
 
   const newItem: InventoryItem = {
@@ -74,13 +81,19 @@ export async function addInventoryItem(prevState: any, formData: FormData) {
 
 export async function adjustStock(prevState: any, formData: FormData) {
   const itemId = formData.get('itemId') as string
-  const branchId = formData.get('branchId') as string
+  let branchId = formData.get('branchId') as string
   const type = formData.get('type') as 'increase' | 'decrease'
   const amount = Number(formData.get('amount'))
   const reason = formData.get('reason') as string
 
   if (!itemId || !branchId || amount <= 0 || !reason) {
     return { error: 'Invalid adjustments' }
+  }
+
+  try {
+    branchId = await requireBranchAccess(branchId)
+  } catch (e) {
+    return { error: 'Forbidden' }
   }
 
   let notFound = false;

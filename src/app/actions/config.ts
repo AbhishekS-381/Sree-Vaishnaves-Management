@@ -2,6 +2,7 @@
 
 import { readJSON, writeJSON, DB_FILES } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
+import { getSession } from '@/app/actions/auth'
 
 export type Config = {
   id: string
@@ -14,6 +15,11 @@ export type Config = {
 }
 
 export async function toggleModule(moduleId: keyof Config, isActive: boolean) {
+  const session = await getSession();
+  if (session?.role !== 'owner' && session?.role !== 'admin') {
+    return { error: 'Forbidden' };
+  }
+
   let configList = await readJSON<Config>(DB_FILES.CONFIG).catch(() => [])
 
   if (configList.length === 0) {

@@ -190,7 +190,7 @@ flowchart TD
   ADD["Add staff member\n(name · department · role · salary · branch)"]
   PROFILE["Staff profile\n(active record in DB)"]
   EDIT["Edit profile\n(owner or branch manager)"]
-  DEACTIVATE["Deactivate\n(is_active = false · soft delete)"]
+  DEACTIVATE["Deactivate\n(isActive = false · soft delete)"]
   HISTORY["Staff history view\n(attendance · advances · payroll)"]
 
   ADD --> PROFILE
@@ -405,7 +405,7 @@ flowchart LR
   ENTRY_EOD --> LEDGER
   ENTRY_VEN --> LEDGER
 
-  LEDGER[("expenses table\nbranch_id · date · category\namount · vendor_name\ninvoice_ref · source\ncreated_by · deleted_at")]
+  LEDGER[("expenses table\nbranch_id · date · category\namount · vendor_name\ninvoice_ref · source\ncreated_by · deletedAt")]
 
   LEDGER --> REFLECT["Reflected back in EOD view\n(vendor bills show as read-only\nwith 'from vendor' badge)"]
   LEDGER --> PL["Daily P&L\n(sum expenses where date = today)"]
@@ -602,7 +602,7 @@ flowchart TD
 
   subgraph RULES["Report rules"]
     R1["Only locked EOD entries counted\n(drafts excluded)"]
-    R2["Deleted expenses excluded\n(deleted_at IS NOT NULL)"]
+    R2["Deleted expenses excluded\n(deletedAt IS NOT NULL)"]
     R3["Cross-branch consolidated — owner only"]
     R4["Export — owner only"]
   end
