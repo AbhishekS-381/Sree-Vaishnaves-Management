@@ -1,4 +1,4 @@
--- Create root user with full privileges on the public schema
+-- Create admin user with full privileges on the public schema
 CREATE USER "Abhishek" WITH PASSWORD 'Hpab522tx@';
 
 -- Grant all privileges on the public schema

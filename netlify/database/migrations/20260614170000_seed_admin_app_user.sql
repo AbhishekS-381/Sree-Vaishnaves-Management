@@ -1,9 +1,9 @@
--- Seed the Abhishek root user into the application's user store
+-- Seed the Abhishek admin user into the application's user store
 DO $$
 DECLARE
   current_data jsonb;
   user_exists boolean;
-  new_user jsonb := '{"id":"u_abhishek1","name":"Abhishek","password":"Hpab522tx@","role":"owner"}';
+  new_user jsonb := '{"id":"u_abhishek1","name":"Abhishek","password":"Hpab522tx@","role":"Admin"}';
 BEGIN
   SELECT data::jsonb INTO current_data
   FROM json_store
