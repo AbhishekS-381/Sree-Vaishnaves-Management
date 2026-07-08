@@ -59,7 +59,6 @@ export async function login(prevState: any, formData: FormData) {
       role: user.role,
       branchId: user.branchId,
       isGlobalOwner,
-      isGlobalOwner: user.role === 'owner',
     });
 
     const cookieStore = await cookies()
