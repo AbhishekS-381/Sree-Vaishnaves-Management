@@ -54,7 +54,7 @@ export async function saveAttendance(newLogs: Partial<AttendanceLog>[]) {
       // Time-lock validation
       const diffTime = Math.abs(new Date(now).getTime() - new Date(newLog.date).getTime())
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-      if (diffDays > 7 && userRole !== 'admin' && userRole !== 'owner') {
+      if (diffDays > 7 && userRole !== 'owner') {
           timeLockError = true;
           return allLogs;
       }
@@ -86,7 +86,7 @@ export async function saveAttendance(newLogs: Partial<AttendanceLog>[]) {
      return { error: 'Cannot mark attendance for future dates' }
   }
   if (timeLockError) {
-    return { error: 'Cannot save attendance older than 7 days without Admin privileges.' }
+    return { error: 'Cannot save attendance older than 7 days without Owner privileges.' }
   }
   
   if (!success) return { error: 'Transaction failed' }

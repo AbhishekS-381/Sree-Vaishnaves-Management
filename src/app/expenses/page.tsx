@@ -8,7 +8,7 @@ export default async function ExpensesPage() {
   const session = await getSession()
   const userRole = session?.role
 
-  if (!session?.isGlobalAdmin) {
+  if (!session?.isGlobalOwner) {
     branches = branches.filter((b: any) => b.id === session?.branchId)
     expenses = expenses.filter((e: any) => e.branchId === session?.branchId)
   }

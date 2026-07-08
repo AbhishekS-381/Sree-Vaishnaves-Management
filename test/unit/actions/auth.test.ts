@@ -18,7 +18,9 @@ vi.mock('@/lib/jwt', () => ({
   signToken: vi.fn()
 }))
 vi.mock('@/lib/rate-limit', () => ({
-  checkRateLimit: vi.fn()
+  checkRateLimit: vi.fn(),
+  resetRateLimit: vi.fn(),
+  pruneRateLimit: vi.fn()
 }))
 vi.mock('bcryptjs', () => ({
   default: { compare: vi.fn(), hash: vi.fn() }
@@ -42,7 +44,7 @@ describe('Auth Actions', () => {
     vi.mocked(cookies).mockResolvedValue(mockCookieStore)
     vi.mocked(headers).mockResolvedValue(mockHeadersStore)
     
-    vi.mocked(jwt.verifyToken).mockResolvedValue({ role: 'Admin', branchId: 'b1', name: 'admin' } as any)
+    vi.mocked(jwt.verifyToken).mockResolvedValue({ role: 'owner', branchId: 'b1', name: 'abhishek' } as any)
     vi.mocked(jwt.signToken).mockResolvedValue('signed-token')
 
     const { checkRateLimit } = await import('@/lib/rate-limit')
@@ -67,8 +69,8 @@ describe('Auth Actions', () => {
   it('login returns error for invalid credentials', async () => {
     const bcrypt = (await import('bcryptjs')).default
     vi.mocked(bcrypt.compare).mockResolvedValue(false)
-    vi.mocked(db.readJSON).mockResolvedValue([{ name: 'admin', password: '$2a$10$hash', role: 'Admin' }])
-    const fd = { get: (k: string) => k === 'name' ? 'admin' : 'StrongPass1!' } as any
+    vi.mocked(db.readJSON).mockResolvedValue([{ name: 'abhishek', password: '$2a$10$hash', role: 'owner' }])
+    const fd = { get: (k: string) => k === 'name' ? 'abhishek' : 'StrongPass1!' } as any
     const res = await login({}, fd)
     expect(res).toEqual({ error: 'Invalid Credentials' })
   })
@@ -77,15 +79,15 @@ describe('Auth Actions', () => {
     const bcrypt = (await import('bcryptjs')).default
     vi.mocked(bcrypt.compare).mockResolvedValue(true)
     const { redirect } = await import('next/navigation')
-    vi.mocked(db.readJSON).mockResolvedValue([{ name: 'admin', password: '$2a$10$hash', role: 'Admin' }])
-    const fd = { get: (k: string) => k === 'name' ? 'admin' : 'StrongPass1!' } as any
+    vi.mocked(db.readJSON).mockResolvedValue([{ name: 'abhishek', password: '$2a$10$hash', role: 'owner' }])
+    const fd = { get: (k: string) => k === 'name' ? 'abhishek' : 'StrongPass1!' } as any
     await login({}, fd)
     expect(redirect).toHaveBeenCalledWith('/')
   })
 
   it('login handles db read failure gracefully', async () => {
     vi.mocked(db.readJSON).mockRejectedValue(new Error('DB error'))
-    const fd = { get: (k: string) => k === 'name' ? 'admin' : 'StrongPass1!' } as any
+    const fd = { get: (k: string) => k === 'name' ? 'abhishek' : 'StrongPass1!' } as any
     const res = await login({}, fd)
     expect(res).toEqual({ error: 'Invalid Credentials' })
   })
@@ -107,13 +109,14 @@ describe('Auth Actions', () => {
 
   it('getSession returns decoded session', async () => {
     const res = await getSession()
-    expect(res).toHaveProperty('role', 'Admin')
+    expect(res).toHaveProperty('role', 'owner')
   })
 
   // ─── getSessionRole ──────────────────────────────────────────────────────
   it('getSessionRole returns role string', async () => {
+    vi.mocked(jwt.verifyToken).mockResolvedValueOnce({ role: 'owner' } as any)
     const role = await getSessionRole()
-    expect(role).toBe('Admin')
+    expect(role).toBe('owner')
   })
 
   it('getSessionRole returns null when no session', async () => {

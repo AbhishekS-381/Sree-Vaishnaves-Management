@@ -22,7 +22,7 @@ type Branch = {
 
 export async function addBranch(prevState: any, formData: FormData) {
   const session = await getSession()
-  if (session?.role !== 'owner' && session?.role !== 'admin') return { error: 'Forbidden' }
+  if (session?.role !== 'owner') return { error: 'Forbidden' }
 
   const name = formData.get('name') as string
   const address = formData.get('address') as string
@@ -39,7 +39,7 @@ export async function addBranch(prevState: any, formData: FormData) {
     phone: z.string().min(1).max(50).trim(),
   });
   const parsed = schema.safeParse({ name, address, phone });
-  if (!parsed.success) return { error: parsed.error.issues[0].message };
+  if (!parsed.success) return { error: 'All fields are required' };
 
   const success = await withTransaction<Branch>(DB_FILES.BRANCHES, (list) => {
     list.push({
@@ -65,7 +65,7 @@ export async function addBranch(prevState: any, formData: FormData) {
 
 export async function updateBranch(prevState: any, formData: FormData) {
   const session = await getSession()
-  if (session?.role !== 'owner' && session?.role !== 'admin') return { error: 'Forbidden' }
+  if (session?.role !== 'owner') return { error: 'Forbidden' }
 
   const id = formData.get('id') as string
   const name = formData.get('name') as string
@@ -79,7 +79,7 @@ export async function updateBranch(prevState: any, formData: FormData) {
 
   const schema = z.object({ name: z.string().min(1).max(100).trim() });
   const parsed = schema.safeParse({ name });
-  if (!id || !parsed.success) return { error: parsed.success ? 'Invalid data' : parsed.error.issues[0].message }
+  if (!id || !parsed.success) return { error: 'Invalid data' }
 
   let notFound = false
   const success = await withTransaction<Branch>(DB_FILES.BRANCHES, (list) => {
@@ -112,7 +112,7 @@ export async function updateBranch(prevState: any, formData: FormData) {
 
 export async function deleteBranch(id: string) {
   const session = await getSession()
-  if (session?.role !== 'owner' && session?.role !== 'admin') return { error: 'Forbidden' }
+  if (session?.role !== 'owner') return { error: 'Forbidden' }
 
   let notFound = false
   const success = await withTransaction<Branch>(DB_FILES.BRANCHES, (list) => {

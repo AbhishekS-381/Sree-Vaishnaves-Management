@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { addCategory, updateCategory } from '@/app/actions/categories'
 import * as db from '@/lib/db'
+import * as auth from '@/app/actions/auth'
 
 vi.mock('@/lib/db', () => ({
   withTransaction: vi.fn(),
@@ -11,7 +12,11 @@ vi.mock('@/lib/db', () => ({
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 
 describe('Categories Actions', () => {
-  beforeEach(() => { vi.resetAllMocks() })
+  beforeEach(() => { vi.resetAllMocks() 
+    vi.spyOn(auth, 'getSession').mockResolvedValue({ role: 'owner', isGlobalOwner: true, branchId: 'b1' } as any)
+    vi.spyOn(auth, 'requireBranchAccess').mockResolvedValue('b1')
+    vi.spyOn(auth, 'getSessionRole').mockResolvedValue('owner')
+  })
 
   // ─── addCategory ──────────────────────────────────────────────────────────
   it('addCategory validates name', async () => {
@@ -61,6 +66,7 @@ describe('Categories Actions', () => {
     expect(res).toEqual({ success: true })
   })
 
+  it('updateCategory cascades name changes', async () => {
     vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
       // First call: categories
       await cb([{ id: 'test', name: 'OldName' }])

@@ -31,7 +31,7 @@ describe('Attendance Actions', () => {
     const oldDate = new Date()
     oldDate.setDate(oldDate.getDate() - 10)
     const res = await saveAttendance([{ date: oldDate.toISOString(), staffId: 's1' }])
-    expect(res).toEqual({ error: 'Cannot save attendance older than 7 days without Admin privileges.' })
+    expect(res).toEqual({ error: 'Cannot save attendance older than 7 days without Owner privileges.' })
   })
 
   it('saveAttendance creates and updates', async () => {

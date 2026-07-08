@@ -116,7 +116,7 @@ When a branch is marked as holiday for a date:
 
 - **Same day:** Both owner and branch_manager can edit
 - **Up to 7 days back:** Owner only can edit
-- **Beyond 7 days:** No edits permitted through UI (super admin only via DB)
+- **Beyond 7 days:** No edits permitted through UI (root user only via DB)
 - **After payroll approved:** No edits to attendance for that month — return error `PAYROLL_ALREADY_APPROVED`
 
 ---

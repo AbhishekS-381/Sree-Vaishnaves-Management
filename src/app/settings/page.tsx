@@ -1,11 +1,11 @@
 import { readJSON, DB_FILES } from '@/lib/db'
 import SettingsClientPage from './SettingsClientPage'
-import { getSessionRole } from '@/app/actions/auth'
+import { getSession } from '@/app/actions/auth'
 import { redirect } from 'next/navigation'
 
 export default async function SettingsPage() {
-  const sessionRole = await getSessionRole()
-  if (sessionRole !== 'owner' && sessionRole !== 'admin') {
+  const session = await getSession()
+  if (!session?.isGlobalOwner) {
     redirect('/')
   }
 
@@ -38,6 +38,6 @@ export default async function SettingsPage() {
 
 
   return (
-    <SettingsClientPage roles={roles} departments={depts} categories={categories} config={config} users={users} sessionRole={sessionRole as string} />
+    <SettingsClientPage roles={roles} departments={depts} categories={categories} config={config} users={users} sessionRole={session.role as string} />
   )
 }

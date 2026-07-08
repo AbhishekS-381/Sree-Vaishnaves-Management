@@ -10,7 +10,7 @@ vi.mock('@/lib/db', () => ({
 
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('@/lib/audit', () => ({ logAction: vi.fn() }))
-vi.mock('@/app/actions/auth', () => ({ getSession: vi.fn().mockResolvedValue({ role: 'Admin', branchId: 'b1' }), getSessionRole: vi.fn().mockResolvedValue('Admin') }))
+vi.mock('@/app/actions/auth', () => ({ getSession: vi.fn().mockResolvedValue({ role: 'owner', branchId: 'b1' }), getSessionRole: vi.fn().mockResolvedValue('owner') }))
 
 describe('config Actions', () => {
   beforeEach(() => { vi.resetAllMocks() })

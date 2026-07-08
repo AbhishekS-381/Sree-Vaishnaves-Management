@@ -14,7 +14,7 @@ vi.mock('jose', async () => {
   return {
     SignJWT: MockSignJWT,
     jwtVerify: vi.fn().mockResolvedValue({
-      payload: { userId: 'u1', name: 'Alice', role: 'Admin', isGlobalAdmin: true }
+      payload: { userId: 'u1', name: 'Alice', role: 'owner', isGlobalOwner: true }
     })
   }
 })
@@ -22,7 +22,7 @@ vi.mock('jose', async () => {
 describe('jwt.ts', () => {
   it('signToken returns a token string', async () => {
     const { signToken } = await import('@/lib/jwt')
-    const token = await signToken({ userId: 'u1', name: 'Alice', role: 'Admin', isGlobalAdmin: true } as any)
+    const token = await signToken({ userId: 'u1', name: 'Alice', role: 'owner', isGlobalOwner: true } as any)
     expect(typeof token).toBe('string')
     expect(token).toBe('mocked.jwt.token')
   })
@@ -30,7 +30,7 @@ describe('jwt.ts', () => {
   it('verifyToken returns decoded payload for a valid token', async () => {
     const { verifyToken } = await import('@/lib/jwt')
     const payload = await verifyToken('mocked.jwt.token')
-    expect(payload).toMatchObject({ userId: 'u1', role: 'Admin', name: 'Alice' })
+    expect(payload).toMatchObject({ userId: 'u1', role: 'owner', name: 'Alice' })
   })
 
   it('verifyToken returns null when jwtVerify throws', async () => {

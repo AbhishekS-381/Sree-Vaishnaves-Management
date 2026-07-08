@@ -19,7 +19,7 @@ const mockFd = (overrides: Record<string, string> = {}) => ({
 describe('Staff Actions', () => {
   beforeEach(() => { 
     vi.resetAllMocks() 
-    vi.spyOn(auth, 'getSession').mockResolvedValue({ userId: 'test-user', role: 'owner', isGlobalAdmin: true, branchId: 'b1' } as any)
+    vi.spyOn(auth, 'getSession').mockResolvedValue({ userId: 'test-user', role: 'owner', isGlobalOwner: true, branchId: 'b1' } as any)
     vi.spyOn(auth, 'requireBranchAccess').mockImplementation(async (b) => (b as string) || 'b1')
   })
 

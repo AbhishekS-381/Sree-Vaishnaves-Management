@@ -25,8 +25,14 @@ export async function savePayroll(prevState: any, formData: FormData) {
   const session = await getSession()
   if (!session) return { error: 'Unauthorized' }
 
-  const month = Number(formData.get('month'))
-  const year = Number(formData.get('year'))
+  const monthStr = formData.get('month') as string
+  const yearStr = formData.get('year') as string
+
+  if (!monthStr || !yearStr) {
+    return { error: 'Invalid Date Selection' }
+  }
+  const month = Number(monthStr)
+  const year = Number(yearStr)
 
   if (!Number.isInteger(month) || month < 1 || month > 12) return { error: 'Invalid month' };
   if (!Number.isInteger(year) || year < 2020 || year > 2100) return { error: 'Invalid year' };
@@ -37,7 +43,7 @@ export async function savePayroll(prevState: any, formData: FormData) {
 
   // We need current staff list to map IDs -> Names/Base Salary
   let staffList = await readJSON<any>(DB_FILES.STAFF)
-  if (!session.isGlobalAdmin) {
+  if (!session.isGlobalOwner) {
     staffList = staffList.filter(s => s.branchId === session.branchId)
   }
 
@@ -87,7 +93,7 @@ export async function savePayroll(prevState: any, formData: FormData) {
 
 export async function markAsPaid(id: string) {
   const session = await getSession()
-  if (!session?.isGlobalAdmin) return { error: 'Forbidden' }
+  if (!session?.isGlobalOwner) return { error: 'Forbidden' }
 
   let notFound = false;
   const success = await withTransaction<SalaryRecord>(DB_FILES.PAYROLL, (payrollDB) => {

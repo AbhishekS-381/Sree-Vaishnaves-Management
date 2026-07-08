@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 
 export default async function BranchesPage() {
   const sessionRole = await getSessionRole()
-  if (sessionRole !== 'owner' && sessionRole !== 'admin') {
+  if (sessionRole !== 'owner') {
     redirect('/')
   }
   let branches = await readJSON<any>(DB_FILES.BRANCHES)

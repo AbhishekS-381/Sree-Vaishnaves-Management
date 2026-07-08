@@ -105,7 +105,7 @@ export async function markVendorBillAsPaid(id: string) {
     const index = expenses.findIndex(e => e.id === id)
     if (index === -1) { notFound = true; return expenses; }
     
-    if (!session.isGlobalAdmin && expenses[index].branchId !== session.branchId) {
+    if (!session.isGlobalOwner && expenses[index].branchId !== session.branchId) {
       forbidden = true; return expenses;
     }
 

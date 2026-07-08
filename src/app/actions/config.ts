@@ -16,7 +16,7 @@ export type Config = {
 
 export async function toggleModule(moduleId: keyof Config, isActive: boolean) {
   const session = await getSession();
-  if (session?.role !== 'owner' && session?.role !== 'admin') {
+  if (session?.role !== 'owner') {
     return { error: 'Forbidden' };
   }
 

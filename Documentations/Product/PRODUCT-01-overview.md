@@ -64,7 +64,7 @@ A trusted employee who runs day-to-day operations at one branch. He needs to:
 He cannot see other branches. He cannot approve payroll. He cannot delete records.
 
 ### The developer (you)
-Technical owner of the system. Has super admin access during development and onboarding. Responsible for setting up branches, creating the first user accounts, and maintaining the system.
+Technical owner of the system. Has root user access during development and onboarding. Responsible for setting up branches, creating the first user accounts, and maintaining the system.
 
 ---
 

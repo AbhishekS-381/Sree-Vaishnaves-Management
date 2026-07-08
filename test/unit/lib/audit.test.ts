@@ -17,14 +17,18 @@ describe('audit.ts - logAction', () => {
     vi.resetAllMocks()
   })
 
-  it('does nothing when no session (silent fail)', async () => {
+  it('writes log with system user when no session', async () => {
     vi.mocked(auth.getSession).mockResolvedValue(null as any)
+    vi.mocked(db.readJSON).mockResolvedValue([])
+    vi.mocked(db.writeJSON).mockResolvedValue(undefined)
     await logAction('CREATE', 'STAFF', 'Added a staff member')
-    expect(db.writeJSON).not.toHaveBeenCalled()
+    expect(db.writeJSON).toHaveBeenCalledTimes(1)
+    const writtenLogs = vi.mocked(db.writeJSON).mock.calls[0][1] as any[]
+    expect(writtenLogs[0]).toMatchObject({ action: 'CREATE', userId: 'system', userName: 'system' })
   })
 
   it('writes audit log with session', async () => {
-    vi.mocked(auth.getSession).mockResolvedValue({ userId: 'u1', name: 'Alice', role: 'Admin' } as any)
+    vi.mocked(auth.getSession).mockResolvedValue({ userId: 'u1', name: 'Alice', role: 'owner' } as any)
     vi.mocked(db.readJSON).mockResolvedValue([])
     vi.mocked(db.writeJSON).mockResolvedValue(undefined)
     await logAction('UPDATE', 'EXPENSE', 'Updated expense', 'e1')
@@ -35,7 +39,7 @@ describe('audit.ts - logAction', () => {
   })
 
   it('handles read failure gracefully (uses empty array)', async () => {
-    vi.mocked(auth.getSession).mockResolvedValue({ userId: 'u1', name: 'Bob', role: 'Admin' } as any)
+    vi.mocked(auth.getSession).mockResolvedValue({ userId: 'u1', name: 'Bob', role: 'owner' } as any)
     vi.mocked(db.readJSON).mockRejectedValue(new Error('File not found'))
     vi.mocked(db.writeJSON).mockResolvedValue(undefined)
     await logAction('DELETE', 'VENDOR', 'Removed vendor')
@@ -43,7 +47,7 @@ describe('audit.ts - logAction', () => {
   })
 
   it('catches write errors without throwing', async () => {
-    vi.mocked(auth.getSession).mockResolvedValue({ userId: 'u1', name: 'Bob', role: 'Admin' } as any)
+    vi.mocked(auth.getSession).mockResolvedValue({ userId: 'u1', name: 'Bob', role: 'owner' } as any)
     vi.mocked(db.readJSON).mockResolvedValue([])
     vi.mocked(db.writeJSON).mockRejectedValue(new Error('Disk full'))
     // Should not throw

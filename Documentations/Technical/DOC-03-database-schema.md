@@ -37,7 +37,7 @@ type User = {
   name: string;
   email: string;
   password?: string; // bcrypt hash
-  role: 'owner' | 'admin' | 'branch_manager';
+  role: 'owner' | 'branch_manager';
   branchId?: string; // Restricted managers only
   isActive: boolean;
   lastLoginAt?: string;

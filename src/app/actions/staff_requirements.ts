@@ -58,7 +58,7 @@ export async function deleteRequirement(id: string) {
     const success = await withTransaction<any>(DB_FILES.STAFF_REQUIREMENTS, (reqs) => {
       return reqs.filter((r: any) => {
         if (r.id === id) {
-          if (!session.isGlobalAdmin && r.branchId !== session.branchId) return true; // Keep it
+          if (!session.isGlobalOwner && r.branchId !== session.branchId) return true; // Keep it
           return false; // Delete it
         }
         return true;
@@ -128,7 +128,7 @@ export async function updateRequirementSchedules(id: string, schedules: Position
     const success = await withTransaction<any>(DB_FILES.STAFF_REQUIREMENTS, (reqs) => {
       const index = reqs.findIndex((r: any) => r.id === id)
       if (index >= 0) {
-        if (!session.isGlobalAdmin && reqs[index].branchId !== session.branchId) return reqs; // Don't modify
+        if (!session.isGlobalOwner && reqs[index].branchId !== session.branchId) return reqs; // Don't modify
         reqs[index].schedules = schedules
       }
       return reqs

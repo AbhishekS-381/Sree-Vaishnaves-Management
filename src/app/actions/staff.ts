@@ -81,7 +81,7 @@ export async function addStaff(prevState: any, formData: FormData) {
   const session = await getSession();
   await logAction('CREATE_STAFF', 'Staff', JSON.stringify({ name, roleId }), newStaff.id);
 
-  revalidatePath('/staff')
+  revalidatePath('/', 'layout')
   return { success: true }
 }
 
@@ -150,7 +150,7 @@ export async function updateStaff(prevState: any, formData: FormData) {
   if (notFound) return { error: 'Staff not found' }
   if (forbidden) return { error: 'Forbidden: Cannot edit staff from another branch' }
   if (!success) return { error: 'Transaction failed' }
-  revalidatePath('/staff')
+  revalidatePath('/', 'layout')
   return { success: true }
 }
 
@@ -166,7 +166,7 @@ export async function toggleStaffStatus(id: string, currentlyActive: boolean) {
       notFound = true
       return staffList
     }
-    if (!session.isGlobalAdmin && staffList[index].branchId !== session.branchId) {
+    if (!session.isGlobalOwner && staffList[index].branchId !== session.branchId) {
       forbidden = true
       return staffList
     }
@@ -177,13 +177,13 @@ export async function toggleStaffStatus(id: string, currentlyActive: boolean) {
   if (notFound) return { error: 'Staff not found' }
   if (forbidden) return { error: 'Forbidden: Cannot edit staff from another branch' }
   if (!success) return { error: 'Transaction failed' }
-  revalidatePath('/staff')
+  revalidatePath('/', 'layout')
   return { success: true }
 }
 
 export async function deleteStaff(id: string) {
   const session = await getSession();
-  if (!session?.isGlobalAdmin) {
+  if (!session?.isGlobalOwner) {
     return { error: 'Forbidden: Only owners can delete staff' };
   }
 
@@ -204,6 +204,6 @@ export async function deleteStaff(id: string) {
   
   await logAction('DELETE_STAFF', 'Staff', 'Deleted staff member', id);
 
-  revalidatePath('/staff')
+  revalidatePath('/', 'layout')
   return { success: true }
 }

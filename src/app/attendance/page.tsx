@@ -13,7 +13,7 @@ export default async function AttendancePage() {
     getSessionRole()
   ]);
 
-  if (!session?.isGlobalAdmin) {
+  if (!session?.isGlobalOwner) {
     staff = staff.filter((s: any) => s.branchId === session?.branchId)
     branches = branches.filter((b: any) => b.id === session?.branchId)
   }

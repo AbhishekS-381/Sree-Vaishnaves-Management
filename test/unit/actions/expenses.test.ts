@@ -16,7 +16,7 @@ vi.mock('@/app/actions/auth', () => ({
 describe('Expenses Actions', () => {
   beforeEach(() => {
     vi.resetAllMocks()
-    vi.mocked(auth.getSession).mockResolvedValue({ role: 'admin', branchId: 'b1' } as any)
+    vi.mocked(auth.getSession).mockResolvedValue({ role: 'owner', branchId: 'b1' } as any)
   })
 
   it('updateExpense validates auth (no session)', async () => {
@@ -25,10 +25,10 @@ describe('Expenses Actions', () => {
     expect(res).toEqual({ error: 'Unauthorized' })
   })
 
-  it('updateExpense validates role (non-admin)', async () => {
-    vi.mocked(auth.getSession).mockResolvedValueOnce({ role: 'Staff', branchId: 'b1' } as any)
-    const res = await updateExpense('e1', { amount: 200 })
-    expect(res).toEqual({ error: 'Only administrators can edit ledger expenses.' })
+  it('updateExpense validates role (non-owner)', async () => {
+    vi.mocked(auth.getSession).mockResolvedValueOnce({ role: 'manager' } as any)
+    const res = await updateExpense('exp1', {})
+    expect(res).toEqual({ error: 'Only owners can edit ledger expenses.' })
   })
 
   it('updateExpense returns not found when expense missing', async () => {

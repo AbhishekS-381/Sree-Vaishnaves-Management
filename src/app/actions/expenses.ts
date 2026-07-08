@@ -10,9 +10,9 @@ export async function updateExpense(id: string, updates: Partial<Expense>) {
   const session = await getSession()
   if (!session) return { error: 'Unauthorized' }
 
-  // Only Admins or SuperAdmins can edit older ledger expenses directly
-  if (session.role !== 'admin' && session.role !== 'owner') {
-    return { error: 'Only administrators can edit ledger expenses.' }
+  // Only Owners can edit older ledger expenses directly
+  if (session.role !== 'owner') {
+    return { error: 'Only owners can edit ledger expenses.' }
   }
 
   let oldData: Expense | null = null;

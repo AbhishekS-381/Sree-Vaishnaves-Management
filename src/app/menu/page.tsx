@@ -8,7 +8,7 @@ export default async function MenuPage() {
   let menu = await readJSON<any>(DB_FILES.MENU)
   const categories = await readJSON<any>(DB_FILES.MENU_CATEGORIES).catch(() => [])
 
-  if (!session?.isGlobalAdmin) {
+  if (!session?.isGlobalOwner) {
     branches = branches.filter((b: any) => b.id === session?.branchId)
     menu = menu.filter((m: any) => m.branchId === session?.branchId)
   }

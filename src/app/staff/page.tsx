@@ -13,7 +13,7 @@ export default async function StaffPage() {
     readJSON<any>(DB_FILES.MENU_CATEGORIES).catch(() => [])
   ]);
 
-  if (!session?.isGlobalAdmin) {
+  if (!session?.isGlobalOwner) {
     staff = staff.filter((s: any) => s.branchId === session?.branchId)
     requirements = requirements.filter((r: any) => r.branchId === session?.branchId)
   }

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { savePayroll, markAsPaid } from '@/app/actions/salary'
 import * as db from '@/lib/db'
+import * as auth from '@/app/actions/auth'
 
 vi.mock('@/lib/db', () => ({
   withTransaction: vi.fn(),
@@ -10,7 +11,11 @@ vi.mock('@/lib/db', () => ({
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 
 describe('Salary Actions', () => {
-  beforeEach(() => { vi.resetAllMocks() })
+  beforeEach(() => { vi.resetAllMocks() 
+    vi.spyOn(auth, 'getSession').mockResolvedValue({ role: 'owner', isGlobalOwner: true, branchId: 'b1' } as any)
+    vi.spyOn(auth, 'requireBranchAccess').mockResolvedValue('b1')
+    vi.spyOn(auth, 'getSessionRole').mockResolvedValue('owner')
+  })
 
   it('savePayroll returns error on invalid date (no month/year)', async () => {
     const fd = { get: () => null, entries: () => [] } as any

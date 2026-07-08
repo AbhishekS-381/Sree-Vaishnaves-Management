@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Briefcase, Layers, Pencil, Plus, ToggleRight, LayoutTemplate, Tag } from 'lucide-react'
 import { GenericEntityModal } from '@/components/GenericEntityModal'
 import { addDepartment, updateDepartment, deleteDepartment, deleteRole } from '@/app/actions/settings'
-import { addCategory, updateCategory } from '@/app/actions/categories'
+import { addCategory, updateCategory, deleteCategory } from '@/app/actions/categories'
 import { RoleModal } from '@/components/RoleModal'
 import { toggleModule } from '@/app/actions/config'
 import { UserModal } from '@/components/UserModal'
@@ -123,7 +123,7 @@ export default function SettingsClientPage({ roles, departments, categories, con
               <div key={r.id} className="p-3 bg-[#252033] rounded-lg border border-white/5 flex items-center justify-between group hover:bg-[#2d283e] hover:border-primary/30 transition-all">
                 <div className="flex items-center gap-3 flex-wrap">
                   <span className="font-medium text-slate-300 group-hover:text-white transition-colors">{r.name}</span>
-                  {r.isAdmin && <span className="bg-purple-500/20 text-purple-300 text-[10px] px-2 py-0.5 rounded-full font-bold border border-purple-500/30 uppercase tracking-wide">Admin</span>}
+                  
                   {r.departmentIds?.length > 0 && <span className="bg-blue-500/10 text-blue-400 text-[10px] px-2 py-0.5 rounded-full font-bold border border-blue-500/20">{r.departmentIds.length} Dept{r.departmentIds.length > 1 ? 's' : ''}</span>}
                 </div>
                 <div className="flex items-center gap-1">
@@ -180,12 +180,24 @@ export default function SettingsClientPage({ roles, departments, categories, con
                      <span className="w-3 h-3 rounded-full" style={{ backgroundColor: c.color || '#64748b' }}></span>
                      <span className="font-medium text-slate-300 group-hover:text-white transition-colors">{c.name}</span>
                   </div>
-                  <button
-                     onClick={() => setCatModal({ open: true, data: c })}
-                     className="text-slate-500 hover:text-white transition-colors p-1"
-                  >
-                     <Pencil className="h-4 w-4" />
-                  </button>
+                  <div className="flex items-center gap-1">
+                     <button
+                        onClick={() => setCatModal({ open: true, data: c })}
+                        className="text-slate-500 hover:text-white transition-colors p-1"
+                     >
+                        <Pencil className="h-4 w-4" />
+                     </button>
+                     <button
+                        onClick={async () => {
+                          if (confirm(`Are you sure you want to delete the ${c.name} category?`)) {
+                            await deleteCategory(c.id)
+                          }
+                        }}
+                        className="text-slate-500 hover:text-red-400 transition-colors p-1"
+                     >
+                        <Trash2 className="h-4 w-4" />
+                     </button>
+                  </div>
                </div>
             ))}
             {categories.length === 0 && (
@@ -260,6 +272,11 @@ export default function SettingsClientPage({ roles, departments, categories, con
                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase border ${u.role === 'owner' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : u.role === 'manager' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-slate-500/10 text-slate-400 border-slate-500/20'}`}>
                             {u.role}
                          </span>
+                         {u.isGlobalOwner && (
+                            <span className="bg-purple-500/20 text-purple-300 text-[10px] px-2 py-0.5 rounded-full font-bold border border-purple-500/30 uppercase tracking-wide">
+                              Owner
+                            </span>
+                         )}
                        </div>
                     </div>
                     
@@ -270,16 +287,18 @@ export default function SettingsClientPage({ roles, departments, categories, con
                        >
                          <Pencil className="h-4 w-4" />
                        </button>
-                       <button
-                          onClick={async () => {
-                             if(confirm(`Remove ${u.name}?`)) {
-                                await deleteUser(u.id);
-                             }
-                          }}
-                          className="text-slate-500 hover:text-red-400 transition-colors p-2 rounded-lg hover:bg-red-500/10"
-                       >
-                         <Trash2 className="h-4 w-4" />
-                       </button>
+                       {!u.isGlobalOwner && (
+                         <button
+                            onClick={async () => {
+                               if(confirm(`Remove ${u.name}?`)) {
+                                  await deleteUser(u.id);
+                               }
+                            }}
+                            className="text-slate-500 hover:text-red-400 transition-colors p-2 rounded-lg hover:bg-red-500/10"
+                         >
+                           <Trash2 className="h-4 w-4" />
+                         </button>
+                       )}
                     </div>
                  </div>
               ))}

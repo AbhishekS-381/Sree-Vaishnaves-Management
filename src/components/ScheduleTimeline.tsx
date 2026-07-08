@@ -47,9 +47,10 @@ function PositionRow({
   positionIndex, 
   startMins, 
   totalDuration, 
+  isEditMode,
   onSave 
 }: { 
-  req: any, positionIndex: number, startMins: number, totalDuration: number, onSave: (s: Shift[]) => void 
+  req: any, positionIndex: number, startMins: number, totalDuration: number, isEditMode: boolean, onSave: (s: Shift[]) => void 
 }) {
   const schedule = req.schedules?.find((s: any) => s.positionIndex === positionIndex)
   const [shifts, setShifts] = useState<Shift[]>(schedule?.shifts || [])
@@ -71,6 +72,7 @@ function PositionRow({
   }
 
   const handlePointerDown = (e: React.PointerEvent, type: 'create' | 'resize-start' | 'resize-end', shiftId?: string) => {
+    if (!isEditMode) return
     e.stopPropagation()
     const mins = getMinsFromEvent(e)
     
@@ -142,7 +144,7 @@ function PositionRow({
   return (
     <div 
       ref={containerRef}
-      className="relative h-12 w-full group border-b border-[#3b3054]/30 last:border-0 hover:bg-white/[0.02] cursor-crosshair touch-none"
+      className={`relative h-12 w-full group border-b border-[#3b3054]/30 last:border-0 ${isEditMode ? 'hover:bg-white/[0.02] cursor-crosshair touch-none' : ''}`}
       onPointerDown={(e) => handlePointerDown(e, 'create')}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
@@ -156,31 +158,37 @@ function PositionRow({
           onPointerDown={e => e.stopPropagation()} // Prevent create when clicking inside block
         >
           {/* Resize handle left */}
-          <div 
-            className="absolute left-0 top-0 bottom-0 w-3 cursor-ew-resize hover:bg-white/20 rounded-l"
-            onPointerDown={e => handlePointerDown(e, 'resize-start', s.id)}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-          />
+          {isEditMode && (
+            <div 
+              className="absolute left-0 top-0 bottom-0 w-3 cursor-ew-resize hover:bg-white/20 rounded-l"
+              onPointerDown={e => handlePointerDown(e, 'resize-start', s.id)}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+            />
+          )}
           
           <span className="px-2 text-[10px] font-bold text-white truncate pointer-events-none select-none">
             {formatTime(s.start)} - {formatTime(s.end)}
           </span>
           
-          <button 
-            className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 bg-black/20 hover:bg-black/40 rounded-full opacity-0 group-hover/shift:opacity-100 transition-opacity"
-            onClick={(e) => removeShift(e, s.id)}
-          >
-            <X className="h-3 w-3 text-white" />
-          </button>
+          {isEditMode && (
+            <button 
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 bg-black/20 hover:bg-black/40 rounded-full opacity-0 group-hover/shift:opacity-100 transition-opacity"
+              onClick={(e) => removeShift(e, s.id)}
+            >
+              <X className="h-3 w-3 text-white" />
+            </button>
+          )}
 
           {/* Resize handle right */}
-          <div 
-            className="absolute right-0 top-0 bottom-0 w-3 cursor-ew-resize hover:bg-white/20 rounded-r"
-            onPointerDown={e => handlePointerDown(e, 'resize-end', s.id)}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-          />
+          {isEditMode && (
+            <div 
+              className="absolute right-0 top-0 bottom-0 w-3 cursor-ew-resize hover:bg-white/20 rounded-r"
+              onPointerDown={e => handlePointerDown(e, 'resize-end', s.id)}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+            />
+          )}
         </div>
       ))}
     </div>
@@ -192,6 +200,7 @@ export function ScheduleTimeline({ requirements, branches, departments, roles }:
   const [selectedDept, setSelectedDept] = useState('')
   const [savingReqId, setSavingReqId] = useState<string | null>(null)
   const [autoScheduleReq, setAutoScheduleReq] = useState<any>(null)
+  const [isEditMode, setIsEditMode] = useState(false)
 
   const branch = branches.find(b => b.id === selectedBranch)
   
@@ -278,27 +287,38 @@ export function ScheduleTimeline({ requirements, branches, departments, roles }:
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4 bg-[#252033] p-4 rounded-xl border border-[#3b3054]">
-        <div>
-          <label className="block text-xs font-semibold text-slate-400 mb-1">Branch</label>
-          <select 
-            value={selectedBranch} 
-            onChange={e => setSelectedBranch(e.target.value)}
-            className="bg-[#131018] border border-[#3b3054] text-white text-sm rounded-lg px-3 py-1.5 focus:border-[#c084fc] outline-none"
-          >
-            {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-          </select>
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-[#252033] p-4 rounded-xl border border-[#3b3054]">
+        <div className="flex items-center gap-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 mb-1">Branch</label>
+            <select 
+              value={selectedBranch} 
+              onChange={e => setSelectedBranch(e.target.value)}
+              className="bg-[#131018] border border-[#3b3054] text-white text-sm rounded-lg px-3 py-1.5 focus:border-[#c084fc] outline-none"
+            >
+              {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 mb-1">Department</label>
+            <select 
+              value={selectedDept} 
+              onChange={e => setSelectedDept(e.target.value)}
+              className="bg-[#131018] border border-[#3b3054] text-white text-sm rounded-lg px-3 py-1.5 focus:border-[#c084fc] outline-none"
+            >
+              <option value="">All Departments</option>
+              {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          </div>
         </div>
-        <div>
-          <label className="block text-xs font-semibold text-slate-400 mb-1">Department</label>
-          <select 
-            value={selectedDept} 
-            onChange={e => setSelectedDept(e.target.value)}
-            className="bg-[#131018] border border-[#3b3054] text-white text-sm rounded-lg px-3 py-1.5 focus:border-[#c084fc] outline-none"
+        <div className="flex items-center gap-3 bg-[#131018] p-2 px-4 rounded-xl border border-[#3b3054]">
+          <span className="text-sm font-semibold text-slate-300">Edit Schedule</span>
+          <button 
+             onClick={() => setIsEditMode(!isEditMode)}
+             className={`w-12 h-6 rounded-full relative transition-colors ${isEditMode ? 'bg-[#c084fc]' : 'bg-slate-700'}`}
           >
-            <option value="">All Departments</option>
-            {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-          </select>
+             <div className={`absolute top-1 bottom-1 w-4 bg-white rounded-full transition-all ${isEditMode ? 'left-7' : 'left-1'}`} />
+          </button>
         </div>
       </div>
 
@@ -366,6 +386,7 @@ export function ScheduleTimeline({ requirements, branches, departments, roles }:
                                 positionIndex={idx}
                                 startMins={startMins}
                                 totalDuration={totalDuration}
+                                isEditMode={isEditMode}
                                 onSave={(shifts) => handleSaveSchedules(req, idx, shifts)}
                               />
                             </div>

@@ -13,7 +13,7 @@ export default function ExpensesClientPage({ branches, expenses, userRole }: { b
   const [search, setSearch] = useState('')
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null)
   const [saving, setSaving] = useState(false)
-  const isAdmin = userRole === 'Admin' || userRole === 'SuperAdmin' || userRole === 'owner'
+  const isOwner = userRole === 'owner'
   
   const { saveDraft, loadDraft, clearDraft } = useDraft('expenses_edit')
 
@@ -139,12 +139,12 @@ export default function ExpensesClientPage({ branches, expenses, userRole }: { b
               <th className="p-4 font-medium text-slate-300">Source</th>
               <th className="p-4 font-medium text-slate-300">Notes</th>
               <th className="p-4 font-medium text-slate-300 text-right">Amount</th>
-              {isAdmin && <th className="p-4 font-medium text-slate-300 text-right">Actions</th>}
+              {isOwner && <th className="p-4 font-medium text-slate-300 text-right">Actions</th>}
             </tr>
           </thead>
           <tbody>
             {filteredExpenses.length === 0 ? (
-              <tr><td colSpan={isAdmin ? 6 : 5} className="p-8 text-center text-slate-500">No expenses found matching the criteria.</td></tr>
+              <tr><td colSpan={isOwner ? 6 : 5} className="p-8 text-center text-slate-500">No expenses found matching the criteria.</td></tr>
             ) : filteredExpenses.map((ex: Expense) => {
               const branchName = branches.find(b => b.id === ex.branchId)?.name || 'Unknown Branch'
               return (
@@ -165,7 +165,7 @@ export default function ExpensesClientPage({ branches, expenses, userRole }: { b
                   <td className="p-4 text-right">
                      <span className="font-bold text-amber-400">₹{Number(ex.amount).toLocaleString()}</span>
                   </td>
-                  {isAdmin && (
+                  {isOwner && (
                      <td className="p-4 text-right">
                         <button 
                           onClick={() => handleEditClick(ex)}

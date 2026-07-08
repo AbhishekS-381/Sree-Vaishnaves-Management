@@ -23,8 +23,11 @@ describe('RoleModal component', () => {
 
   it('renders Edit Role form when editData provided', () => {
     const { getByText } = render(
-      <RoleModal isOpen={true} onClose={vi.fn()} departments={departments}
-        editData={{ id: 'r1', name: 'Manager', isAdmin: false, departmentIds: ['d1'] }}
+      <RoleModal 
+        isOpen={true} 
+        onClose={vi.fn()} 
+        departments={[{ id: 'd1', name: 'Kitchen' } as any]} 
+        editData={{ id: 'r1', name: 'Manager', departmentIds: ['d1'] } as any}
       />
     )
     expect(getByText('Edit Role')).toBeTruthy()
@@ -41,9 +44,8 @@ describe('RoleModal component', () => {
     expect(getByText('No departments created yet.')).toBeTruthy()
   })
 
-  it('renders isAdmin and isChef checkboxes', () => {
-    const { container } = render(<RoleModal isOpen={true} onClose={vi.fn()} departments={[]} />)
-    expect(container.querySelector('#isAdmin')).toBeTruthy()
+  it('renders isChef checkboxes', () => {
+    const { container } = render(<RoleModal isOpen={true} onClose={() => {}} editData={{ id: 'r1', name: 'Cook', isChef: true, departmentIds: ['d1'] } as any} departments={[]} />)
     expect(container.querySelector('#isChef')).toBeTruthy()
   })
 

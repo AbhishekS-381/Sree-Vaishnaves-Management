@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { addUser, updateUser, deleteUser } from '@/app/actions/users'
 import * as db from '@/lib/db'
+import * as auth from '@/app/actions/auth'
 
 vi.mock('@/lib/db', () => ({
   withTransaction: vi.fn(),
@@ -9,7 +10,11 @@ vi.mock('@/lib/db', () => ({
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 
 describe('Users Actions', () => {
-  beforeEach(() => { vi.resetAllMocks() })
+  beforeEach(() => { vi.resetAllMocks() 
+    vi.spyOn(auth, 'getSession').mockResolvedValue({ role: 'owner', isGlobalOwner: true, branchId: 'b1' } as any)
+    vi.spyOn(auth, 'requireBranchAccess').mockResolvedValue('b1')
+    vi.spyOn(auth, 'getSessionRole').mockResolvedValue('owner')
+  })
 
   // ─── addUser ──────────────────────────────────────────────────────────────
   it('addUser validates required fields', async () => {
@@ -19,7 +24,7 @@ describe('Users Actions', () => {
 
   it('addUser rejects duplicate name', async () => {
     vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
-      await cb([{ id: 'u1', name: 'alice', role: 'Admin' }])
+      await cb([{ id: 'u1', name: 'alice', role: 'owner' }])
       return true
     })
     const fd = { get: (k: string) => k === 'name' ? 'Alice' : 'test' } as any
@@ -57,7 +62,7 @@ describe('Users Actions', () => {
   it('updateUser rejects duplicate name for another user', async () => {
     vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
       await cb([
-        { id: 'u1', name: 'alice', role: 'Admin' },
+        { id: 'u1', name: 'alice', role: 'owner' },
         { id: 'u2', name: 'test', role: 'Staff' }
       ])
       return true

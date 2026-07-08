@@ -22,11 +22,11 @@ const navItems = [
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
 
-export function Navigation({ role, config }: { role: string, config: any }) {
+export function Navigation({ role, config}: { role: string, config: any }) {
   const pathname = usePathname()
   const [isOpen, setIsOpen] = useState(false)
-  const isGlobalAdmin = role === 'owner' || role === 'admin'
-  const isBranchManager = !isGlobalAdmin
+  const isGlobalOwner = role === 'owner'
+  const isBranchManager = !isGlobalOwner
 
   return (
     <>
@@ -59,7 +59,7 @@ export function Navigation({ role, config }: { role: string, config: any }) {
             </h1>
             <div className="flex items-center gap-2 mt-2">
               <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold">
-                {isBranchManager ? 'Manager Portal' : 'Admin Portal'}
+                {isBranchManager ? 'Manager Portal' : 'Owner Portal'}
               </p>
               {isBranchManager && <Shield className="h-3 w-3 text-emerald-500" />}
             </div>
@@ -74,7 +74,8 @@ export function Navigation({ role, config }: { role: string, config: any }) {
               if (item.name === 'Attendance' && config?.attendance === false) return null;
               if (item.name === 'Payroll' && config?.payroll === false) return null;
               if (item.name === 'Reports' && config?.reports === false) return null;
-              if ((item.name === 'Branches' || item.name === 'Settings') && !isGlobalAdmin) return null;
+              if (item.name === 'Branches' && !isGlobalOwner) return null;
+              if (item.name === 'Settings' && (!isGlobalOwner)) return null;
 
               const Icon = item.icon
               const isActive = pathname === item.href
@@ -112,7 +113,7 @@ export function Navigation({ role, config }: { role: string, config: any }) {
               </div>
               <div>
                 <p className="text-sm font-semibold text-foreground">
-                  {role === 'owner' ? 'Owner' : role === 'admin' ? 'Admin' : 'Manager'}
+                  {role === 'owner' ? 'Owner' : 'Manager'}
                 </p>
                 <p className="text-xs text-slate-400 capitalize">{isBranchManager ? 'Restricted Access' : 'Full Access'}</p>
               </div>

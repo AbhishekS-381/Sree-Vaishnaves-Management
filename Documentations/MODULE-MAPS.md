@@ -138,7 +138,7 @@ flowchart TD
 
   JWT --> OWNER
   JWT --> MANAGER
-  JWT --> SUPERADMIN
+  JWT --> ROOTUSER
 
   subgraph OWNER["Owner"]
     O1["All branches — full access"]
@@ -158,7 +158,7 @@ flowchart TD
     M6["Cannot delete or export"]
   end
 
-  subgraph SUPERADMIN["Super admin (developer)"]
+  subgraph ROOTUSER["root user (developer)"]
     S1["Full system access"]
     S2["Create branches"]
     S3["Assign roles"]
@@ -170,7 +170,7 @@ flowchart TD
 
   subgraph SCOPE["Branch scope middleware — runs on every request"]
     SC1{"User role?"}
-    SC1 -->|owner / super_admin| SC2["Allow any branch_id\nor cross-branch query"]
+    SC1 -->|owner / root_owner| SC2["Allow any branch_id\nor cross-branch query"]
     SC1 -->|branch_manager| SC3{"Request branch_id\n= user's branch_id?"}
     SC3 -->|Yes| SC4["Allow — inject branchId"]
     SC3 -->|No| SC5["403 FORBIDDEN"]

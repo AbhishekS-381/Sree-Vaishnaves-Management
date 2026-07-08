@@ -8,7 +8,7 @@ vi.mock('@/lib/db', () => ({
 }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('@/app/actions/auth', () => ({
-  getSession: vi.fn(() => ({ isGlobalAdmin: true, branchId: 'b1' })),
+  getSession: vi.fn(() => ({ isGlobalOwner: true, branchId: 'b1' })),
   requireBranchAccess: vi.fn(async (b) => b || 'b1')
 }))
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useActionState, useEffect } from 'react'
+import { useState, useActionState, useEffect, useRef } from 'react'
 import { X, Loader2 } from 'lucide-react'
 
 export type FieldDef = {
@@ -31,12 +31,17 @@ export function GenericEntityModal({ isOpen, onClose, title, fields, addAction, 
   const actionToUse = isEditing && updateAction ? updateAction : addAction;
   const [state, formAction, isPending] = useActionState(actionToUse, initialState);
 
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
   // Auto-close on success
   useEffect(() => {
-    if (state?.success) {
-      onClose();
+    if (state?.success && isOpen) {
+      onCloseRef.current();
     }
-  }, [state, onClose]);
+  }, [state?.success, isOpen]);
 
   if (!isOpen) return null;
 

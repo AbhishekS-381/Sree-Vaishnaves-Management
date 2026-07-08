@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { addMenuCategory, updateMenuCategory, deleteMenuCategory } from '@/app/actions/menu_categories'
 import * as db from '@/lib/db'
+import * as auth from '@/app/actions/auth'
 
 vi.mock('@/lib/db', () => ({
   withTransaction: vi.fn(),
@@ -9,7 +10,11 @@ vi.mock('@/lib/db', () => ({
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 
 describe('Menu Categories Actions', () => {
-  beforeEach(() => { vi.resetAllMocks() })
+  beforeEach(() => { vi.resetAllMocks() 
+    vi.spyOn(auth, 'getSession').mockResolvedValue({ role: 'owner', isGlobalOwner: true, branchId: 'b1' } as any)
+    vi.spyOn(auth, 'requireBranchAccess').mockResolvedValue('b1')
+    vi.spyOn(auth, 'getSessionRole').mockResolvedValue('owner')
+  })
 
   it('addMenuCategory validates name+branch', async () => {
     const res = await addMenuCategory({}, { get: () => null } as any)

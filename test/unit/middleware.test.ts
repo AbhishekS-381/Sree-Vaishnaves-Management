@@ -17,11 +17,12 @@ function makeRequest(url: string, cookieValue?: string): NextRequest {
 describe('middleware.ts', () => {
   beforeEach(() => {
     vi.resetAllMocks()
+    process.env.JWT_SECRET = 'test-secret'
   })
 
   it('redirects logged-in user away from /login', async () => {
     const { jwtVerify } = await import('jose')
-    vi.mocked(jwtVerify).mockResolvedValue({ payload: { role: 'Admin' } } as any)
+    vi.mocked(jwtVerify).mockResolvedValue({ payload: { role: 'owner', isGlobalOwner: true } } as any)
     const req = makeRequest('http://localhost/login', 'valid-token')
     const res = await middleware(req)
     expect(res.status).toBe(307)
@@ -47,7 +48,7 @@ describe('middleware.ts', () => {
 
   it('allows authenticated access to protected route', async () => {
     const { jwtVerify } = await import('jose')
-    vi.mocked(jwtVerify).mockResolvedValue({ payload: { role: 'Admin' } } as any)
+    vi.mocked(jwtVerify).mockResolvedValue({ payload: { role: 'owner', isGlobalOwner: true } } as any)
     const req = makeRequest('http://localhost/dashboard', 'valid-token')
     const res = await middleware(req)
     expect(res.status).toBe(200) // next()

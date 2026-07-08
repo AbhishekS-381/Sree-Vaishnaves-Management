@@ -21,7 +21,12 @@ export async function logAction(action: string, entityType: string, details: str
     } catch (e) {}
     
     
-    const logs = await readJSON<AuditLogEntry>(DB_FILES.AUDIT_LOGS).catch(() => [] as AuditLogEntry[]);
+    let logs: AuditLogEntry[] = [];
+    try {
+      logs = await readJSON<AuditLogEntry>(DB_FILES.AUDIT_LOGS);
+    } catch (e) {}
+    
+    if (!Array.isArray(logs)) logs = [];
     
     logs.push({
       id: randomUUID(),

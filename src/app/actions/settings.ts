@@ -17,13 +17,13 @@ type Department = {
 
 export async function addDepartment(prevState: any, formData: FormData) {
   const session = await getSession()
-  if (session?.role !== 'owner' && session?.role !== 'admin') return { error: 'Forbidden' }
+  if (session?.role !== 'owner') return { error: 'Forbidden' }
 
   const name = formData.get('name') as string
 
   const schema = z.object({ name: z.string().min(1).max(100).trim() });
   const parsed = schema.safeParse({ name });
-  if (!parsed.success) return { error: parsed.error.issues[0].message }
+  if (!parsed.success) return { error: 'Name is required' }
 
   const newDept: Department = {
     id: `dept_${randomUUID().split('-')[0]}`,
@@ -42,14 +42,14 @@ export async function addDepartment(prevState: any, formData: FormData) {
 
 export async function updateDepartment(prevState: any, formData: FormData) {
   const session = await getSession()
-  if (session?.role !== 'owner' && session?.role !== 'admin') return { error: 'Forbidden' }
+  if (session?.role !== 'owner') return { error: 'Forbidden' }
 
   const id = formData.get('id') as string
   const name = formData.get('name') as string
 
   const schema = z.object({ name: z.string().min(1).max(100).trim() });
   const parsed = schema.safeParse({ name });
-  if (!id || !parsed.success) return { error: parsed.success ? 'Invalid data' : parsed.error.issues[0].message }
+  if (!id || !parsed.success) return { error: 'Invalid data' }
 
   let notFound = false
   const success = await withTransaction<Department>(DB_FILES.DEPARTMENTS, (list) => {
@@ -70,7 +70,7 @@ export async function updateDepartment(prevState: any, formData: FormData) {
 
 export async function deleteDepartment(id: string) {
   const session = await getSession()
-  if (session?.role !== 'owner' && session?.role !== 'admin') return { error: 'Forbidden' }
+  if (session?.role !== 'owner') return { error: 'Forbidden' }
 
   let notFound = false
   const success = await withTransaction<Department>(DB_FILES.DEPARTMENTS, (list) => {
@@ -96,7 +96,7 @@ export async function deleteDepartment(id: string) {
 type Role = {
   id: string
   name: string
-  isAdmin: boolean
+  isOwner: boolean
   isChef?: boolean
   departmentIds?: string[]
   isActive?: boolean
@@ -105,21 +105,21 @@ type Role = {
 
 export async function addRole(prevState: any, formData: FormData) {
   const session = await getSession()
-  if (session?.role !== 'owner' && session?.role !== 'admin') return { error: 'Forbidden' }
+  if (session?.role !== 'owner') return { error: 'Forbidden' }
 
   const name = formData.get('name') as string
-  const isAdmin = formData.get('isAdmin') === 'on'
+  const isOwner = formData.get('isOwner') === 'on'
   const isChef = formData.get('isChef') === 'on'
   const departmentIds = formData.getAll('departmentIds') as string[]
 
   const schema = z.object({ name: z.string().min(1).max(100).trim() });
   const parsed = schema.safeParse({ name });
-  if (!parsed.success) return { error: parsed.error.issues[0].message }
+  if (!parsed.success) return { error: 'Name is required' }
 
   const newItem: Role = {
     id: `role_${randomUUID().split('-')[0]}`,
     name,
-    isAdmin,
+    isOwner,
     isChef,
     departmentIds,
     isActive: true
@@ -136,17 +136,17 @@ export async function addRole(prevState: any, formData: FormData) {
 
 export async function updateRole(prevState: any, formData: FormData) {
   const session = await getSession()
-  if (session?.role !== 'owner' && session?.role !== 'admin') return { error: 'Forbidden' }
+  if (session?.role !== 'owner') return { error: 'Forbidden' }
 
   const id = formData.get('id') as string
   const name = formData.get('name') as string
-  const isAdmin = formData.get('isAdmin') === 'on'
+  const isOwner = formData.get('isOwner') === 'on'
   const isChef = formData.get('isChef') === 'on'
   const departmentIds = formData.getAll('departmentIds') as string[]
 
   const schema = z.object({ name: z.string().min(1).max(100).trim() });
   const parsed = schema.safeParse({ name });
-  if (!id || !parsed.success) return { error: parsed.success ? 'Invalid data' : parsed.error.issues[0].message }
+  if (!id || !parsed.success) return { error: 'Invalid data' }
 
   let notFound = false
   const success = await withTransaction<Role>(DB_FILES.ROLES, (list) => {
@@ -155,7 +155,7 @@ export async function updateRole(prevState: any, formData: FormData) {
       notFound = true
       return list
     }
-    list[index] = { ...list[index], name, isAdmin, isChef, departmentIds }
+    list[index] = { ...list[index], name, isOwner, isChef, departmentIds }
     return list
   })
 
@@ -167,7 +167,7 @@ export async function updateRole(prevState: any, formData: FormData) {
 
 export async function deleteRole(id: string) {
   const session = await getSession()
-  if (session?.role !== 'owner' && session?.role !== 'admin') return { error: 'Forbidden' }
+  if (session?.role !== 'owner') return { error: 'Forbidden' }
 
   let notFound = false
   const success = await withTransaction<Role>(DB_FILES.ROLES, (list) => {

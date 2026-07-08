@@ -3,7 +3,7 @@
 This is a comprehensive restaurant management platform built with [Next.js](https://nextjs.org).
 
 ## Features
-- **Role-Based Access Control**: Strict access boundaries between `owner`, `admin`, and `branch_manager` roles.
+- **Role-Based Access Control**: Strict access boundaries between `owner` and `branch_manager` roles.
 - **Multi-Branch Support**: Users are securely sandboxed to their assigned branches.
 - **In-House Rate Limiting**: Built-in sliding window rate limiter protects against brute-force attacks without requiring external Redis dependencies.
 - **Soft Deletion**: Complete audit trail via soft-deletion patterns (`isActive` and `deletedAt`) for all core entities (Staff, Branches, Departments).

@@ -78,3 +78,22 @@ export async function updateCategory(prevState: any, formData: FormData) {
   revalidatePath('/reports')
   return { success: true }
 }
+
+export async function deleteCategory(id: string) {
+  let notFound = false;
+  const success = await withTransaction<ExpenseCategory>(DB_FILES.CATEGORIES, (cats) => {
+    const idx = cats.findIndex(c => c.id === id)
+    if (idx === -1) {
+      notFound = true;
+      return cats;
+    }
+    cats.splice(idx, 1)
+    return cats;
+  })
+
+  if (notFound) return { error: 'Category not found' }
+  if (!success) return { error: 'Transaction failed' }
+
+  revalidatePath('/settings')
+  return { success: true }
+}

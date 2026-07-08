@@ -18,7 +18,7 @@ The application utilizes **Next.js App Router Server Actions** for authenticatio
 2. **Validation**: Input is strictly validated using Zod:
    - Password must be at least 8 characters, with 1 uppercase, 1 lowercase, 1 number, and 1 special character.
 3. **Password Verification**: Compares the provided password with the hashed password in `users.json` using `bcrypt.compare()`.
-4. **JWT Generation**: A stateless JWT containing `userId`, `name`, `role`, `branchId`, and `isGlobalAdmin` is signed.
+4. **JWT Generation**: A stateless JWT containing `userId`, `name`, `role`, `branchId`, and `isGlobalOwner` is signed.
 5. **Cookie Storage**: The JWT is set in an `HttpOnly`, `Secure` (in production) cookie named `session` with a 1-week expiration. No refresh tokens are used.
 
 ### Logout
@@ -31,10 +31,10 @@ The `logout` Server Action simply deletes the `session` cookie and redirects the
 ```json
 {
   "userId": "uuid",
-  "role": "owner | admin | branch_manager",
+  "role": "owner | branch_manager",
   "branchId": "uuid or null",
   "name": "User Name",
-  "isGlobalAdmin": true,
+  "isGlobalOwner": true,
   "iat": 1234567890,
   "exp": 1234567890
 }
@@ -49,13 +49,13 @@ The `logout` Server Action simply deletes the `session` cookie and redirects the
 | Role | Scope | Can approve payroll | Can delete | Can export | Can see all branches |
 |------|-------|-------------------|-----------|-----------|---------------------|
 | `owner` | All branches | Yes | Yes (soft) | Yes | Yes |
-| `admin` | All branches | Yes | Yes (soft) | Yes | Yes |
+| `owner` | All branches | Yes | Yes (soft) | Yes | Yes |
 | `branch_manager` | Assigned branch only | No | No | No | No |
 
 ### Backend Authorization (`requireBranchAccess`)
 
 All Server Actions enforce data sandboxing via `requireBranchAccess(targetBranchId)` from `auth.ts`:
-- If the user is an `owner` or `admin`, they can view/edit any branch.
+- If the user is an `owner`, they can view/edit any branch.
 - If the user is a `branch_manager`, they are strictly confined to their assigned `branchId`.
 
 ```ts

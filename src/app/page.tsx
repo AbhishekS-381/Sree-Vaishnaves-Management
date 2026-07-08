@@ -9,7 +9,7 @@ type Staff = { id: string; branchId: string; isActive: boolean }
 
 export default async function Dashboard() {
   const session = await getSession();
-  const isGlobalAdmin = session?.isGlobalAdmin;
+  const isGlobalOwner = session?.isGlobalOwner;
   const userBranchId = session?.branchId;
 
   let [branches, staff, eod, expenses, inventory, attendance, payroll, configList] = await Promise.all([
@@ -24,7 +24,7 @@ export default async function Dashboard() {
   ]);
   const config = configList[0] || { attendance: true, payroll: true, vendors: true, inventory: true, menu: true, reports: true }
 
-  if (!isGlobalAdmin && userBranchId) {
+  if (!isGlobalOwner && userBranchId) {
     branches = branches.filter((b: any) => b.id === userBranchId);
     staff = staff.filter((s: any) => s.branchId === userBranchId);
     eod = eod.filter((e: any) => e.branchId === userBranchId);

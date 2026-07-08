@@ -18,7 +18,7 @@ export default function AttendanceClientPage({ staff, branches, roles, userRole 
   const todayStr = new Date().toISOString().split('T')[0]
   const diffTime = Math.abs(new Date(todayStr).getTime() - new Date(date).getTime())
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-  const isLocked = diffDays > 7 && userRole !== 'Admin' && userRole !== 'SuperAdmin' && userRole !== 'owner'
+  const isLocked = diffDays > 7 && !['owner'].includes(userRole?.toLowerCase() || '')
 
   useEffect(() => {
     loadAttendance()

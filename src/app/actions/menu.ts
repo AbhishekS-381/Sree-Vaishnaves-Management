@@ -58,7 +58,7 @@ export async function toggleMenuItemStatus(id: string, currentState: boolean) {
   await withTransaction<MenuItem>(DB_FILES.MENU, (menu) => {
     const item = menu.find(m => m.id === id)
     if (item) {
-      if (!session.isGlobalAdmin && item.branchId !== session.branchId) return menu;
+      if (!session.isGlobalOwner && item.branchId !== session.branchId) return menu;
       item.isAvailable = !currentState
     }
     return menu
@@ -73,7 +73,7 @@ export async function deleteMenuItem(id: string) {
   await withTransaction<MenuItem>(DB_FILES.MENU, (menu) => {
     return menu.filter(m => {
       if (m.id === id) {
-        if (!session.isGlobalAdmin && m.branchId !== session.branchId) return true; // Don't delete
+        if (!session.isGlobalOwner && m.branchId !== session.branchId) return true; // Don't delete
         return false; // Delete
       }
       return true;

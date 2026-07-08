@@ -46,7 +46,7 @@ There are exactly **three roles** in the system:
 - Cannot unlock locked EOD entries
 - Can mark attendance, fill EOD entry, manage staff profiles, manage menu
 
-### Super admin (developer only)
+### root user (developer only)
 - Full system access including branch creation, role assignment, data seeding
 - Never exposed in the UI
 - Used only during development and initial onboarding

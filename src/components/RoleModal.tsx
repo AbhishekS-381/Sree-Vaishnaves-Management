@@ -74,20 +74,6 @@ export function RoleModal({ isOpen, onClose, editData, departments = [] }: Props
                <div className="flex items-center gap-3 p-3 rounded-xl bg-[#131018] border border-[#3b3054]">
                  <input
                    type="checkbox"
-                   name="isAdmin"
-                   id="isAdmin"
-                   defaultChecked={editData?.isAdmin}
-                   className="w-5 h-5 rounded border-[#3b3054] text-[#c084fc] focus:ring-[#c084fc] bg-[#1e1b2e]"
-                 />
-                 <label htmlFor="isAdmin" className="text-sm font-medium text-slate-300">
-                   Is Admin / Owner Role?
-                   <span className="block text-xs text-slate-500 font-normal">Grants full access to the system</span>
-                 </label>
-               </div>
-
-               <div className="flex items-center gap-3 p-3 rounded-xl bg-[#131018] border border-[#3b3054]">
-                 <input
-                   type="checkbox"
                    name="isChef"
                    id="isChef"
                    defaultChecked={editData?.isChef}

@@ -83,7 +83,7 @@ export async function saveEODEntry(
       const isPast24Hours = (new Date().getTime() - new Date(existing.createdAt).getTime()) > 24 * 60 * 60 * 1000;
       
       const session = await getSession();
-      if ((existing.status === 'locked' || isPast24Hours) && !session?.isGlobalAdmin) {
+      if ((existing.status === 'locked' || isPast24Hours) && !session?.isGlobalOwner) {
         isLocked = true;
         return allEOD;
       }

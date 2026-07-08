@@ -225,5 +225,5 @@ const overridePayrollSchema = z.object({
 2. Base salary changes take effect from the next month's payroll — they do not retroactively affect past records
 3. Advances from previous months that were not yet deducted carry forward — they appear in the next generated payroll
 4. Net payable is floored at 0 — it can never be negative
-5. Once payroll is approved, it cannot be regenerated. Owner must contact super admin to unlock (handled manually, no UI)
+5. Once payroll is approved, it cannot be regenerated. Owner must contact root user to unlock (handled manually, no UI)
 6. Payroll generation is idempotent for draft status — calling generate multiple times produces the same result

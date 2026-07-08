@@ -52,13 +52,14 @@ export async function login(prevState: any, formData: FormData) {
       pruneRateLimits().catch(() => {});
     }
 
-    const isGlobalAdmin = user.role === 'admin' || user.role === 'owner';
+    const isGlobalOwner = user.role === 'owner';
     const token = await signToken({
       userId: user.id || user.name,
       name: user.name,
       role: user.role,
       branchId: user.branchId,
-      isGlobalAdmin,
+      isGlobalOwner,
+      isGlobalOwner: user.role === 'owner',
     });
 
     const cookieStore = await cookies()
@@ -96,7 +97,7 @@ export async function requireBranchAccess(targetBranchId?: string) {
   const session = await getSession();
   if (!session) throw new Error('Unauthorized');
   
-  if (!session.isGlobalAdmin) {
+  if (!session.isGlobalOwner) {
     if (targetBranchId && targetBranchId !== session.branchId) {
       throw new Error('Forbidden: You can only access your assigned branch.');
     }
@@ -108,7 +109,7 @@ export async function requireBranchAccess(targetBranchId?: string) {
 
 export async function migratePasswordsToHash() {
   const session = await getSession();
-  if (session?.role !== 'owner' && session?.role !== 'admin') {
+  if (session?.role !== 'owner') {
     return { error: 'Forbidden' };
   }
   const users = await readJSON<any>(DB_FILES.USERS);

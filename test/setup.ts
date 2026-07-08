@@ -29,3 +29,6 @@ vi.mock('next/navigation', () => ({
   usePathname: () => '/',
   useSearchParams: () => new URLSearchParams(),
 }));
+
+process.env.DATABASE_URL = 'postgres://mock:mock@mock/mock';
+process.env.DATA_DIR = './.data';

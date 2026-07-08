@@ -7,7 +7,7 @@ export default async function BranchDetailPage({ params }: { params: Promise<{ i
   const { id } = await params
   
   const session = await getSession()
-  if (!session?.isGlobalAdmin && session?.branchId !== id) {
+  if (!session?.isGlobalOwner && session?.branchId !== id) {
     redirect('/')
   }
 
@@ -24,7 +24,7 @@ export default async function BranchDetailPage({ params }: { params: Promise<{ i
     notFound()
   }
 
-  const branchStaff = staff.filter((s: any) => s.branchId === branch.id)
+  const branchStaff = staff.filter((s: any) => s.branchId === branch.id && !s.deletedAt)
   const branchRequirements = requirements.filter((r: any) => r.branchId === branch.id)
   const totalPositions = branchRequirements.reduce((sum: number, r: any) => sum + (Number(r.requiredCount) || 1), 0)
 
