@@ -441,8 +441,20 @@ export function ScheduleTimeline({ staff, requirements, branches, departments, r
             </div>
             <div className="p-4 max-h-[60vh] overflow-y-auto space-y-4">
               {(() => {
-                const workingStaff = staff.filter(s => {
-                  if (s.branchId !== selectedBranch || s.deletedAt || s.isActive === false) return false;
+                const slotStart = activeSlotMins;
+                const slotEnd = activeSlotMins + 60;
+
+                const isOverlapping = (start: number, end: number) => {
+                  if (end < start) {
+                    return (start < slotEnd && 1440 > slotStart) || (0 < slotEnd && end > slotStart);
+                  }
+                  return start < slotEnd && end > slotStart;
+                };
+
+                // 1. Group Working Staff
+                const staffGrouped = new Map<string, any[]>();
+                staff.forEach(s => {
+                  if (s.branchId !== selectedBranch || s.deletedAt || s.isActive === false) return;
                   
                   let startMins = 0;
                   let endMins = 0;
@@ -451,47 +463,89 @@ export function ScheduleTimeline({ staff, requirements, branches, departments, r
                     startMins = timeToMins(s.startTime);
                     endMins = timeToMins(s.endTime);
                   } else {
-                    // Fallback to shiftType if custom times aren't set
-                    if (s.shiftType === 'morning') { startMins = 6 * 60; endMins = 15 * 60; } // 6 AM - 3 PM
-                    else if (s.shiftType === 'evening') { startMins = 15 * 60; endMins = 24 * 60; } // 3 PM - 12 AM
-                    else { startMins = 9 * 60; endMins = 21 * 60; } // Full: 9 AM - 9 PM
+                    const sType = (s.shiftType || 'full').toLowerCase();
+                    if (sType === 'morning') { startMins = 6 * 60; endMins = 15 * 60; }
+                    else if (sType === 'evening') { startMins = 15 * 60; endMins = 24 * 60; }
+                    else { startMins = 9 * 60; endMins = 21 * 60; }
                   }
 
-                  if (endMins < startMins) {
-                    // Overnight shift
-                    return activeSlotMins >= startMins || activeSlotMins < endMins;
+                  if (isOverlapping(startMins, endMins)) {
+                    const roleName = roles.find(r => r.id === s.roleId)?.name || s.roleId;
+                    if (!staffGrouped.has(roleName)) staffGrouped.set(roleName, []);
+                    staffGrouped.get(roleName)!.push(s);
                   }
-                  
-                  return activeSlotMins >= startMins && activeSlotMins < endMins;
                 });
 
-                const grouped = workingStaff.reduce((acc, curr) => {
-                  const roleName = roles.find(r => r.id === curr.roleId)?.name || curr.roleId;
-                  if (!acc[roleName]) acc[roleName] = [];
-                  acc[roleName].push(curr);
-                  return acc;
-                }, {} as Record<string, any[]>);
+                // 2. Group Required Positions
+                const reqsGrouped = new Map<string, number>();
+                filteredReqs.forEach(req => {
+                  const roleName = roles.find(r => r.id === req.roleId)?.name || req.roleId;
+                  let activePositions = 0;
+                  
+                  if (req.schedules) {
+                    req.schedules.forEach((schedule: any) => {
+                      const hasActiveShift = schedule.shifts.some((shift: any) => {
+                         const sMins = timeToMins(shift.start);
+                         const eMins = timeToMins(shift.end);
+                         return isOverlapping(sMins, eMins);
+                      });
+                      if (hasActiveShift) activePositions++;
+                    });
+                  }
+                  
+                  if (activePositions > 0) {
+                    reqsGrouped.set(roleName, (reqsGrouped.get(roleName) || 0) + activePositions);
+                  }
+                });
 
-                if (Object.keys(grouped).length === 0) {
-                  return <p className="text-slate-400 text-sm text-center py-6">No staff scheduled for this hour.</p>
+                const allRoles = Array.from(new Set([...staffGrouped.keys(), ...reqsGrouped.keys()]));
+
+                if (allRoles.length === 0) {
+                  return <p className="text-slate-400 text-sm text-center py-6">No staff or positions scheduled for this hour.</p>
                 }
 
-                return (Object.entries(grouped) as [string, any[]][]).map(([role, employees]) => (
-                  <div key={role} className="bg-[#131018] rounded-xl border border-[#3b3054] p-3">
-                    <div className="flex justify-between items-center mb-2 border-b border-[#3b3054]/50 pb-2">
-                      <span className="font-bold text-[#c084fc] text-sm uppercase tracking-wide">{role}</span>
-                      <span className="text-xs bg-[#c084fc]/20 text-[#c084fc] px-2 py-0.5 rounded-full font-bold">{employees.length}</span>
-                    </div>
-                    <div className="space-y-1">
-                      {employees.map(e => (
-                        <div key={e.id} className="text-sm text-slate-300 font-medium flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                          {e.name}
+                return allRoles.map(role => {
+                  const employees = staffGrouped.get(role) || [];
+                  const assignedPositions = reqsGrouped.get(role) || 0;
+                  const vacant = Math.max(0, assignedPositions - employees.length);
+                  const extra = Math.max(0, employees.length - assignedPositions);
+                  
+                  const hourLabel = `${Math.floor(activeSlotMins / 60) % 12 || 12} ${Math.floor(activeSlotMins / 60) >= 12 ? 'PM' : 'AM'}`;
+
+                  return (
+                    <div key={role} className="bg-[#131018] rounded-xl border border-[#3b3054] p-3 mb-4 last:mb-0">
+                      <div className="flex justify-between items-center mb-2 border-b border-[#3b3054]/50 pb-2">
+                        <span className="font-bold text-[#c084fc] text-sm uppercase tracking-wide">{role}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] bg-[#c084fc]/10 text-[#c084fc] px-2 py-0.5 rounded font-bold uppercase tracking-wider" title="Positions Assigned">
+                            {assignedPositions} Req
+                          </span>
+                          <span className="text-[10px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded font-bold uppercase tracking-wider" title="Working Staff">
+                            {employees.length} Staff
+                          </span>
                         </div>
-                      ))}
+                      </div>
+                      
+                      <div className="text-[11px] text-slate-400 mb-3 px-1 leading-relaxed">
+                        {assignedPositions} position{assignedPositions !== 1 ? 's' : ''} assigned for {role.toLowerCase()} at {hourLabel} and staff count for that {role.toLowerCase()} role is {employees.length}.
+                        {vacant > 0 && <span className="text-rose-400 ml-1 font-medium">({vacant} vacant)</span>}
+                        {extra > 0 && <span className="text-amber-400 ml-1 font-medium">({extra} extra staff scheduled)</span>}
+                      </div>
+
+                      <div className="space-y-1">
+                        {employees.map((e: any) => (
+                          <div key={e.id} className="text-sm text-slate-300 font-medium flex items-center gap-2">
+                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            {e.name}
+                          </div>
+                        ))}
+                        {employees.length === 0 && (
+                          <div className="text-xs text-slate-500 italic px-2">No staff assigned</div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))
+                  )
+                })
               })()}
             </div>
           </div>
