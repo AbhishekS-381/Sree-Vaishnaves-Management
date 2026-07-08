@@ -13,13 +13,13 @@ vi.mock('@/app/actions/auth', () => ({ logout: vi.fn() }))
 
 describe('Navigation component', () => {
   it('renders the owner portal label', () => {
-    const { container } = render(<Navigation role="owner" config={{}} />)
+    const { container } = render(<Navigation role="owner" isGlobalOwner={true} config={{}} />)
     expect(container.textContent).toContain('Owner Portal')
   })
 
-  it('renders manager portal when role=readonly', () => {
+  it('renders read-only portal when role=readonly', () => {
     const { container } = render(<Navigation role="readonly" config={{}} />)
-    expect(container.textContent).toContain('Manager Portal')
+    expect(container.textContent).toContain('Read-Only Portal')
   })
 
   it('hides Menu nav item when config.menu=false', () => {
@@ -48,7 +48,7 @@ describe('Navigation component', () => {
   })
 
   it('shows all nav items when config is empty', () => {
-    const { getByText } = render(<Navigation role="owner" config={{}}  />)
+    const { getByText } = render(<Navigation role="owner" isRootAdmin={true} config={{}}  />)
     expect(getByText('Dashboard')).toBeTruthy()
     expect(getByText('Staff')).toBeTruthy()
     expect(getByText('Settings')).toBeTruthy()
