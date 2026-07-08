@@ -1,13 +1,18 @@
 'use client'
 
-import { useActionState } from 'react'
+import { useActionState, useState, useEffect } from 'react'
 import { Plus, X, Loader2, User } from 'lucide-react'
 import { addUser, updateUser } from '@/app/actions/users'
 
 const initialState: any = { message: '', error: '' }
 
-export function UserModal({ isOpen, onClose, editData }: { isOpen: boolean, onClose: () => void, editData?: any }) {
+export function UserModal({ isOpen, onClose, editData, branches = [] }: { isOpen: boolean, onClose: () => void, editData?: any, branches?: any[] }) {
   const [state, action, isPending] = useActionState(editData ? updateUser : addUser, initialState)
+  const [selectedRole, setSelectedRole] = useState(editData?.role || 'manager')
+
+  useEffect(() => {
+    setSelectedRole(editData?.role || 'manager')
+  }, [editData?.role])
 
   if (!isOpen) return null
 
@@ -59,12 +64,24 @@ export function UserModal({ isOpen, onClose, editData }: { isOpen: boolean, onCl
 
             <div>
                <label className="block text-sm font-medium text-slate-400 mb-1">System Role</label>
-               <select required name="role" defaultValue={editData?.role || 'manager'} className="w-full bg-[#131018] border border-[#3b3054] rounded-xl px-4 py-2.5 text-white focus:border-[#c084fc] focus:outline-none">
+               <select required name="role" value={selectedRole} onChange={e => setSelectedRole(e.target.value)} className="w-full bg-[#131018] border border-[#3b3054] rounded-xl px-4 py-2.5 text-white focus:border-[#c084fc] focus:outline-none">
                    <option value="owner">Owner (Full Settings Access)</option>
                    <option value="manager">Manager (App Operation Access)</option>
                    <option value="readonly">Read-Only Analyst</option>
                </select>
             </div>
+
+            {selectedRole === 'manager' && (
+              <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                 <label className="block text-sm font-medium text-slate-400 mb-1">Assigned Branch</label>
+                 <select required name="branchId" defaultValue={editData?.branchId || ''} className="w-full bg-[#131018] border border-[#3b3054] rounded-xl px-4 py-2.5 text-white focus:border-[#c084fc] focus:outline-none">
+                     <option value="" disabled>Select a branch</option>
+                     {branches.map(b => (
+                       <option key={b.id} value={b.id}>{b.name}</option>
+                     ))}
+                 </select>
+              </div>
+            )}
 
             {state?.error && <p className="text-red-400 text-sm">{state.error}</p>}
             

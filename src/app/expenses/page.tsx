@@ -8,7 +8,7 @@ export default async function ExpensesPage() {
   const session = await getSession()
   const userRole = session?.role
 
-  if (!session?.isGlobalOwner) {
+  if (!session?.isGlobalOwner && session?.role !== 'readonly') {
     branches = branches.filter((b: any) => b.id === session?.branchId)
     expenses = expenses.filter((e: any) => e.branchId === session?.branchId)
   }
@@ -16,6 +16,6 @@ export default async function ExpensesPage() {
   branches = branches.filter((b: any) => b.isActive !== false)
 
   return (
-    <ExpensesClientPage branches={branches} expenses={expenses} userRole={userRole || ''} />
+    <ExpensesClientPage branches={branches} expenses={expenses} userRole={userRole || ''} isGlobalOwner={session?.isGlobalOwner ?? false} isReadOnly={session?.role === 'readonly'} />
   )
 }

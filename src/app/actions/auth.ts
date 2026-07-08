@@ -31,7 +31,7 @@ export async function login(prevState: any, formData: FormData) {
   }
 
   const users = await readJSON<any>(DB_FILES.USERS).catch(() => [])
-  const user = users.find((u: any) => u.name.toLowerCase() === name.toLowerCase())
+  const user = users.find((u: any) => u.name.toLowerCase() === name.toLowerCase() && u.isActive !== false)
 
   let isValidPassword = false;
   if (user && user.password) {
@@ -52,20 +52,22 @@ export async function login(prevState: any, formData: FormData) {
       pruneRateLimits().catch(() => {});
     }
 
-    const isGlobalOwner = user.role === 'owner';
+    const isGlobalOwner = user.role?.toLowerCase() === 'owner' || user.isGlobalOwner === true;
+    const isRootAdmin = user.isGlobalOwner === true;
     const token = await signToken({
       userId: user.id || user.name,
       name: user.name,
-      role: user.role,
+      role: user.role?.toLowerCase() || 'manager',
       branchId: user.branchId,
       isGlobalOwner,
+      isRootAdmin,
     });
 
     const cookieStore = await cookies()
     cookieStore.set('session', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production' && process.env.SECURE_COOKIE !== 'false',
-      maxAge: 60 * 60 * 24 * 7, // 1 week
+      maxAge: 60 * 60 * 2, // 2 hours
       path: '/',
     })
     redirect('/')
@@ -84,7 +86,8 @@ export async function getSession() {
   const cookieStore = await cookies()
   const token = cookieStore.get('session')?.value
   if (!token) return null;
-  return await verifyToken(token);
+  const payload = await verifyToken(token);
+  return payload;
 }
 
 export async function getSessionRole() {

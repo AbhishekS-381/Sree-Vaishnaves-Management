@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { Briefcase, Layers, Pencil, Plus, ToggleRight, LayoutTemplate, Tag } from 'lucide-react'
 import { GenericEntityModal } from '@/components/GenericEntityModal'
 import { addDepartment, updateDepartment, deleteDepartment, deleteRole } from '@/app/actions/settings'
@@ -18,13 +19,27 @@ type Props = {
   config: any
   users: any[]
   sessionRole?: string
+  branches?: any[]
 }
 
-export default function SettingsClientPage({ roles, departments, categories, config, users, sessionRole }: Props) {
+export default function SettingsClientPage({ roles, departments, categories, config, users, sessionRole, branches = [] }: Props) {
   const [deptModal, setDeptModal] = useState({ open: false, data: null })
   const [roleModal, setRoleModal] = useState({ open: false, data: null })
   const [catModal, setCatModal] = useState({ open: false, data: null })
   const [userModal, setUserModal] = useState({ open: false, data: null })
+  const [confirmAction, setConfirmAction] = useState<{ label: string, fn: () => Promise<void> } | null>(null)
+  const [confirming, setConfirming] = useState(false)
+  const router = useRouter()
+  const [isPending, startTransition] = useTransition()
+
+  async function runConfirmAction() {
+    if (!confirmAction) return;
+    setConfirming(true)
+    await confirmAction.fn()
+    setConfirming(false)
+    setConfirmAction(null)
+    startTransition(() => router.refresh())
+  }
 
   const handleToggle = async (moduleName: string, currentlyActive: boolean) => {
     // Optimistic UI could be added, but simple toggle action is fine
@@ -81,11 +96,13 @@ export default function SettingsClientPage({ roles, departments, categories, con
                     <Pencil className="h-4 w-4" />
                   </button>
                   <button
-                    onClick={async () => {
-                      if (confirm(`Are you sure you want to delete the ${d.name} department?`)) {
-                        await deleteDepartment(d.id)
+                    onClick={() => setConfirmAction({
+                      label: `Delete the "${d.name}" department?`,
+                      fn: async () => {
+                        const res = await deleteDepartment(d.id)
+                        if (res?.error) alert(res.error)
                       }
-                    }}
+                    })}
                     className="text-slate-500 hover:text-red-400 transition-colors p-1"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -134,11 +151,13 @@ export default function SettingsClientPage({ roles, departments, categories, con
                     <Pencil className="h-4 w-4" />
                   </button>
                   <button
-                    onClick={async () => {
-                      if (confirm(`Are you sure you want to delete the ${r.name} role?`)) {
-                        await deleteRole(r.id)
+                    onClick={() => setConfirmAction({
+                      label: `Delete the "${r.name}" role?`,
+                      fn: async () => {
+                        const res = await deleteRole(r.id)
+                        if (res?.error) alert(res.error)
                       }
-                    }}
+                    })}
                     className="text-slate-500 hover:text-red-400 transition-colors p-1"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -188,11 +207,13 @@ export default function SettingsClientPage({ roles, departments, categories, con
                         <Pencil className="h-4 w-4" />
                      </button>
                      <button
-                        onClick={async () => {
-                          if (confirm(`Are you sure you want to delete the ${c.name} category?`)) {
-                            await deleteCategory(c.id)
+                        onClick={() => setConfirmAction({
+                          label: `Delete the "${c.name}" category?`,
+                          fn: async () => {
+                            const res = await deleteCategory(c.id)
+                            if (res?.error) alert(res.error)
                           }
-                        }}
+                        })}
                         className="text-slate-500 hover:text-red-400 transition-colors p-1"
                      >
                         <Trash2 className="h-4 w-4" />
@@ -274,7 +295,7 @@ export default function SettingsClientPage({ roles, departments, categories, con
                          </span>
                          {u.isGlobalOwner && (
                             <span className="bg-purple-500/20 text-purple-300 text-[10px] px-2 py-0.5 rounded-full font-bold border border-purple-500/30 uppercase tracking-wide">
-                              Owner
+                              Admin
                             </span>
                          )}
                        </div>
@@ -287,18 +308,20 @@ export default function SettingsClientPage({ roles, departments, categories, con
                        >
                          <Pencil className="h-4 w-4" />
                        </button>
-                       {!u.isGlobalOwner && (
-                         <button
-                            onClick={async () => {
-                               if(confirm(`Remove ${u.name}?`)) {
-                                  await deleteUser(u.id);
+                        {!u.isGlobalOwner && (
+                          <button
+                             onClick={() => setConfirmAction({
+                               label: `Remove user "${u.name}"?`,
+                               fn: async () => {
+                                 const res = await deleteUser(u.id);
+                                 if (res?.error) alert(res.error)
                                }
-                            }}
-                            className="text-slate-500 hover:text-red-400 transition-colors p-2 rounded-lg hover:bg-red-500/10"
-                         >
-                           <Trash2 className="h-4 w-4" />
-                         </button>
-                       )}
+                             })}
+                             className="text-slate-500 hover:text-red-400 transition-colors p-2 rounded-lg hover:bg-red-500/10"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
                     </div>
                  </div>
               ))}
@@ -343,11 +366,38 @@ export default function SettingsClientPage({ roles, departments, categories, con
         ]}
       />
 
-      <UserModal
-        isOpen={userModal.open}
-        onClose={() => setUserModal({ ...userModal, open: false })}
-        editData={userModal.data}
-      />
+      <UserModal isOpen={userModal.open} onClose={() => setUserModal({ open: false, data: null })} editData={userModal.data} branches={branches} />
+
+      {/* Shared Delete Confirmation Modal */}
+      {confirmAction && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-[#1e1b2e] border border-red-500/20 rounded-2xl p-6 w-full max-w-sm shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-red-500/10 rounded-lg border border-red-500/20">
+                <Trash2 className="text-red-400 h-5 w-5" />
+              </div>
+              <h2 className="text-lg font-bold text-white">Confirm Delete</h2>
+            </div>
+            <p className="text-slate-400 text-sm mb-6">{confirmAction.label} This cannot be undone.</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmAction(null)}
+                disabled={confirming}
+                className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl font-semibold transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={runConfirmAction}
+                disabled={confirming}
+                className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {confirming ? 'Deleting...' : <><Trash2 className="h-4 w-4" /> Delete</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

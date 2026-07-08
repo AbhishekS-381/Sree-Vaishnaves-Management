@@ -52,3 +52,22 @@ export async function updateExpense(id: string, updates: Partial<Expense>) {
   revalidatePath('/reports')
   return { success: true }
 }
+
+export async function deleteExpense(id: string) {
+  const session = await getSession()
+  if (!session || !session.isGlobalOwner) return { error: 'Unauthorized' }
+  let deleted: Expense | null = null;
+  const success = await withTransaction<Expense>(DB_FILES.EXPENSES, (allExpenses) => {
+    const index = allExpenses.findIndex(e => e.id === id)
+    if (index === -1) return allExpenses;
+    deleted = allExpenses.splice(index, 1)[0];
+    return allExpenses;
+  })
+  if (!deleted) return { error: 'Not found' }
+  if (!success) return { error: 'Failed to delete' }
+  const exp = deleted as unknown as Expense;
+  await logAction('DELETE_EXPENSE', 'EXPENSE', `Deleted expense ${id} of amount ${exp.amount}`, id)
+  revalidatePath('/expenses')
+  revalidatePath('/reports')
+  return { success: true }
+}

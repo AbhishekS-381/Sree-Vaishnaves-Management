@@ -18,7 +18,7 @@ type Branch = {
   customerEndTime?: string;
 }
 
-export default function BranchesClientPage({ branches }: { branches: Branch[] }) {
+export default function BranchesClientPage({ branches, isReadOnly = false }: { branches: Branch[], isReadOnly?: boolean }) {
   const [modal, setModal] = useState({ open: false, data: null })
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
@@ -42,12 +42,14 @@ export default function BranchesClientPage({ branches }: { branches: Branch[] })
           <h1 className="text-3xl font-bold text-foreground">Branches</h1>
           <p className="text-slate-400 mt-1">Manage your restaurant locations.</p>
         </div>
-        <button
-          onClick={() => setModal({ open: true, data: null })}
-          className="bg-primary text-[#131018] px-4 py-2 rounded-lg text-sm font-bold hover:bg-accent transition-colors flex items-center gap-2"
-        >
-          <Plus className="h-4 w-4" /> Add Branch
-        </button>
+        {!isReadOnly && (
+          <button
+            onClick={() => setModal({ open: true, data: null })}
+            className="bg-primary text-[#131018] px-4 py-2 rounded-lg text-sm font-bold hover:bg-accent transition-colors flex items-center gap-2"
+          >
+            <Plus className="h-4 w-4" /> Add Branch
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -79,20 +81,22 @@ export default function BranchesClientPage({ branches }: { branches: Branch[] })
               </div>
 
               <div className="mt-6 pt-4 border-t border-white/5 flex justify-between items-center">
-                <div className="flex gap-2">
-                  <button
-                    onClick={(e) => handleEdit(e, branch)}
-                    className="p-1.5 hover:bg-[#3b3054] rounded-lg text-slate-500 hover:text-white transition-colors"
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={(e) => handleDelete(e, branch.id)}
-                    className="p-1.5 hover:bg-red-900/20 rounded-lg text-slate-500 hover:text-red-400 transition-colors"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
+                {!isReadOnly ? (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={(e) => handleEdit(e, branch)}
+                      className="p-1.5 hover:bg-[#3b3054] rounded-lg text-slate-500 hover:text-white transition-colors"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={(e) => handleDelete(e, branch.id)}
+                      className="p-1.5 hover:bg-red-900/20 rounded-lg text-slate-500 hover:text-red-400 transition-colors"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : <div />}
                 <span className="text-xs font-semibold text-accent opacity-0 group-hover:opacity-100 transition-opacity">
                   View Details →
                 </span>

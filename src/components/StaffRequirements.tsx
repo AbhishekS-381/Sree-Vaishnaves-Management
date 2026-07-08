@@ -24,9 +24,10 @@ type Props = {
   roles: any[]
   menuCategories?: any[]
   onQuickHire?: (id: string) => void
+  isReadOnly?: boolean
 }
 
-export function StaffRequirements({ requirements, staff, branches, departments, roles, menuCategories = [], onQuickHire }: Props) {
+export function StaffRequirements({ requirements, staff, branches, departments, roles, menuCategories = [], onQuickHire, isReadOnly = false }: Props) {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingReq, setEditingReq] = useState<Requirement | null>(null)
 
@@ -63,12 +64,14 @@ export function StaffRequirements({ requirements, staff, branches, departments, 
           <h2 className="text-xl font-bold text-foreground">Configured Positions</h2>
           <p className="text-sm text-slate-400">Define the required headcount for specific roles across branches.</p>
         </div>
-        <button
-          onClick={handleNew}
-          className="bg-primary text-[#131018] px-4 py-2 rounded-lg text-sm font-bold hover:bg-accent transition-colors flex items-center gap-2"
-        >
-          <Plus className="h-4 w-4" /> Add Requirement
-        </button>
+        {!isReadOnly && (
+          <button
+            onClick={handleNew}
+            className="bg-primary text-[#131018] px-4 py-2 rounded-lg text-sm font-bold hover:bg-accent transition-colors flex items-center gap-2"
+          >
+            <Plus className="h-4 w-4" /> Add Requirement
+          </button>
+        )}
       </div>
 
       <div className="flex flex-col sm:flex-row gap-4 mb-6">
@@ -195,7 +198,7 @@ export function StaffRequirements({ requirements, staff, branches, departments, 
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          {onQuickHire && (
+                          {!isReadOnly && onQuickHire && (
                             <button
                               onClick={() => onQuickHire(req.id)}
                               className="p-2 hover:bg-[#3b3054] rounded-lg text-[#c084fc] hover:text-white transition-colors"
@@ -204,20 +207,24 @@ export function StaffRequirements({ requirements, staff, branches, departments, 
                               <UserPlus className="h-4 w-4" />
                             </button>
                           )}
-                          <button
-                            onClick={() => handleEdit(req)}
-                            className="p-2 hover:bg-[#3b3054] rounded-lg text-slate-400 hover:text-white transition-colors"
-                            title="Edit"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(req.id)}
-                            className="p-2 hover:bg-red-900/20 rounded-lg text-slate-400 hover:text-red-400 transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          {!isReadOnly && (
+                            <>
+                              <button
+                                onClick={() => handleEdit(req)}
+                                className="p-2 hover:bg-[#3b3054] rounded-lg text-slate-400 hover:text-white transition-colors"
+                                title="Edit"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(req.id)}
+                                className="p-2 hover:bg-red-900/20 rounded-lg text-slate-400 hover:text-red-400 transition-colors"
+                                title="Delete"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>

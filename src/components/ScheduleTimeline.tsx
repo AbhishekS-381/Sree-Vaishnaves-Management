@@ -12,6 +12,7 @@ type Props = {
   branches: any[]
   departments: any[]
   roles: any[]
+  isReadOnly?: boolean
 }
 
 const timeToMins = (timeStr?: string) => {
@@ -195,12 +196,13 @@ function PositionRow({
   )
 }
 
-export function ScheduleTimeline({ requirements, branches, departments, roles }: Props) {
+export function ScheduleTimeline({ staff, requirements, branches, departments, roles, isReadOnly = false }: Props) {
   const [selectedBranch, setSelectedBranch] = useState(branches[0]?.id || '')
   const [selectedDept, setSelectedDept] = useState('')
   const [savingReqId, setSavingReqId] = useState<string | null>(null)
   const [autoScheduleReq, setAutoScheduleReq] = useState<any>(null)
   const [isEditMode, setIsEditMode] = useState(false)
+  const [activeSlotMins, setActiveSlotMins] = useState<number | null>(null)
 
   const branch = branches.find(b => b.id === selectedBranch)
   
@@ -311,15 +313,17 @@ export function ScheduleTimeline({ requirements, branches, departments, roles }:
             </select>
           </div>
         </div>
-        <div className="flex items-center gap-3 bg-[#131018] p-2 px-4 rounded-xl border border-[#3b3054]">
-          <span className="text-sm font-semibold text-slate-300">Edit Schedule</span>
-          <button 
-             onClick={() => setIsEditMode(!isEditMode)}
-             className={`w-12 h-6 rounded-full relative transition-colors ${isEditMode ? 'bg-[#c084fc]' : 'bg-slate-700'}`}
-          >
-             <div className={`absolute top-1 bottom-1 w-4 bg-white rounded-full transition-all ${isEditMode ? 'left-7' : 'left-1'}`} />
-          </button>
-        </div>
+          {!isReadOnly && (
+          <div className="flex items-center gap-3 bg-[#131018] p-2 px-4 rounded-xl border border-[#3b3054]">
+            <span className="text-sm font-semibold text-slate-300">Edit Schedule</span>
+            <button 
+               onClick={() => setIsEditMode(!isEditMode)}
+               className={`w-12 h-6 rounded-full relative transition-colors ${isEditMode ? 'bg-[#c084fc]' : 'bg-slate-700'}`}
+            >
+               <div className={`absolute top-1 bottom-1 w-4 bg-white rounded-full transition-all ${isEditMode ? 'left-7' : 'left-1'}`} />
+            </button>
+          </div>
+          )}
       </div>
 
       <div className="bg-[#1e1b2e] rounded-2xl border border-[#3b3054] shadow-xl overflow-hidden overflow-x-auto select-none">
@@ -334,8 +338,9 @@ export function ScheduleTimeline({ requirements, branches, departments, roles }:
               {hours.map((h, i) => (
                 <div 
                   key={i} 
-                  className="absolute top-0 bottom-0 border-l border-[#3b3054]/30 text-[10px] font-medium text-slate-500 pl-1 pt-1"
-                  style={{ left: `${((h.mins - startMins) / totalDuration) * 100}%` }}
+                  onClick={() => setActiveSlotMins(h.mins)}
+                  className="absolute top-0 bottom-0 border-l border-[#3b3054]/30 text-[10px] font-medium text-slate-500 pl-1 pt-1 cursor-pointer hover:bg-[#c084fc]/10 hover:text-[#c084fc] transition-colors"
+                  style={{ left: `${((h.mins - startMins) / totalDuration) * 100}%`, right: i === hours.length - 1 ? 0 : `${100 - (((hours[i+1].mins - startMins) / totalDuration) * 100)}%` }}
                 >
                   {h.label}
                 </div>
@@ -355,7 +360,7 @@ export function ScheduleTimeline({ requirements, branches, departments, roles }:
                     <div className="w-48 shrink-0 p-4 border-r border-[#3b3054] bg-[#1a1726] flex flex-col justify-center">
                       <h4 className="font-bold text-white text-sm">{roleName}</h4>
                       <p className="text-xs text-slate-500 mt-1 mb-3">{req.requiredCount} Positions</p>
-                      {req.requiredCount > 0 && (
+                      {req.requiredCount > 0 && !isReadOnly && (
                         <button 
                           onClick={() => setAutoScheduleReq(req)}
                           className="w-full py-1.5 px-2 bg-[#252033] hover:bg-[#3b3054] text-[#c084fc] text-[10px] font-bold rounded flex items-center justify-center gap-1 transition-colors border border-[#3b3054]"
@@ -418,9 +423,80 @@ export function ScheduleTimeline({ requirements, branches, departments, roles }:
         onGenerate={(schedules) => {
           if (autoScheduleReq) {
             handleAutoGenerate(autoScheduleReq, schedules)
+            setAutoScheduleReq(null)
           }
         }}
       />
+
+      {activeSlotMins !== null && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-[#1e1b2e] rounded-2xl w-full max-w-md overflow-hidden border border-[#3b3054] shadow-2xl flex flex-col animate-in zoom-in-95 duration-200">
+            <div className="p-4 border-b border-[#3b3054] flex justify-between items-center bg-[#131018]">
+              <h2 className="font-bold text-white text-lg">
+                Working Staff at {Math.floor(activeSlotMins / 60) % 12 || 12} {Math.floor(activeSlotMins / 60) >= 12 ? 'PM' : 'AM'}
+              </h2>
+              <button onClick={() => setActiveSlotMins(null)} className="text-slate-400 hover:text-white transition-colors">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-4 max-h-[60vh] overflow-y-auto space-y-4">
+              {(() => {
+                const workingStaff = staff.filter(s => {
+                  if (s.branchId !== selectedBranch || s.deletedAt || s.isActive === false) return false;
+                  
+                  let startMins = 0;
+                  let endMins = 0;
+                  
+                  if (s.startTime && s.endTime) {
+                    startMins = timeToMins(s.startTime);
+                    endMins = timeToMins(s.endTime);
+                  } else {
+                    // Fallback to shiftType if custom times aren't set
+                    if (s.shiftType === 'morning') { startMins = 6 * 60; endMins = 15 * 60; } // 6 AM - 3 PM
+                    else if (s.shiftType === 'evening') { startMins = 15 * 60; endMins = 24 * 60; } // 3 PM - 12 AM
+                    else { startMins = 9 * 60; endMins = 21 * 60; } // Full: 9 AM - 9 PM
+                  }
+
+                  if (endMins < startMins) {
+                    // Overnight shift
+                    return activeSlotMins >= startMins || activeSlotMins < endMins;
+                  }
+                  
+                  return activeSlotMins >= startMins && activeSlotMins < endMins;
+                });
+
+                const grouped = workingStaff.reduce((acc, curr) => {
+                  const roleName = roles.find(r => r.id === curr.roleId)?.name || curr.roleId;
+                  if (!acc[roleName]) acc[roleName] = [];
+                  acc[roleName].push(curr);
+                  return acc;
+                }, {} as Record<string, any[]>);
+
+                if (Object.keys(grouped).length === 0) {
+                  return <p className="text-slate-400 text-sm text-center py-6">No staff scheduled for this hour.</p>
+                }
+
+                return (Object.entries(grouped) as [string, any[]][]).map(([role, employees]) => (
+                  <div key={role} className="bg-[#131018] rounded-xl border border-[#3b3054] p-3">
+                    <div className="flex justify-between items-center mb-2 border-b border-[#3b3054]/50 pb-2">
+                      <span className="font-bold text-[#c084fc] text-sm uppercase tracking-wide">{role}</span>
+                      <span className="text-xs bg-[#c084fc]/20 text-[#c084fc] px-2 py-0.5 rounded-full font-bold">{employees.length}</span>
+                    </div>
+                    <div className="space-y-1">
+                      {employees.map(e => (
+                        <div key={e.id} className="text-sm text-slate-300 font-medium flex items-center gap-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          {e.name}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

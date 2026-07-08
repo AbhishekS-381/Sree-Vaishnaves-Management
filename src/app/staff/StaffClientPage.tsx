@@ -32,9 +32,10 @@ type Props = {
   roles: any[]
   requirements: any[]
   menuCategories?: any[]
+  isReadOnly?: boolean
 }
 
-export default function StaffClientPage({ initialStaff, branches, departments, roles, requirements, menuCategories = [] }: Props) {
+export default function StaffClientPage({ initialStaff, branches, departments, roles, requirements, menuCategories = [], isReadOnly = false }: Props) {
   const [activeTab, setActiveTab] = useState<'staff' | 'requirements' | 'timeline'>('staff')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null)
@@ -73,12 +74,14 @@ export default function StaffClientPage({ initialStaff, branches, departments, r
           <h1 className="text-3xl font-bold text-foreground">Staff</h1>
           <p className="text-slate-400 mt-1">Manage your team members.</p>
         </div>
-        <button
-          onClick={handleNew}
-          className="bg-primary text-[#131018] px-4 py-2 rounded-lg text-sm font-bold hover:bg-accent transition-colors flex items-center gap-2"
-        >
-          <Plus className="h-4 w-4" /> Add Staff
-        </button>
+        {!isReadOnly && (
+          <button
+            onClick={handleNew}
+            className="bg-primary text-[#131018] px-4 py-2 rounded-lg text-sm font-bold hover:bg-accent transition-colors flex items-center gap-2"
+          >
+            <Plus className="h-4 w-4" /> Add Staff
+          </button>
+        )}
       </div>
 
       <div className="flex bg-[#252033] p-1 rounded-xl w-fit border border-[#3b3054] shadow-inner mb-6">
@@ -109,6 +112,7 @@ export default function StaffClientPage({ initialStaff, branches, departments, r
           branches={branches}
           departments={departments}
           roles={roles}
+          isReadOnly={isReadOnly}
         />
       ) : activeTab === 'requirements' ? (
         <StaffRequirements 
@@ -118,7 +122,8 @@ export default function StaffClientPage({ initialStaff, branches, departments, r
           departments={departments} 
           roles={roles} 
           menuCategories={menuCategories}
-          onQuickHire={handleNewWithPosition}
+          onQuickHire={isReadOnly ? undefined : handleNewWithPosition}
+          isReadOnly={isReadOnly}
         />
       ) : (
       <>
@@ -204,25 +209,29 @@ export default function StaffClientPage({ initialStaff, branches, departments, r
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => handleEdit(s)}
-                        className="p-2 hover:bg-[#3b3054] rounded-lg text-slate-400 hover:text-white transition-colors"
-                        title="Edit"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={async () => {
-                          if (confirm('Are you sure you want to delete this staff member? This action cannot be undone.')) {
-                            await deleteStaff(s.id)
-                            router.refresh()
-                          }
-                        }}
-                        className="p-2 hover:bg-red-900/20 rounded-lg text-slate-400 hover:text-red-400 transition-colors"
-                        title="Delete"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      {!isReadOnly && (
+                        <>
+                          <button
+                            onClick={() => handleEdit(s)}
+                            className="p-2 hover:bg-[#3b3054] rounded-lg text-slate-400 hover:text-white transition-colors"
+                            title="Edit"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={async () => {
+                              if (confirm('Are you sure you want to delete this staff member? This action cannot be undone.')) {
+                                await deleteStaff(s.id)
+                                router.refresh()
+                              }
+                            }}
+                            className="p-2 hover:bg-red-900/20 rounded-lg text-slate-400 hover:text-red-400 transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </td>
                  </tr>

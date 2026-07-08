@@ -13,7 +13,7 @@ export default async function StaffPage() {
     readJSON<any>(DB_FILES.MENU_CATEGORIES).catch(() => [])
   ]);
 
-  if (!session?.isGlobalOwner) {
+  if (!session?.isGlobalOwner && session?.role !== 'readonly') {
     staff = staff.filter((s: any) => s.branchId === session?.branchId)
     requirements = requirements.filter((r: any) => r.branchId === session?.branchId)
   }
@@ -29,6 +29,7 @@ export default async function StaffPage() {
       roles={roles}
       requirements={requirements}
       menuCategories={menuCategories}
+      isReadOnly={session?.role === 'readonly'}
     />
   )
 }

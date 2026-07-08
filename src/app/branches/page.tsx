@@ -1,15 +1,22 @@
 import { readJSON, DB_FILES } from '@/lib/db'
 import BranchesClientPage from './BranchesClientPage'
-import { getSessionRole } from '@/app/actions/auth'
+import { getSession } from '@/app/actions/auth'
 import { redirect } from 'next/navigation'
 
 export default async function BranchesPage() {
-  const sessionRole = await getSessionRole()
-  if (sessionRole !== 'owner') {
+  const session = await getSession()
+  // Owners, readonly, and managers can view branches
+  if (session?.role !== 'owner' && session?.role !== 'readonly' && session?.role !== 'manager') {
     redirect('/')
   }
+  
+  const isReadOnly = session?.role === 'readonly' || session?.role === 'manager'
   let branches = await readJSON<any>(DB_FILES.BRANCHES)
+
+  if (!session?.isGlobalOwner && session?.role !== 'readonly') {
+    branches = branches.filter((b: any) => b.id === session?.branchId)
+  }
+
   branches = branches.filter((b: any) => b.isActive !== false)
-  // Ensure we sort or prep data if needed, but for now direct pass
-  return <BranchesClientPage branches={branches} />
+  return <BranchesClientPage branches={branches} isReadOnly={isReadOnly} />
 }

@@ -20,7 +20,7 @@ export async function signToken(payload: CustomJWTPayload): Promise<string> {
   return await new SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
-    .setExpirationTime('7d')
+    .setExpirationTime('2h')
     .sign(getSecretKey());
 }
 

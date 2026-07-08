@@ -5,16 +5,17 @@ import { redirect } from 'next/navigation'
 
 export default async function SettingsPage() {
   const session = await getSession()
-  if (!session?.isGlobalOwner) {
+  if (!session?.isRootAdmin) {
     redirect('/')
   }
 
-  let [[roles, depts, categories, rawUsers], configList] = await Promise.all([
+  let [[roles, depts, categories, rawUsers, branches], configList] = await Promise.all([
     Promise.all([
       readJSON<any>(DB_FILES.ROLES),
       readJSON<any>(DB_FILES.DEPARTMENTS),
       readJSON<any>(DB_FILES.CATEGORIES).catch(() => []),
-      readJSON<any>(DB_FILES.USERS).catch(() => [])
+      readJSON<any>(DB_FILES.USERS).catch(() => []),
+      readJSON<any>(DB_FILES.BRANCHES).catch(() => [])
     ]),
     readJSON<any>(DB_FILES.CONFIG).catch(() => [])
   ]);
@@ -38,6 +39,6 @@ export default async function SettingsPage() {
 
 
   return (
-    <SettingsClientPage roles={roles} departments={depts} categories={categories} config={config} users={users} sessionRole={session.role as string} />
+    <SettingsClientPage roles={roles} departments={depts} categories={categories} config={config} users={users} sessionRole={session.role as string} branches={branches} />
   )
 }

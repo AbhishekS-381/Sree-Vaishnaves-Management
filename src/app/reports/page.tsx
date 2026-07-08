@@ -13,7 +13,7 @@ export default async function ReportsPage() {
     readJSON<any>(DB_FILES.STAFF).catch(() => [])
   ]);
 
-  if (!session?.isGlobalOwner) {
+  if (!session?.isGlobalOwner && session?.role !== 'readonly') {
     branches = branches.filter((b: any) => b.id === session?.branchId)
     eod = eod.filter((e: any) => e.branchId === session?.branchId)
     expenses = expenses.filter((e: any) => e.branchId === session?.branchId)

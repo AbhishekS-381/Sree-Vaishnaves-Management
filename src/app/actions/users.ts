@@ -11,17 +11,19 @@ export type User = {
   name: string
   password?: string
   role: string
+  branchId?: string
   isActive?: boolean
   deletedAt?: string
 }
 
 export async function addUser(prevState: any, formData: FormData) {
   const session = await getSession()
-  if (session?.role !== 'owner') return { error: 'Forbidden' }
+  if (!session?.isRootAdmin) return { error: 'Forbidden' }
 
   const name = formData.get('name') as string
   const password = formData.get('password') as string
-  const role = formData.get('role') as string
+  const role = (formData.get('role') as string)?.toLowerCase()
+  const branchId = formData.get('branchId') as string
 
   if (!name || !password || !role) return { error: 'All fields required' }
   const hashedPassword = await bcrypt.hash(password, 10)
@@ -37,6 +39,7 @@ export async function addUser(prevState: any, formData: FormData) {
       name,
       password: hashedPassword,
       role,
+      branchId: role === 'manager' && branchId ? branchId : undefined,
       isActive: true
     })
     return list
@@ -50,12 +53,13 @@ export async function addUser(prevState: any, formData: FormData) {
 
 export async function updateUser(prevState: any, formData: FormData) {
   const session = await getSession()
-  if (session?.role !== 'owner') return { error: 'Forbidden' }
+  if (!session?.isRootAdmin) return { error: 'Forbidden' }
 
   const id = formData.get('id') as string
   const name = formData.get('name') as string
   const password = formData.get('password') as string // optional to update
-  const role = formData.get('role') as string
+  const role = (formData.get('role') as string)?.toLowerCase()
+  const branchId = formData.get('branchId') as string
 
   if (!id || !name || !role) return { error: 'Invalid data' }
   const hashedPassword = password ? await bcrypt.hash(password, 10) : undefined
@@ -80,6 +84,7 @@ export async function updateUser(prevState: any, formData: FormData) {
        ...list[index],
        name, 
        role, 
+       branchId: role === 'manager' && branchId ? branchId : undefined,
        password: hashedPassword || existingPassword 
     }
     return list
@@ -95,7 +100,7 @@ export async function updateUser(prevState: any, formData: FormData) {
 
 export async function deleteUser(id: string) {
   const session = await getSession()
-  if (session?.role !== 'owner') return { error: 'Forbidden' }
+  if (!session?.isRootAdmin) return { error: 'Forbidden' }
 
   let isRootError = false
   await withTransaction<User>(DB_FILES.USERS, (list) => {

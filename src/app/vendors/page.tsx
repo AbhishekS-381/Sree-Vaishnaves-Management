@@ -9,7 +9,7 @@ export default async function VendorsPage() {
   let expenses = await readJSON<any>(DB_FILES.EXPENSES).catch(() => [])
   const categories = await readJSON<any>(DB_FILES.CATEGORIES).catch(() => [])
 
-  if (!session?.isGlobalOwner) {
+  if (!session?.isGlobalOwner && session?.role !== 'readonly') {
     branches = branches.filter((b: any) => b.id === session?.branchId)
     vendors = vendors.filter((v: any) => v.branchId === session?.branchId)
     expenses = expenses.filter((e: any) => e.branchId === session?.branchId)

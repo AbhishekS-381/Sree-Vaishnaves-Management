@@ -17,23 +17,22 @@ const navItems = [
   { name: 'Attendance', href: '/attendance', icon: Users },
   { name: 'Payroll', href: '/payroll', icon: FileText },
   { name: 'Reports', href: '/reports', icon: BarChart3 },
-  { name: 'Staff', href: '/staff', icon: Users },    
+  { name: 'Staff', href: '/staff', icon: Users },
   { name: 'Branches', href: '/branches', icon: Store },
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
 
-export function Navigation({ role, config}: { role: string, config: any }) {
+export function Navigation({ role, config, isGlobalOwner, isRootAdmin, userName }: { role: string, config: any, isGlobalOwner?: boolean, isRootAdmin?: boolean, userName?: string }) {
   const pathname = usePathname()
   const [isOpen, setIsOpen] = useState(false)
-  const isGlobalOwner = role === 'owner'
-  const isBranchManager = !isGlobalOwner
+  const isReadOnly = role === 'readonly'
 
   return (
     <>
       {/* Mobile Toggle Header */}
-      <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-white/80 backdrop-blur-md border-b border-gray-200 px-4 py-3 flex items-center justify-between">
-        <span className="font-bold text-lg text-accent">Sree Vaishnaves</span>
-        <button onClick={() => setIsOpen(!isOpen)} className="p-2 text-slate-600">
+      <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-[#c084fc] border-b border-[#a855f7] px-4 py-3 flex items-center justify-between">
+        <span className="font-bold text-lg text-[#131018]">Sree Vaishnaves</span>
+        <button onClick={() => setIsOpen(!isOpen)} className="p-2 text-[#131018]">
           {isOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
         </button>
       </div>
@@ -59,9 +58,9 @@ export function Navigation({ role, config}: { role: string, config: any }) {
             </h1>
             <div className="flex items-center gap-2 mt-2">
               <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold">
-                {isBranchManager ? 'Manager Portal' : 'Owner Portal'}
+                {isRootAdmin ? 'Admin Portal' : isGlobalOwner ? 'Owner Portal' : isReadOnly ? 'Read-Only Portal' : 'Manager Portal'}
               </p>
-              {isBranchManager && <Shield className="h-3 w-3 text-emerald-500" />}
+              {!isRootAdmin && <Shield className="h-3 w-3 text-emerald-500" />}
             </div>
           </div>
 
@@ -74,8 +73,8 @@ export function Navigation({ role, config}: { role: string, config: any }) {
               if (item.name === 'Attendance' && config?.attendance === false) return null;
               if (item.name === 'Payroll' && config?.payroll === false) return null;
               if (item.name === 'Reports' && config?.reports === false) return null;
-              if (item.name === 'Branches' && !isGlobalOwner) return null;
-              if (item.name === 'Settings' && (!isGlobalOwner)) return null;
+              if (item.name === 'Settings' && !isRootAdmin) return null;
+              if (item.name === 'EOD Entry' && isReadOnly) return null;
 
               const Icon = item.icon
               const isActive = pathname === item.href
@@ -106,16 +105,20 @@ export function Navigation({ role, config}: { role: string, config: any }) {
           <div className="p-4 border-t border-slate-800 m-4 rounded-2xl bg-slate-900/50">
             <div className="flex items-center gap-3 mb-3">
               <div className={cn(
-                "h-10 w-10 rounded-full flex items-center justify-center text-white shadow-md",
-                isBranchManager ? "bg-emerald-600" : "bg-primary"
+                "h-10 w-10 rounded-full flex items-center justify-center text-white shadow-md shrink-0",
+                isRootAdmin ? "bg-purple-600" : isGlobalOwner ? "bg-primary" : isReadOnly ? "bg-slate-600" : "bg-emerald-600"
               )}>
-                <span className="font-bold text-sm">{isBranchManager ? 'MA' : 'AD'}</span>
+                <span className="font-bold text-sm">
+                  {userName ? userName.slice(0, 2).toUpperCase() : (isRootAdmin ? 'AD' : isGlobalOwner ? 'OW' : isReadOnly ? 'RO' : 'MA')}
+                </span>
               </div>
-              <div>
-                <p className="text-sm font-semibold text-foreground">
-                  {role === 'owner' ? 'Owner' : 'Manager'}
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-foreground truncate">
+                  {userName || (isRootAdmin ? 'Admin' : isGlobalOwner ? 'Owner' : isReadOnly ? 'Read Only' : 'Manager')}
                 </p>
-                <p className="text-xs text-slate-400 capitalize">{isBranchManager ? 'Restricted Access' : 'Full Access'}</p>
+                <p className="text-xs text-slate-400 capitalize">
+                  ({isRootAdmin ? 'admin' : role})
+                </p>
               </div>
             </div>
 

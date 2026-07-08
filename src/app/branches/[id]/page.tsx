@@ -7,7 +7,9 @@ export default async function BranchDetailPage({ params }: { params: Promise<{ i
   const { id } = await params
   
   const session = await getSession()
-  if (!session?.isGlobalOwner && session?.branchId !== id) {
+  // Owners can view any branch; readonly can view any branch; managers can only view their assigned branch
+  const isReadOnly = session?.role === 'readonly'
+  if (!session?.isGlobalOwner && !isReadOnly && session?.branchId !== id) {
     redirect('/')
   }
 

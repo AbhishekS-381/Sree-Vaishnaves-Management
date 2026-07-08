@@ -1,19 +1,24 @@
 'use client'
 
-import { useState } from 'react'
-import { Store, Calendar as CalendarIcon, Filter, Search, Download, Edit2, X, Save } from 'lucide-react'
-import { updateExpense } from '@/app/actions/expenses'
+import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
+import { Store, Calendar as CalendarIcon, Filter, Search, Download, Edit2, X, Save, Trash2 } from 'lucide-react'
+import { updateExpense, deleteExpense } from '@/app/actions/expenses'
 import type { Expense } from '@/app/actions/eod'
 import { useDraft } from '@/lib/useDraft'
 import { useEffect } from 'react'
 
-export default function ExpensesClientPage({ branches, expenses, userRole }: { branches: any[], expenses: any[], userRole: string }) {
+export default function ExpensesClientPage({ branches, expenses, userRole, isGlobalOwner, isReadOnly = false }: { branches: any[], expenses: any[], userRole: string, isGlobalOwner: boolean, isReadOnly?: boolean }) {
   const [selectedBranch, setSelectedBranch] = useState('')
   const [dateFilter, setDateFilter] = useState('')
   const [search, setSearch] = useState('')
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null)
   const [saving, setSaving] = useState(false)
-  const isOwner = userRole === 'owner'
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const isOwner = !isReadOnly && (isGlobalOwner || userRole === 'owner')
+  const router = useRouter()
+  const [isPending, startTransition] = useTransition()
   
   const { saveDraft, loadDraft, clearDraft } = useDraft('expenses_edit')
 
@@ -48,6 +53,26 @@ export default function ExpensesClientPage({ branches, expenses, userRole }: { b
 
   const totalFiltered = filteredExpenses.reduce((sum, ex) => sum + Number(ex.amount), 0)
 
+  async function handleDelete() {
+    if (!confirmDeleteId) return;
+    setDeleting(true)
+    try {
+      const res = await deleteExpense(confirmDeleteId);
+      if ('error' in res && res.error) {
+         alert('Delete failed: ' + res.error);
+      } else {
+         startTransition(() => {
+            router.refresh();
+         });
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to delete");
+    } finally {
+      setDeleting(false)
+      setConfirmDeleteId(null)
+    }
+  }
+
   async function handleSaveEdit(e: React.FormEvent) {
     e.preventDefault()
     if (!editingExpense) return
@@ -81,9 +106,11 @@ export default function ExpensesClientPage({ branches, expenses, userRole }: { b
           <p className="text-slate-400 mt-2">Centralized ledger for all EOD and Vendor expenses.</p>
         </div>
         
-        <button className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-xl transition-colors border border-white/10 text-sm font-semibold">
-           <Download className="w-4 h-4" /> Export CSV
-        </button>
+        {!isReadOnly && (
+          <button className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-xl transition-colors border border-white/10 text-sm font-semibold">
+             <Download className="w-4 h-4" /> Export CSV
+          </button>
+        )}
       </div>
 
       <div className="bg-card p-4 rounded-2xl border border-white/5 shadow-sm flex flex-col md:flex-row gap-4 items-center">
@@ -167,13 +194,22 @@ export default function ExpensesClientPage({ branches, expenses, userRole }: { b
                   </td>
                   {isOwner && (
                      <td className="p-4 text-right">
-                        <button 
-                          onClick={() => handleEditClick(ex)}
-                          className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors border border-white/5"
-                          title="Edit Expense"
-                        >
-                          <Edit2 size={16} />
-                        </button>
+                        <div className="flex justify-end gap-2">
+                          <button 
+                            onClick={() => handleEditClick(ex)}
+                            className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors border border-white/5"
+                            title="Edit Expense"
+                          >
+                            <Edit2 size={16} />
+                          </button>
+                          <button 
+                            onClick={() => setConfirmDeleteId(ex.id)}
+                            className="p-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors border border-red-500/10"
+                            title="Delete Expense"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
                      </td>
                   )}
                 </tr>
@@ -254,6 +290,36 @@ export default function ExpensesClientPage({ branches, expenses, userRole }: { b
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Delete Confirmation Modal */}
+      {confirmDeleteId && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-[#1e1b2e] border border-red-500/20 rounded-2xl p-6 w-full max-w-sm shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-red-500/10 rounded-lg border border-red-500/20">
+                <Trash2 className="text-red-400" size={20} />
+              </div>
+              <h2 className="text-lg font-bold text-white">Delete Expense</h2>
+            </div>
+            <p className="text-slate-400 text-sm mb-6">Are you sure you want to delete this expense? This action cannot be undone.</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmDeleteId(null)}
+                disabled={deleting}
+                className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl font-semibold transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {deleting ? 'Deleting...' : <><Trash2 size={16} /> Delete</>}
+              </button>
+            </div>
           </div>
         </div>
       )}
