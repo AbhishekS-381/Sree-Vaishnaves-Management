@@ -13,6 +13,7 @@ export interface CustomJWTPayload extends JWTPayload {
   role: string;
   branchId?: string; // Optional: If user is restricted to a branch
   isGlobalOwner: boolean;
+  isGlobalAdmin: boolean;
   
 }
 

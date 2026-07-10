@@ -21,6 +21,7 @@ type Staff = {
   shiftType?: 'morning' | 'evening' | 'full'
   specialtyId?: string
   positionId?: string
+  positionIndex?: number
   startTime?: string
   endTime?: string
   deletedAt?: string
@@ -70,6 +71,19 @@ export async function addStaff(prevState: any, formData: FormData) {
   }
 
   const success = await withTransaction<Staff>(DB_FILES.STAFF, (staffList) => {
+    if (newStaff.positionId) {
+      const existingIndices = staffList
+        .filter(s => s.isActive === true && s.positionId === newStaff.positionId)
+        .map(s => s.positionIndex)
+        .filter(idx => idx !== undefined) as number[];
+      
+      let newIndex = 0;
+      while (existingIndices.includes(newIndex)) {
+        newIndex++;
+      }
+      newStaff.positionIndex = newIndex;
+    }
+    
     staffList.push(newStaff)
     return staffList
   })
@@ -141,9 +155,27 @@ export async function updateStaff(prevState: any, formData: FormData) {
       shiftType: shiftType || staffList[index].shiftType,
       specialtyId,
       positionId,
+      positionIndex: staffList[index].positionIndex, // preserve initially, update below
       startTime,
       endTime
     }
+    
+    // Update positionIndex if positionId changed
+    if (positionId && staffList[index].positionId !== positionId) {
+      const existingIndices = staffList
+        .filter(s => s.isActive === true && s.positionId === positionId && s.id !== id)
+        .map(s => s.positionIndex)
+        .filter(idx => idx !== undefined) as number[];
+      
+      let newIndex = 0;
+      while (existingIndices.includes(newIndex)) {
+        newIndex++;
+      }
+      staffList[index].positionIndex = newIndex;
+    } else if (!positionId) {
+      staffList[index].positionIndex = undefined;
+    }
+    
     return staffList
   })
 
@@ -166,11 +198,16 @@ export async function toggleStaffStatus(id: string, currentlyActive: boolean) {
       notFound = true
       return staffList
     }
-    if (!session.isGlobalOwner && staffList[index].branchId !== session.branchId) {
+    if (!session.isGlobalAdmin && staffList[index].branchId !== session.branchId) {
       forbidden = true
       return staffList
     }
     staffList[index].isActive = !currentlyActive
+    if (currentlyActive) {
+      // Deactivating — unlink from position to prevent silent re-assignment on reactivation
+      staffList[index].positionId = undefined
+      staffList[index].positionIndex = undefined
+    }
     return staffList
   })
 
@@ -183,7 +220,7 @@ export async function toggleStaffStatus(id: string, currentlyActive: boolean) {
 
 export async function deleteStaff(id: string) {
   const session = await getSession();
-  if (!session?.isGlobalOwner) {
+  if (!session?.isGlobalAdmin) {
     return { error: 'Forbidden: Only owners can delete staff' };
   }
 
@@ -196,6 +233,8 @@ export async function deleteStaff(id: string) {
     }
     staffList[index].isActive = false
     staffList[index].deletedAt = new Date().toISOString()
+    staffList[index].positionId = undefined  // unlink from position
+    staffList[index].positionIndex = undefined
     return staffList
   })
 

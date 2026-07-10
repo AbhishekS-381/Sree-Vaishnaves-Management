@@ -1,6 +1,6 @@
 "use server"
 
-import { withTransaction, DB_FILES } from '@/lib/db'
+import { withTransaction, readJSON, DB_FILES } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'crypto'
 import { getSession, requireBranchAccess } from './auth'
@@ -8,7 +8,35 @@ import { getSession, requireBranchAccess } from './auth'
 export async function saveRequirement(id: string | null, branchId: string, departmentId: string, roleId: string, requiredCount: number, specialtyId?: string, defaultSalary?: number, startTime?: string, endTime?: string, responsibility?: string) {
   try {
     const enforcedBranchId = await requireBranchAccess(branchId)
+
+    // Issue 6: Block role/department changes when staff are assigned
+    if (id) {
+      const [currentReqs, staffList] = await Promise.all([
+        readJSON<any>(DB_FILES.STAFF_REQUIREMENTS),
+        readJSON<any>(DB_FILES.STAFF)
+      ])
+      const existingReq = currentReqs.find((r: any) => r.id === id)
+      if (existingReq) {
+        const linkedCount = staffList.filter((s: any) => s.positionId === id && s.isActive === true).length
+        if (linkedCount > 0 && (roleId !== existingReq.roleId || departmentId !== existingReq.departmentId)) {
+          return { error: `Cannot change role/department — ${linkedCount} staff member(s) are currently assigned to this position. Unassign them first.` }
+        }
+      }
+    }
+
     const success = await withTransaction<any>(DB_FILES.STAFF_REQUIREMENTS, (reqs) => {
+      // Issue 21: Duplicate check for edits
+      if (id) {
+        const duplicateExists = reqs.some((r: any) => 
+          r.id !== id && 
+          r.branchId === enforcedBranchId && 
+          r.departmentId === departmentId && 
+          r.roleId === roleId && 
+          r.specialtyId === specialtyId
+        )
+        if (duplicateExists) throw new Error('DUPLICATE_REQUIREMENT')
+      }
+
       const existingIndex = reqs.findIndex((r: any) => 
         (id && r.id === id) || 
         (!id && r.branchId === enforcedBranchId && r.departmentId === departmentId && r.roleId === roleId && r.specialtyId === specialtyId)
@@ -43,8 +71,21 @@ export async function saveRequirement(id: string | null, branchId: string, depar
 
     if (!success) throw new Error('Transaction failed')
     revalidatePath('/staff')
+
+    // Warn if requiredCount was reduced below currently filled count
+    if (id) {
+      const staffList = await readJSON<any>(DB_FILES.STAFF)
+      const currentlyFilled = staffList.filter((s: any) => s.positionId === id && s.isActive === true).length
+      if (requiredCount < currentlyFilled) {
+        return { success: true, warning: `${currentlyFilled - requiredCount} staff member(s) exceed the new headcount. Please reassign them.` }
+      }
+    }
+
     return { success: true }
-  } catch (error) {
+  } catch (error: any) {
+    if (error.message === 'DUPLICATE_REQUIREMENT') {
+      return { error: 'A position with this Role, Department, and Branch already exists.' }
+    }
     console.error('Error saving requirement:', error)
     return { error: 'Failed to save requirement' }
   }
@@ -55,10 +96,22 @@ export async function deleteRequirement(id: string) {
   if (!session) return { error: 'Unauthorized' }
 
   try {
+    // Cascade: clear positionId and positionIndex from all staff assigned to this requirement
+    await withTransaction<any>(DB_FILES.STAFF, (staffList) => {
+      staffList.forEach((s: any) => {
+        if (s.positionId === id) {
+          s.positionId = undefined
+          s.positionIndex = undefined
+        }
+      })
+      return staffList
+    })
+
+    // Then delete the requirement itself
     const success = await withTransaction<any>(DB_FILES.STAFF_REQUIREMENTS, (reqs) => {
       return reqs.filter((r: any) => {
         if (r.id === id) {
-          if (!session.isGlobalOwner && r.branchId !== session.branchId) return true; // Keep it
+          if (!session.isGlobalAdmin && r.branchId !== session.branchId) return true; // Keep it
           return false; // Delete it
         }
         return true;
@@ -120,15 +173,15 @@ export async function updateRequirementSchedules(id: string, schedules: Position
         }
       }
       
-      if (totalMinutes !== 10 * 60) {
-        return { error: `Validation Error: Total shift hours must be exactly 10 hours.` };
+      if (totalMinutes > 10 * 60) {
+        return { error: `Validation Error: Total shift hours cannot exceed 10 hours.` };
       }
     }
 
     const success = await withTransaction<any>(DB_FILES.STAFF_REQUIREMENTS, (reqs) => {
       const index = reqs.findIndex((r: any) => r.id === id)
       if (index >= 0) {
-        if (!session.isGlobalOwner && reqs[index].branchId !== session.branchId) return reqs; // Don't modify
+        if (!session.isGlobalAdmin && reqs[index].branchId !== session.branchId) return reqs; // Don't modify
         reqs[index].schedules = schedules
       }
       return reqs

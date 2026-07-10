@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { deleteRequirement } from "@/app/actions/staff_requirements"
-import { Plus, Pencil, Trash2, UserPlus, Search } from "lucide-react"
+import { Plus, Pencil, Trash2, UserPlus, Search, Loader2 } from "lucide-react"
 import { RequirementModal } from "./RequirementModal"
 
 type Requirement = {
@@ -25,9 +25,10 @@ type Props = {
   menuCategories?: any[]
   onQuickHire?: (id: string) => void
   isReadOnly?: boolean
+  isPending?: boolean
 }
 
-export function StaffRequirements({ requirements, staff, branches, departments, roles, menuCategories = [], onQuickHire, isReadOnly = false }: Props) {
+export function StaffRequirements({ requirements, staff, branches, departments, roles, menuCategories = [], onQuickHire, isReadOnly = false, isPending = false }: Props) {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingReq, setEditingReq] = useState<Requirement | null>(null)
 
@@ -103,7 +104,15 @@ export function StaffRequirements({ requirements, staff, branches, departments, 
         </select>
       </div>
 
-      <div className="bg-card rounded-2xl border border-card shadow-lg shadow-black/20 overflow-hidden">
+      <div className="relative bg-card rounded-2xl border border-card shadow-lg shadow-black/20 overflow-hidden">
+        {isPending && (
+          <div className="absolute inset-0 bg-[#131018]/60 backdrop-blur-[2px] z-10 flex items-center justify-center rounded-2xl">
+            <div className="flex items-center gap-2 text-sm text-slate-300">
+              <Loader2 className="h-5 w-5 animate-spin text-[#c084fc]" />
+              Refreshing…
+            </div>
+          </div>
+        )}
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead className="bg-[#1e1b2e] border-b border-[#3b3054] text-slate-400 text-xs uppercase font-semibold tracking-wider">
@@ -138,15 +147,7 @@ export function StaffRequirements({ requirements, staff, branches, departments, 
                   return true
                 }).map((req) => {
                   const assignedStaff = staff.filter((s) => 
-                    s.isActive && (
-                      s.positionId === req.id ||
-                      (!s.positionId &&
-                        s.branchId === req.branchId &&
-                        s.departmentId === req.departmentId &&
-                        s.roleId === req.roleId &&
-                        (s.specialtyId || 'none') === (req.specialtyId || 'none')
-                      )
-                    )
+                    s.isActive && s.positionId === req.id
                   )
                   const filled = assignedStaff.length
                   const open = req.requiredCount - filled
@@ -187,9 +188,20 @@ export function StaffRequirements({ requirements, staff, branches, departments, 
                             {open} Open
                           </span>
                         ) : open < 0 ? (
-                          <span className="inline-flex items-center px-2 py-1 rounded bg-amber-500/10 text-amber-400 text-xs font-bold border border-amber-500/20">
-                            {Math.abs(open)} Over
-                          </span>
+                          <div className="flex flex-col items-center gap-1">
+                            <span className="inline-flex items-center px-2 py-1 rounded bg-amber-500/10 text-amber-400 text-xs font-bold border border-amber-500/20"
+                              title={`Excess staff: ${assignedStaff.slice(req.requiredCount).map(s => s.name).join(', ')}`}
+                            >
+                              {Math.abs(open)} Over
+                            </span>
+                            <div className="flex flex-wrap gap-0.5 justify-center max-w-[120px]">
+                              {assignedStaff.slice(req.requiredCount).map((s) => (
+                                <span key={s.id} className="text-[9px] text-amber-400/80 bg-amber-500/5 px-1 rounded border border-amber-500/10 truncate max-w-[100px]" title={`${s.name} — consider reassigning`}>
+                                  {s.name}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
                         ) : (
                           <span className="inline-flex items-center px-2 py-1 rounded bg-emerald-500/10 text-emerald-400 text-xs font-bold border border-emerald-500/20">
                             Balanced

@@ -23,10 +23,10 @@ type Props = {
 }
 
 export default function SettingsClientPage({ roles, departments, categories, config, users, sessionRole, branches = [] }: Props) {
-  const [deptModal, setDeptModal] = useState({ open: false, data: null })
-  const [roleModal, setRoleModal] = useState({ open: false, data: null })
-  const [catModal, setCatModal] = useState({ open: false, data: null })
-  const [userModal, setUserModal] = useState({ open: false, data: null })
+  const [deptModal, setDeptModal] = useState<{ open: boolean, data: any }>({ open: false, data: null })
+  const [roleModal, setRoleModal] = useState<{ open: boolean, data: any }>({ open: false, data: null })
+  const [catModal, setCatModal] = useState<{ open: boolean, data: any }>({ open: false, data: null })
+  const [userModal, setUserModal] = useState<{ open: boolean, data: any }>({ open: false, data: null })
   const [confirmAction, setConfirmAction] = useState<{ label: string, fn: () => Promise<void> } | null>(null)
   const [confirming, setConfirming] = useState(false)
   const router = useRouter()
@@ -267,7 +267,7 @@ export default function SettingsClientPage({ roles, departments, categories, con
       </section>
 
       {/* System Users Settings (Owner Only) */}
-      {sessionRole === 'owner' && (
+      {(sessionRole === 'owner' || sessionRole === 'admin' || sessionRole === 'SuperAdmin') && (
         <section className="bg-card rounded-2xl border border-card shadow-lg shadow-black/20 p-6 flex flex-col h-full mt-8">
            <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
@@ -293,11 +293,6 @@ export default function SettingsClientPage({ roles, departments, categories, con
                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase border ${u.role === 'owner' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : u.role === 'manager' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-slate-500/10 text-slate-400 border-slate-500/20'}`}>
                             {u.role}
                          </span>
-                         {u.isGlobalOwner && (
-                            <span className="bg-purple-500/20 text-purple-300 text-[10px] px-2 py-0.5 rounded-full font-bold border border-purple-500/30 uppercase tracking-wide">
-                              Admin
-                            </span>
-                         )}
                        </div>
                     </div>
                     
@@ -308,7 +303,7 @@ export default function SettingsClientPage({ roles, departments, categories, con
                        >
                          <Pencil className="h-4 w-4" />
                        </button>
-                        {!u.isGlobalOwner && (
+                        {u.role !== 'owner' && (
                           <button
                              onClick={() => setConfirmAction({
                                label: `Remove user "${u.name}"?`,
@@ -347,6 +342,7 @@ export default function SettingsClientPage({ roles, departments, categories, con
       />
 
       <RoleModal
+        key={roleModal.data?.id || 'new'}
         isOpen={roleModal.open}
         onClose={() => setRoleModal({ ...roleModal, open: false })}
         editData={roleModal.data}

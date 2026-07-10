@@ -13,7 +13,7 @@ export default async function BranchesPage() {
   const isReadOnly = session?.role === 'readonly' || session?.role === 'manager'
   let branches = await readJSON<any>(DB_FILES.BRANCHES)
 
-  if (!session?.isGlobalOwner && session?.role !== 'readonly') {
+  if (!session?.isGlobalAdmin && session?.role !== 'readonly') {
     branches = branches.filter((b: any) => b.id === session?.branchId)
   }
 

@@ -55,7 +55,7 @@ export async function updateExpense(id: string, updates: Partial<Expense>) {
 
 export async function deleteExpense(id: string) {
   const session = await getSession()
-  if (!session || !session.isGlobalOwner) return { error: 'Unauthorized' }
+  if (!session || !session.isGlobalAdmin) return { error: 'Unauthorized' }
   let deleted: Expense | null = null;
   const success = await withTransaction<Expense>(DB_FILES.EXPENSES, (allExpenses) => {
     const index = allExpenses.findIndex(e => e.id === id)

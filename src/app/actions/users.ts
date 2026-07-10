@@ -18,7 +18,7 @@ export type User = {
 
 export async function addUser(prevState: any, formData: FormData) {
   const session = await getSession()
-  if (!session?.isRootAdmin) return { error: 'Forbidden' }
+  if (!session?.isGlobalAdmin) return { error: 'Forbidden' }
 
   const name = formData.get('name') as string
   const password = formData.get('password') as string
@@ -53,7 +53,7 @@ export async function addUser(prevState: any, formData: FormData) {
 
 export async function updateUser(prevState: any, formData: FormData) {
   const session = await getSession()
-  if (!session?.isRootAdmin) return { error: 'Forbidden' }
+  if (!session?.isGlobalAdmin) return { error: 'Forbidden' }
 
   const id = formData.get('id') as string
   const name = formData.get('name') as string
@@ -100,7 +100,7 @@ export async function updateUser(prevState: any, formData: FormData) {
 
 export async function deleteUser(id: string) {
   const session = await getSession()
-  if (!session?.isRootAdmin) return { error: 'Forbidden' }
+  if (!session?.isGlobalAdmin) return { error: 'Forbidden' }
 
   let isRootError = false
   await withTransaction<User>(DB_FILES.USERS, (list) => {

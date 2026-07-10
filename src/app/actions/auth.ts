@@ -60,6 +60,7 @@ export async function login(prevState: any, formData: FormData) {
       role: user.role?.toLowerCase() || 'manager',
       branchId: user.branchId,
       isGlobalOwner,
+      isGlobalAdmin: isGlobalOwner,
       isRootAdmin,
     });
 

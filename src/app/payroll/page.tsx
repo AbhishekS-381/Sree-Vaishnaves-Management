@@ -11,13 +11,13 @@ export default async function PayrollPage() {
       readJSON<any>(DB_FILES.ATTENDANCE).catch(() => [])
     ]);
 
-    if (!session?.isGlobalOwner && session?.role !== 'readonly') {
+    if (!session?.isGlobalAdmin && session?.role !== 'readonly') {
       staff = staff.filter((s: any) => s.branchId === session?.branchId)
       payroll = payroll.filter((p: any) => p.branchId === session?.branchId)
       attendance = attendance.filter((a: any) => a.branchId === session?.branchId)
     }
     
-    staff = staff.filter((s: any) => s.isActive !== false)
+    staff = staff.filter((s: any) => s.isActive === true)
 
     return (
       <PayrollClientPage

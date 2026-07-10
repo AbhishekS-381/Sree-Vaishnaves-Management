@@ -12,13 +12,13 @@ export default async function StaffPage() {
     readJSON<any>(DB_FILES.STAFF_REQUIREMENTS),
     readJSON<any>(DB_FILES.MENU_CATEGORIES).catch(() => [])
   ]);
-
-  if (!session?.isGlobalOwner && session?.role !== 'readonly') {
+  if (!session?.isGlobalAdmin && session?.role !== 'readonly') {
     staff = staff.filter((s: any) => s.branchId === session?.branchId)
     requirements = requirements.filter((r: any) => r.branchId === session?.branchId)
   }
 
-  staff = staff.filter((s: any) => s.isActive !== false)
+  // Normalize legacy records (undefined -> true) and remove deleted
+  staff = staff.map((s: any) => ({ ...s, isActive: s.isActive !== false })).filter((s: any) => !s.deletedAt)
   requirements = requirements.filter((r: any) => r.isActive !== false)
 
   return (

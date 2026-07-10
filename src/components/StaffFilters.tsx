@@ -92,7 +92,7 @@ export function StaffFilters({ branches, departments, roles, onFilterChange }: P
               checked={filters.showInactive}
               onChange={(e) => handleChange('showInactive', e.target.checked)}
             />
-            <span className="text-sm text-slate-300">Show Inactive</span>
+            <span className="text-sm text-slate-300" title="Deleted staff are not shown. Use audit logs to view deleted records.">Include Inactive Staff</span>
           </label>
         </div>
       </div>

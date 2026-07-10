@@ -38,7 +38,7 @@ export default async function Dashboard() {
   }
 
   branches = branches.filter((b: any) => b.isActive !== false);
-  staff = staff.filter((s: any) => s.isActive !== false);
+  staff = staff.filter((s: any) => s.isActive === true);
 
   const activeStaff = staff.filter(s => s.isActive).length
 

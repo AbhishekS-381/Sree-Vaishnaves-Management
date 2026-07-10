@@ -2,9 +2,9 @@
 
 import { useState, useMemo, useRef, useEffect } from 'react'
 import { updateRequirementSchedules, Shift, PositionSchedule } from '@/app/actions/staff_requirements'
-import { X, Save, Loader2, Wand2 } from 'lucide-react'
+import { X, Save, Loader2, Wand2, Info } from 'lucide-react'
 import { AutoScheduleModal } from './AutoScheduleModal'
-import { generateSchedules } from '@/lib/scheduleGenerator'
+
 
 type Props = {
   staff: any[]
@@ -13,6 +13,7 @@ type Props = {
   departments: any[]
   roles: any[]
   isReadOnly?: boolean
+  isPending?: boolean
 }
 
 const timeToMins = (timeStr?: string) => {
@@ -151,6 +152,22 @@ function PositionRow({
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
     >
+      {/* Total hours indicator */}
+      {(() => {
+        const totalMins = shifts.reduce((acc, s) => {
+          let sMins = timeToMins(s.start)
+          let eMins = timeToMins(s.end)
+          if (eMins <= sMins) eMins += 24 * 60
+          return acc + (eMins - sMins)
+        }, 0)
+        const totalHoursStr = (totalMins / 60).toFixed(1).replace(/\.0$/, '') + 'h'
+        const isOver = totalMins > 10 * 60
+        return (
+          <div className={`absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-medium px-1.5 py-0.5 rounded border pointer-events-none z-10 ${isOver ? 'bg-red-900/40 text-red-400 border-red-900/50' : 'bg-[#131018] text-slate-500 border-[#3b3054]/50'}`}>
+            {totalHoursStr} / max 10h
+          </div>
+        )
+      })()}
       {shifts.map(s => (
         <div 
           key={s.id} 
@@ -196,7 +213,7 @@ function PositionRow({
   )
 }
 
-export function ScheduleTimeline({ staff, requirements, branches, departments, roles, isReadOnly = false }: Props) {
+export function ScheduleTimeline({ staff, requirements, branches, departments, roles, isReadOnly = false, isPending = false }: Props) {
   const [selectedBranch, setSelectedBranch] = useState(branches[0]?.id || '')
   const [selectedDept, setSelectedDept] = useState('')
   const [savingReqId, setSavingReqId] = useState<string | null>(null)
@@ -255,28 +272,7 @@ export function ScheduleTimeline({ staff, requirements, branches, departments, r
     )
   }, [requirements, selectedBranch, selectedDept])
 
-  const attemptedAutoGenerations = useRef(new Set<string>())
 
-  // Internal Auto-Trigger for mismatching position counts
-  useEffect(() => {
-    filteredReqs.forEach(req => {
-      const currentSchedulesCount = req.schedules ? req.schedules.length : 0
-      const attemptKey = `${req.id}-${req.requiredCount}`
-      if (req.requiredCount > 0 && currentSchedulesCount !== req.requiredCount && !savingReqId && !attemptedAutoGenerations.current.has(attemptKey)) {
-        attemptedAutoGenerations.current.add(attemptKey)
-        // Automatically generate with default baseline params if count changed
-        const generated = generateSchedules({
-          positionCount: req.requiredCount,
-          branchStartTime: branch?.internalStartTime || '05:00',
-          branchEndTime: branch?.internalEndTime || '23:00',
-          maxHours: 10,
-          minSegmentHours: 2,
-          maxBreaks: 2
-        })
-        handleAutoGenerate(req, generated)
-      }
-    })
-  }, [filteredReqs, branch, savingReqId])
 
   const groupedByRole = useMemo(() => {
     const map = new Map<string, any[]>()
@@ -331,7 +327,9 @@ export function ScheduleTimeline({ staff, requirements, branches, departments, r
           {/* Header row (Hours) */}
           <div className="flex border-b border-[#3b3054] bg-[#131018] sticky top-0 z-10">
             <div className="w-48 shrink-0 p-4 border-r border-[#3b3054] font-bold text-slate-300 text-sm flex items-center justify-between">
-              Role / Position
+              <span className="flex items-center gap-1.5 cursor-help" title="Shifts must fall between 05:00–23:00 and not exceed 10 hours total per position slot.">
+                Role / Position <Info className="h-4 w-4 text-slate-500" />
+              </span>
               {savingReqId && <Loader2 className="h-4 w-4 text-[#c084fc] animate-spin" />}
             </div>
             <div className="flex-1 relative h-12">
@@ -368,6 +366,15 @@ export function ScheduleTimeline({ staff, requirements, branches, departments, r
                           <Wand2 className="h-3 w-3" /> Auto-Schedule
                         </button>
                       )}
+                      {(() => {
+                        const scheduleCount = req.schedules ? req.schedules.length : 0
+                        const scheduleMismatch = scheduleCount !== req.requiredCount && req.requiredCount > 0
+                        return scheduleMismatch ? (
+                          <p className="text-[9px] text-amber-400 mt-1.5 leading-tight bg-amber-500/10 border border-amber-500/20 rounded px-1.5 py-1">
+                            ⚠ Schedules ({scheduleCount}) don't match positions ({req.requiredCount}). Click Auto-Schedule to regenerate.
+                          </p>
+                        ) : null
+                      })()}
                     </div>
                     <div className="flex-1 relative bg-[#1e1b2e] flex flex-col justify-center">
                       {/* Hour grid lines */}
@@ -456,23 +463,45 @@ export function ScheduleTimeline({ staff, requirements, branches, departments, r
                 staff.forEach(s => {
                   if (s.branchId !== selectedBranch || s.deletedAt || s.isActive === false) return;
                   
-                  let startMins = 0;
-                  let endMins = 0;
-                  
-                  if (s.startTime && s.endTime) {
-                    startMins = timeToMins(s.startTime);
-                    endMins = timeToMins(s.endTime);
-                  } else {
-                    const sType = (s.shiftType || 'full').toLowerCase();
-                    if (sType === 'morning') { startMins = 6 * 60; endMins = 15 * 60; }
-                    else if (sType === 'evening') { startMins = 15 * 60; endMins = 24 * 60; }
-                    else { startMins = 9 * 60; endMins = 21 * 60; }
+                  let activeShifts: any[] = [];
+                  let hasPositionSchedule = false;
+
+                  if (s.positionId && s.positionIndex !== undefined) {
+                    const req = filteredReqs.find(r => r.id === s.positionId);
+                    if (req && req.schedules) {
+                      const schedule = req.schedules.find((sch: any) => sch.positionIndex === s.positionIndex);
+                      if (schedule && schedule.shifts && schedule.shifts.length > 0) {
+                        activeShifts = schedule.shifts;
+                        hasPositionSchedule = true;
+                      }
+                    }
                   }
 
-                  if (isOverlapping(startMins, endMins)) {
+                  let working = false;
+
+                  if (hasPositionSchedule) {
+                    // Check if any of their scheduled split shifts overlap
+                    working = activeShifts.some(shift => isOverlapping(timeToMins(shift.start), timeToMins(shift.end)));
+                  } else {
+                    // Fall back to staff record times
+                    let startMins = 0;
+                    let endMins = 0;
+                    if (s.startTime && s.endTime) {
+                      startMins = timeToMins(s.startTime);
+                      endMins = timeToMins(s.endTime);
+                    } else {
+                      const sType = (s.shiftType || 'full').toLowerCase();
+                      if (sType === 'morning') { startMins = 6 * 60; endMins = 15 * 60; }
+                      else if (sType === 'evening') { startMins = 15 * 60; endMins = 24 * 60; }
+                      else { startMins = 9 * 60; endMins = 21 * 60; }
+                    }
+                    working = isOverlapping(startMins, endMins);
+                  }
+
+                  if (working) {
                     const roleName = roles.find(r => r.id === s.roleId)?.name || s.roleId;
                     if (!staffGrouped.has(roleName)) staffGrouped.set(roleName, []);
-                    staffGrouped.get(roleName)!.push(s);
+                    staffGrouped.get(roleName)!.push({ ...s, _timeSource: hasPositionSchedule ? 'schedule' : 'record' });
                   }
                 });
 
@@ -534,9 +563,14 @@ export function ScheduleTimeline({ staff, requirements, branches, departments, r
 
                       <div className="space-y-1">
                         {employees.map((e: any) => (
-                          <div key={e.id} className="text-sm text-slate-300 font-medium flex items-center gap-2">
-                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                            {e.name}
+                          <div key={e.id} className="text-sm text-slate-300 font-medium flex items-center justify-between gap-2 px-1">
+                            <div className="flex items-center gap-2">
+                              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                              {e.name}
+                            </div>
+                            <span className="text-[9px] uppercase tracking-wider text-slate-500 bg-slate-800/50 px-1.5 py-0.5 rounded border border-slate-700">
+                              {e._timeSource === 'schedule' ? '📅 Position Schedule' : '🕐 Staff Record'}
+                            </span>
                           </div>
                         ))}
                         {employees.length === 0 && (

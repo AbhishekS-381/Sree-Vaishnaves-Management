@@ -30,10 +30,13 @@ export function RoleModal({ isOpen, onClose, editData, departments = [] }: Props
     }
 
     try {
-      if (editData) {
-        await updateRole(null, formData)
-      } else {
-        await addRole(null, formData)
+      const result = editData
+        ? await updateRole(null, formData)
+        : await addRole(null, formData)
+
+      if (result?.error) {
+        setError(result.error)
+        return
       }
       onClose()
     } catch (err) {

@@ -8,7 +8,7 @@ import type { Expense } from '@/app/actions/eod'
 import { useDraft } from '@/lib/useDraft'
 import { useEffect } from 'react'
 
-export default function ExpensesClientPage({ branches, expenses, userRole, isGlobalOwner, isReadOnly = false }: { branches: any[], expenses: any[], userRole: string, isGlobalOwner: boolean, isReadOnly?: boolean }) {
+export default function ExpensesClientPage({ branches, expenses, userRole, isGlobalAdmin, isReadOnly = false }: { branches: any[], expenses: any[], userRole: string, isGlobalAdmin: boolean, isReadOnly?: boolean }) {
   const [selectedBranch, setSelectedBranch] = useState('')
   const [dateFilter, setDateFilter] = useState('')
   const [search, setSearch] = useState('')
@@ -16,7 +16,7 @@ export default function ExpensesClientPage({ branches, expenses, userRole, isGlo
   const [saving, setSaving] = useState(false)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
-  const isOwner = !isReadOnly && (isGlobalOwner || userRole === 'owner')
+  const isOwner = !isReadOnly && (isGlobalAdmin || userRole === 'owner')
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   

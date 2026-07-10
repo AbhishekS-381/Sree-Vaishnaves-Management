@@ -30,11 +30,16 @@ export async function addDepartment(prevState: any, formData: FormData) {
     name,
     isActive: true
   }
+  let alreadyExists = false;
   const success = await withTransaction<Department>(DB_FILES.DEPARTMENTS, (list) => {
+    if (list.some(d => d.isActive !== false && d.name.toLowerCase() === name.toLowerCase())) {
+      alreadyExists = true; return list;
+    }
     list.push(newDept)
     return list
   })
 
+  if (alreadyExists) return { error: 'Department name already exists' }
   if (!success) return { error: 'Failed to add department' }
   revalidatePath('/settings')
   return { success: true }
@@ -72,6 +77,19 @@ export async function deleteDepartment(id: string) {
   const session = await getSession()
   if (session?.role !== 'owner') return { error: 'Forbidden' }
 
+  // Issue 6: Prevent deleting departments that are the sole link for any active role
+  const roles = await readJSON<any>(DB_FILES.ROLES).catch(() => [])
+  const orphanedRoles = roles.filter((r: any) =>
+    r.isActive !== false &&
+    !r.deletedAt &&
+    r.departmentIds?.includes(id) &&
+    r.departmentIds?.length === 1
+  )
+  
+  if (orphanedRoles.length > 0) {
+    return { error: `Cannot delete — ${orphanedRoles.map((r: any) => r.name).join(', ')} would become unassignable. Relink them first.` }
+  }
+
   let notFound = false
   const success = await withTransaction<Department>(DB_FILES.DEPARTMENTS, (list) => {
     const index = list.findIndex(d => d.id === id)
@@ -96,7 +114,6 @@ export async function deleteDepartment(id: string) {
 type Role = {
   id: string
   name: string
-  isOwner: boolean
   isChef?: boolean
   departmentIds?: string[]
   isActive?: boolean
@@ -108,7 +125,6 @@ export async function addRole(prevState: any, formData: FormData) {
   if (session?.role !== 'owner') return { error: 'Forbidden' }
 
   const name = formData.get('name') as string
-  const isOwner = formData.get('isOwner') === 'on'
   const isChef = formData.get('isChef') === 'on'
   const departmentIds = formData.getAll('departmentIds') as string[]
 
@@ -119,16 +135,20 @@ export async function addRole(prevState: any, formData: FormData) {
   const newItem: Role = {
     id: `role_${randomUUID().split('-')[0]}`,
     name,
-    isOwner,
     isChef,
     departmentIds,
     isActive: true
   }
+  let alreadyExists = false;
   const success = await withTransaction<Role>(DB_FILES.ROLES, (list) => {
+    if (list.some(r => r.isActive !== false && r.name.toLowerCase() === name.toLowerCase())) {
+      alreadyExists = true; return list;
+    }
     list.push(newItem)
     return list
   })
 
+  if (alreadyExists) return { error: 'Role name already exists' }
   if (!success) return { error: 'Failed to add role' }
   revalidatePath('/settings')
   return { success: true }
@@ -140,7 +160,6 @@ export async function updateRole(prevState: any, formData: FormData) {
 
   const id = formData.get('id') as string
   const name = formData.get('name') as string
-  const isOwner = formData.get('isOwner') === 'on'
   const isChef = formData.get('isChef') === 'on'
   const departmentIds = formData.getAll('departmentIds') as string[]
 
@@ -155,7 +174,7 @@ export async function updateRole(prevState: any, formData: FormData) {
       notFound = true
       return list
     }
-    list[index] = { ...list[index], name, isOwner, isChef, departmentIds }
+    list[index] = { ...list[index], name, isChef, departmentIds }
     return list
   })
 
@@ -168,6 +187,19 @@ export async function updateRole(prevState: any, formData: FormData) {
 export async function deleteRole(id: string) {
   const session = await getSession()
   if (session?.role !== 'owner') return { error: 'Forbidden' }
+
+  // Issue 1: Prevent deleting roles that are in use
+  const staffList = await readJSON<any>(DB_FILES.STAFF).catch(() => [])
+  const inUse = staffList.filter((s: any) => s.roleId === id && s.isActive !== false && !s.deletedAt).length
+  if (inUse > 0) {
+    return { error: `Cannot delete — ${inUse} active staff member(s) use this role. Reassign them first.` }
+  }
+
+  const reqs = await readJSON<any>(DB_FILES.STAFF_REQUIREMENTS).catch(() => [])
+  const reqsInUse = reqs.filter((r: any) => r.roleId === id && r.isActive !== false).length
+  if (reqsInUse > 0) {
+    return { error: `Cannot delete — ${reqsInUse} open position(s) use this role. Delete them first.` }
+  }
 
   let notFound = false
   const success = await withTransaction<Role>(DB_FILES.ROLES, (list) => {

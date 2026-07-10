@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useTransition } from 'react'
 import { User, Phone, Plus, Pencil, Trash2 } from 'lucide-react'
 import { deleteStaff } from '@/app/actions/staff'
 import { StaffFilters } from '@/components/StaffFilters'
@@ -22,6 +22,7 @@ type Staff = {
   isActive: boolean
   specialtyId?: string
   positionId?: string
+  positionIndex?: number
   monthlySalary?: number
 }
 
@@ -43,6 +44,7 @@ export default function StaffClientPage({ initialStaff, branches, departments, r
 
   const { filters, setFilters, filteredStaff } = useStaffFilters(initialStaff)
   const router = useRouter()
+  const [isPending, startTransition] = useTransition()
 
   // Helpers
   const getRole = (id: string) => roles.find(r => r.id === id)?.name || id
@@ -113,6 +115,7 @@ export default function StaffClientPage({ initialStaff, branches, departments, r
           departments={departments}
           roles={roles}
           isReadOnly={isReadOnly}
+          isPending={isPending}
         />
       ) : activeTab === 'requirements' ? (
         <StaffRequirements 
@@ -124,6 +127,7 @@ export default function StaffClientPage({ initialStaff, branches, departments, r
           menuCategories={menuCategories}
           onQuickHire={isReadOnly ? undefined : handleNewWithPosition}
           isReadOnly={isReadOnly}
+          isPending={isPending}
         />
       ) : (
       <>
@@ -174,6 +178,13 @@ export default function StaffClientPage({ initialStaff, branches, departments, r
                               {s.label}
                             </span>
                           )}
+                          {s.positionId && (
+                            <span className="px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-400 text-[10px] font-bold border border-violet-500/20">
+                              {requirements?.find((r: any) => r.id === s.positionId)
+                                ? `Slot #${(s.positionIndex ?? 0) + 1}: ${roles.find(r => r.id === requirements?.find((req: any) => req.id === s.positionId)?.roleId)?.name || 'Position'}`
+                                : 'Orphaned Position'}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -222,7 +233,7 @@ export default function StaffClientPage({ initialStaff, branches, departments, r
                             onClick={async () => {
                               if (confirm('Are you sure you want to delete this staff member? This action cannot be undone.')) {
                                 await deleteStaff(s.id)
-                                router.refresh()
+                                startTransition(() => { router.refresh() })
                               }
                             }}
                             className="p-2 hover:bg-red-900/20 rounded-lg text-slate-400 hover:text-red-400 transition-colors"
@@ -237,7 +248,7 @@ export default function StaffClientPage({ initialStaff, branches, departments, r
                  </tr>
               )) : (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-slate-500 text-sm italic">
+                  <td colSpan={7} className="px-6 py-12 text-center text-slate-500 text-sm italic">
                     No staff members found matching these filters.
                   </td>
                 </tr>
@@ -254,10 +265,12 @@ export default function StaffClientPage({ initialStaff, branches, departments, r
         onClose={() => {
           setIsModalOpen(false)
           setPreselectedPositionId(null)
+          startTransition(() => { router.refresh() })
         }}
         editData={editingStaff}
         preselectedPositionId={preselectedPositionId}
         requirements={requirements}
+        staff={initialStaff}
         branches={branches}
         departments={departments}
         roles={roles}

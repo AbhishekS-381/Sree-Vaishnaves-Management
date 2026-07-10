@@ -5,7 +5,7 @@ import { addStaff, updateStaff } from '@/app/actions/staff'
 import { X, Loader2 } from 'lucide-react'
 import { useDraft } from '@/lib/useDraft'
 import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+
 
 type Props = {
   isOpen: boolean
@@ -13,13 +13,14 @@ type Props = {
   editData?: any
   preselectedPositionId?: string | null
   requirements?: any[]
+  staff?: any[]
   branches: any[]
   departments: any[]
   roles: any[]
   menuCategories?: any[]
 }
 
-export function StaffModal({ isOpen, onClose, editData, preselectedPositionId, requirements = [], branches, departments, roles, menuCategories = [] }: Props) {
+export function StaffModal({ isOpen, onClose, editData, preselectedPositionId, requirements = [], staff = [], branches, departments, roles, menuCategories = [] }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [selectedDept, setSelectedDept] = useState(editData?.departmentId || '')
@@ -34,7 +35,9 @@ export function StaffModal({ isOpen, onClose, editData, preselectedPositionId, r
   const [startTime, setStartTime] = useState<string>(editData?.startTime || '')
   const [endTime, setEndTime] = useState<string>(editData?.endTime || '')
   const [shiftType, setShiftType] = useState<string>(editData?.shiftType || draftData?.shiftType || 'full')
-  const router = useRouter()
+  const [showDraftBanner, setShowDraftBanner] = useState(false)
+  const [pendingDraft, setPendingDraft] = useState<any>(null)
+
 
   useEffect(() => {
     if (isOpen) {
@@ -48,37 +51,28 @@ export function StaffModal({ isOpen, onClose, editData, preselectedPositionId, r
         setStartTime(editData.startTime || '')
         setEndTime(editData.endTime || '')
       } else {
+        // Set defaults first (including preselectedPositionId from Quick Hire)
+        if (preselectedPositionId) {
+          setSelectedPositionId(preselectedPositionId)
+        } else {
+          setSelectedPositionId('')
+          setSelectedDept('')
+          setSelectedRole('')
+          setSelectedBranch('')
+          setSelectedSpecialty('')
+        }
+        setSalary('')
+        setStartTime('')
+        setEndTime('')
+
+        // Check for draft — show banner instead of blocking window.confirm
         const d = loadDraft('add') as any
         if (d && Object.keys(d).length > 0) {
-          if (window.confirm("You have an unsaved draft for a new staff member. Restore it?")) {
-             setDraftData(d)
-             if (d.departmentId) setSelectedDept(d.departmentId)
-             if (d.roleId) setSelectedRole(d.roleId)
-             if (d.branchId) setSelectedBranch(d.branchId)
-             if (d.specialtyId) setSelectedSpecialty(d.specialtyId)
-             if (d.positionId) setSelectedPositionId(d.positionId)
-             if (d.salary) setSalary(d.salary)
-             if (d.startTime) setStartTime(d.startTime)
-             if (d.endTime) setEndTime(d.endTime)
-          } else {
-             clearDraft('add')
-             setSalary('')
-             setStartTime('')
-             setEndTime('')
-          }
+          setPendingDraft(d)
+          setShowDraftBanner(true)
         } else {
-          if (preselectedPositionId) {
-            setSelectedPositionId(preselectedPositionId)
-          } else {
-            setSelectedPositionId('')
-            setSelectedDept('')
-            setSelectedRole('')
-            setSelectedBranch('')
-            setSelectedSpecialty('')
-          }
-          setSalary('')
-          setStartTime('')
-          setEndTime('')
+          setShowDraftBanner(false)
+          setPendingDraft(null)
         }
       }
     } else {
@@ -91,24 +85,27 @@ export function StaffModal({ isOpen, onClose, editData, preselectedPositionId, r
       setSalary('')
       setStartTime('')
       setEndTime('')
+      setShowDraftBanner(false)
+      setPendingDraft(null)
     }
   }, [isOpen, editData, preselectedPositionId, loadDraft, clearDraft])
 
+  // Issue 10: Only auto-fill from position when adding new staff, not editing
   useEffect(() => {
-    if (selectedPositionId && requirements.length > 0) {
+    if (selectedPositionId && requirements.length > 0 && !editData) {
       const req = requirements.find(r => r.id === selectedPositionId)
       if (req) {
         setSelectedDept(req.departmentId)
         setSelectedRole(req.roleId)
         setSelectedBranch(req.branchId)
         setSelectedSpecialty(req.specialtyId || '')
-        if (req.defaultSalary !== undefined && !editData) {
+        if (req.defaultSalary !== undefined) {
           setSalary(req.defaultSalary)
         }
-        if (req.startTime && !editData) {
+        if (req.startTime) {
           setStartTime(req.startTime)
         }
-        if (req.endTime && !editData) {
+        if (req.endTime) {
           setEndTime(req.endTime)
         }
       }
@@ -119,6 +116,37 @@ export function StaffModal({ isOpen, onClose, editData, preselectedPositionId, r
      if (!selectedDept) return false
      return r.departmentIds && r.departmentIds.includes(selectedDept)
   })
+
+  // Issue 9: Filter positions to only show open ones (not at capacity)
+  const openRequirements = requirements.filter(req => {
+    // When editing, always include the staff member's current position
+    if (editData?.positionId === req.id) return true
+    const filled = staff.filter(s => s.isActive === true && s.positionId === req.id).length
+    return filled < req.requiredCount
+  })
+
+  // Draft banner handlers
+  const restoreDraft = () => {
+    if (pendingDraft) {
+      setDraftData(pendingDraft)
+      if (pendingDraft.departmentId) setSelectedDept(pendingDraft.departmentId)
+      if (pendingDraft.roleId) setSelectedRole(pendingDraft.roleId)
+      if (pendingDraft.branchId) setSelectedBranch(pendingDraft.branchId)
+      if (pendingDraft.specialtyId) setSelectedSpecialty(pendingDraft.specialtyId)
+      if (pendingDraft.positionId) setSelectedPositionId(pendingDraft.positionId)
+      if (pendingDraft.salary) setSalary(pendingDraft.salary)
+      if (pendingDraft.startTime) setStartTime(pendingDraft.startTime)
+      if (pendingDraft.endTime) setEndTime(pendingDraft.endTime)
+    }
+    setShowDraftBanner(false)
+    setPendingDraft(null)
+  }
+
+  const discardDraft = () => {
+    clearDraft('add')
+    setShowDraftBanner(false)
+    setPendingDraft(null)
+  }
 
   if (!isOpen) return null
 
@@ -155,7 +183,6 @@ export function StaffModal({ isOpen, onClose, editData, preselectedPositionId, r
         setError(result.error)
       } else {
         if (!editData) clearDraft('add')
-        router.refresh()
         onClose()
       }
     } catch (err) {
@@ -181,22 +208,22 @@ export function StaffModal({ isOpen, onClose, editData, preselectedPositionId, r
           </div>
 
           <div className="flex-1 overflow-y-auto">
+            {showDraftBanner && (
+              <div className="mx-6 mt-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center justify-between gap-3">
+                <span className="text-amber-400 text-sm">You have an unsaved draft. Restore it?</span>
+                <div className="flex gap-2 shrink-0">
+                  <button type="button" onClick={restoreDraft} className="text-xs px-3 py-1 bg-amber-500 text-black rounded font-bold hover:bg-amber-400 transition-colors">Restore</button>
+                  <button type="button" onClick={discardDraft} className="text-xs px-3 py-1 bg-slate-700 text-white rounded hover:bg-slate-600 transition-colors">Discard</button>
+                </div>
+              </div>
+            )}
             <form onSubmit={handleSubmit} onChange={handleChange} className="p-6 space-y-4">
             {editData && <input type="hidden" name="id" value={editData.id} />}
-            {selectedPositionId && (
-              <>
-                <input type="hidden" name="positionId" value={selectedPositionId} />
-                <input type="hidden" name="branchId" value={selectedBranch} />
-                <input type="hidden" name="departmentId" value={selectedDept} />
-                <input type="hidden" name="roleId" value={selectedRole} />
-                {selectedSpecialty && <input type="hidden" name="specialtyId" value={selectedSpecialty} />}
-              </>
-            )}
+            {selectedPositionId && <input type="hidden" name="positionId" value={selectedPositionId} />}
 
             <div>
               <label className="block text-sm font-medium text-slate-400 mb-1.5">Map to Position / Budget Slot (Optional)</label>
               <select
-                name="positionId"
                 value={selectedPositionId}
                 onChange={(e) => {
                   const val = e.target.value
@@ -212,14 +239,16 @@ export function StaffModal({ isOpen, onClose, editData, preselectedPositionId, r
                 className="w-full px-4 py-2.5 rounded-xl bg-[#131018] border border-[#3b3054] text-white focus:border-[#c084fc] outline-none"
               >
                 <option value="">Direct Hire / No Position Mapping</option>
-                {requirements.map((req: any) => {
+                {openRequirements.map((req: any) => {
                   const branchName = branches.find(b => b.id === req.branchId)?.name || req.branchId
                   const deptName = departments.find(d => d.id === req.departmentId)?.name || req.departmentId
                   const roleName = roles.find(r => r.id === req.roleId)?.name || req.roleId
+                  const filled = staff.filter(s => s.isActive === true && s.positionId === req.id).length
+                  const remaining = req.requiredCount - filled
                   const specialtyName = req.specialtyId ? ` (${menuCategories.find((c: any) => c.id === req.specialtyId)?.name || req.specialtyId})` : ''
                   return (
                     <option key={req.id} value={req.id}>
-                      {branchName} - {deptName} - {roleName}{specialtyName}
+                      {branchName} - {deptName} - {roleName}{specialtyName} [{remaining} open]
                     </option>
                   )
                 })}
@@ -251,72 +280,110 @@ export function StaffModal({ isOpen, onClose, editData, preselectedPositionId, r
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-1.5">Department</label>
-                <select
-                  name="departmentId"
-                  value={selectedDept}
-                  onChange={(e) => {
-                    setSelectedDept(e.target.value)
-                    setSelectedRole('')
-                  }}
-                  required
-                  disabled={!!selectedPositionId}
-                  className="w-full px-4 py-2.5 rounded-xl bg-[#131018] border border-[#3b3054] text-white focus:border-[#c084fc] outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <option value="">Select Dept</option>
-                  {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-1.5">Role</label>
-                <select
-                  name="roleId"
-                  value={selectedRole}
-                  onChange={(e) => setSelectedRole(e.target.value)}
-                  required
-                  disabled={!selectedDept || !!selectedPositionId}
-                  className="w-full px-4 py-2.5 rounded-xl bg-[#131018] border border-[#3b3054] text-white focus:border-[#c084fc] outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <option value="">{selectedDept ? "Select Role" : "Select Dept First"}</option>
-                  {filteredRoles.map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}
-                </select>
-              </div>
-            </div>
+            {selectedPositionId ? (
+              /* Position locked — show read-only display with hidden inputs */
+              <>
+                <input type="hidden" name="branchId" value={selectedBranch} />
+                <input type="hidden" name="departmentId" value={selectedDept} />
+                <input type="hidden" name="roleId" value={selectedRole} />
+                {selectedSpecialty && <input type="hidden" name="specialtyId" value={selectedSpecialty} />}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-1.5">Department</label>
+                    <div className="w-full px-4 py-2.5 rounded-xl bg-[#131018] border border-[#3b3054] text-slate-400 cursor-not-allowed opacity-60">
+                      {departments.find(d => d.id === selectedDept)?.name || 'Unknown'}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-1.5">Role</label>
+                    <div className="w-full px-4 py-2.5 rounded-xl bg-[#131018] border border-[#3b3054] text-slate-400 cursor-not-allowed opacity-60">
+                      {roles.find(r => r.id === selectedRole)?.name || 'Unknown'}
+                    </div>
+                  </div>
+                </div>
+                {roles.find(r => r.id === selectedRole)?.isChef && selectedSpecialty && (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-1.5">Food Category / Specialty</label>
+                    <div className="w-full px-4 py-2.5 rounded-xl bg-[#131018] border border-[#3b3054] text-slate-400 cursor-not-allowed opacity-60">
+                      {menuCategories.find(c => c.id === selectedSpecialty)?.name || 'Unknown'}
+                    </div>
+                  </div>
+                )}
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-1.5">Branch Assignment</label>
+                  <div className="w-full px-4 py-2.5 rounded-xl bg-[#131018] border border-[#3b3054] text-slate-400 cursor-not-allowed opacity-60">
+                    {branches.find(b => b.id === selectedBranch)?.name || 'Unknown'}
+                  </div>
+                </div>
+              </>
+            ) : (
+              /* No position — interactive selects */
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-1.5">Department</label>
+                    <select
+                      name="departmentId"
+                      value={selectedDept}
+                      onChange={(e) => {
+                        setSelectedDept(e.target.value)
+                        setSelectedRole('')
+                      }}
+                      required
+                      className="w-full px-4 py-2.5 rounded-xl bg-[#131018] border border-[#3b3054] text-white focus:border-[#c084fc] outline-none"
+                    >
+                      <option value="">Select Dept</option>
+                      {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-1.5">Role</label>
+                    <select
+                      name="roleId"
+                      value={selectedRole}
+                      onChange={(e) => setSelectedRole(e.target.value)}
+                      required
+                      disabled={!selectedDept}
+                      className="w-full px-4 py-2.5 rounded-xl bg-[#131018] border border-[#3b3054] text-white focus:border-[#c084fc] outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <option value="">{selectedDept ? "Select Role" : "Select Dept First"}</option>
+                      {filteredRoles.map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                    </select>
+                  </div>
+                </div>
 
-            {/* Conditional Specialty Field */}
-            {roles.find(r => r.id === selectedRole)?.isChef && (
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-1.5">Food Category / Specialty</label>
-                <select
-                  name="specialtyId"
-                  value={selectedSpecialty}
-                  onChange={(e) => setSelectedSpecialty(e.target.value)}
-                  required
-                  disabled={!!selectedPositionId}
-                  className="w-full px-4 py-2.5 rounded-xl bg-[#131018] border border-[#3b3054] text-white focus:border-rose-400 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <option value="">Select Specialty</option>
-                  {menuCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-              </div>
+                {/* Conditional Specialty Field */}
+                {roles.find(r => r.id === selectedRole)?.isChef && (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-1.5">Food Category / Specialty</label>
+                    <select
+                      name="specialtyId"
+                      value={selectedSpecialty}
+                      onChange={(e) => setSelectedSpecialty(e.target.value)}
+                      required
+                      className="w-full px-4 py-2.5 rounded-xl bg-[#131018] border border-[#3b3054] text-white focus:border-rose-400 outline-none"
+                    >
+                      <option value="">Select Specialty</option>
+                      {menuCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-1.5">Branch Assignment</label>
+                  <select
+                    name="branchId"
+                    value={selectedBranch}
+                    onChange={(e) => setSelectedBranch(e.target.value)}
+                    required
+                    className="w-full px-4 py-2.5 rounded-xl bg-[#131018] border border-[#3b3054] text-white focus:border-[#c084fc] outline-none"
+                  >
+                    <option value="">Select Branch</option>
+                    {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  </select>
+                </div>
+              </>
             )}
-
-            <div>
-              <label className="block text-sm font-medium text-slate-400 mb-1.5">Branch Assignment</label>
-              <select
-                name="branchId"
-                value={selectedBranch}
-                onChange={(e) => setSelectedBranch(e.target.value)}
-                required
-                disabled={!!selectedPositionId}
-                className="w-full px-4 py-2.5 rounded-xl bg-[#131018] border border-[#3b3054] text-white focus:border-[#c084fc] outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <option value="">Select Branch</option>
-                {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
-            </div>
 
             <div>
               <label className="block text-sm font-medium text-slate-400 mb-1.5">Custom Label / Tag (Optional)</label>

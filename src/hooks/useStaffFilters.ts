@@ -12,6 +12,7 @@ type Staff = {
   isActive: boolean
   specialtyId?: string
   positionId?: string
+  positionIndex?: number
   monthlySalary?: number
 }
 

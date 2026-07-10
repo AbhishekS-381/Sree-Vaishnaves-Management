@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { saveRequirement } from '@/app/actions/staff_requirements'
 import { X, Loader2 } from 'lucide-react'
 
@@ -19,6 +19,14 @@ export function RequirementModal({ isOpen, onClose, editData, branches, departme
   const [error, setError] = useState('')
   const [selectedDept, setSelectedDept] = useState(editData?.departmentId || '')
   const [selectedRole, setSelectedRole] = useState(editData?.roleId || '')
+
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedDept(editData?.departmentId || '')
+      setSelectedRole(editData?.roleId || '')
+      setError('')
+    }
+  }, [isOpen, editData])
 
   const filteredRoles = roles.filter(r => {
     if (!selectedDept) return false
@@ -50,6 +58,9 @@ export function RequirementModal({ isOpen, onClose, editData, branches, departme
       if (result?.error) {
         setError(result.error)
       } else {
+        if (result?.warning) {
+          alert(`⚠️ ${result.warning}`)
+        }
         onClose()
       }
     } catch (err) {
