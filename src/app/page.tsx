@@ -24,17 +24,17 @@ export default async function Dashboard() {
   ]);
   const config = configList[0] || { attendance: true, payroll: true, vendors: true, inventory: true, menu: true, reports: true }
 
-  if (!isGlobalOwner && userBranchId) {
-    branches = branches.filter((b: any) => b.id === userBranchId);
-    staff = staff.filter((s: any) => s.branchId === userBranchId);
-    eod = eod.filter((e: any) => e.branchId === userBranchId);
-    expenses = expenses.filter((e: any) => e.branchId === userBranchId);
-    inventory = inventory.filter((i: any) => i.branchId === userBranchId);
+  if (!session?.isGlobalAdmin && session?.branchId) {
+    branches = branches.filter((b: any) => b.id === session?.branchId);
+    staff = staff.filter((s: any) => s.branchId === session?.branchId);
+    eod = eod.filter((e: any) => e.branchId === session?.branchId);
+    expenses = expenses.filter((e: any) => e.branchId === session?.branchId);
+    inventory = inventory.filter((i: any) => i.branchId === session?.branchId);
     // Attendance and payroll usually have branchId attached if generated correctly,
     // but typically they are linked to staffId. We might need to filter based on staff branch.
     // For now, assume they have branchId if they are branch-scoped.
-    attendance = attendance.filter((a: any) => a.branchId === userBranchId);
-    payroll = payroll.filter((p: any) => p.branchId === userBranchId);
+    attendance = attendance.filter((a: any) => a.branchId === session?.branchId);
+    payroll = payroll.filter((p: any) => p.branchId === session?.branchId);
   }
 
   branches = branches.filter((b: any) => b.isActive !== false);

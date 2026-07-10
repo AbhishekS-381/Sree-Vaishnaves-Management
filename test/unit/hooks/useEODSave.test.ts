@@ -14,7 +14,7 @@ describe('useEODSave', () => {
   const expenses = [{ id: 'e1', amount: 10, category: 'Food', notes: 'Lunch' }]
 
   beforeEach(() => {
-    vi.resetAllMocks()
+    vi.clearAllMocks()
   })
 
   it('returns error when branch or date missing', async () => {

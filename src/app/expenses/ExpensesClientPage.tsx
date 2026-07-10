@@ -16,7 +16,7 @@ export default function ExpensesClientPage({ branches, expenses, userRole, isGlo
   const [saving, setSaving] = useState(false)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
-  const isOwner = !isReadOnly && (isGlobalAdmin || userRole === 'owner')
+  const isOwner = !isReadOnly && isGlobalAdmin
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   

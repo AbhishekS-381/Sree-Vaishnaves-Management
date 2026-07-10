@@ -14,7 +14,7 @@ export interface CustomJWTPayload extends JWTPayload {
   branchId?: string; // Optional: If user is restricted to a branch
   isGlobalOwner: boolean;
   isGlobalAdmin: boolean;
-  
+  isRootAdmin: boolean;
 }
 
 export async function signToken(payload: CustomJWTPayload): Promise<string> {

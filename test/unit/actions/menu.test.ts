@@ -4,7 +4,7 @@ import * as db from '@/lib/db'
 
 vi.mock('@/lib/db', () => ({
   withTransaction: vi.fn(),
-  readJSON: vi.fn(),
+  readJSON: vi.fn().mockResolvedValue([]),
   DB_FILES: new Proxy({}, { get: () => 'mock.json' })
 }))
 
@@ -13,7 +13,7 @@ vi.mock('@/lib/audit', () => ({ logAction: vi.fn() }))
 vi.mock('@/app/actions/auth', () => ({ getSession: vi.fn().mockResolvedValue({ role: 'owner', branchId: 'b1' }), getSessionRole: vi.fn().mockResolvedValue('owner') }))
 
 describe('menu Actions', () => {
-  beforeEach(() => { vi.resetAllMocks() })
+  beforeEach(() => { vi.clearAllMocks() })
 
   const getValidFormData = () => {
     return {

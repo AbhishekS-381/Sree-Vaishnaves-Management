@@ -17,7 +17,7 @@ type Department = {
 
 export async function addDepartment(prevState: any, formData: FormData) {
   const session = await getSession()
-  if (session?.role !== 'owner') return { error: 'Forbidden' }
+  if (session?.role !== 'admin') return { error: 'Forbidden: Only admin can manage settings' }
 
   const name = formData.get('name') as string
 
@@ -47,7 +47,7 @@ export async function addDepartment(prevState: any, formData: FormData) {
 
 export async function updateDepartment(prevState: any, formData: FormData) {
   const session = await getSession()
-  if (session?.role !== 'owner') return { error: 'Forbidden' }
+  if (session?.role !== 'admin') return { error: 'Forbidden: Only admin can manage settings' }
 
   const id = formData.get('id') as string
   const name = formData.get('name') as string
@@ -75,7 +75,7 @@ export async function updateDepartment(prevState: any, formData: FormData) {
 
 export async function deleteDepartment(id: string) {
   const session = await getSession()
-  if (session?.role !== 'owner') return { error: 'Forbidden' }
+  if (session?.role !== 'admin') return { error: 'Forbidden: Only admin can manage settings' }
 
   // Issue 6: Prevent deleting departments that are the sole link for any active role
   const roles = await readJSON<any>(DB_FILES.ROLES).catch(() => [])
@@ -122,7 +122,7 @@ type Role = {
 
 export async function addRole(prevState: any, formData: FormData) {
   const session = await getSession()
-  if (session?.role !== 'owner') return { error: 'Forbidden' }
+  if (session?.role !== 'admin') return { error: 'Forbidden: Only admin can manage settings' }
 
   const name = formData.get('name') as string
   const isChef = formData.get('isChef') === 'on'
@@ -156,7 +156,7 @@ export async function addRole(prevState: any, formData: FormData) {
 
 export async function updateRole(prevState: any, formData: FormData) {
   const session = await getSession()
-  if (session?.role !== 'owner') return { error: 'Forbidden' }
+  if (session?.role !== 'admin') return { error: 'Forbidden: Only admin can manage settings' }
 
   const id = formData.get('id') as string
   const name = formData.get('name') as string
@@ -186,7 +186,7 @@ export async function updateRole(prevState: any, formData: FormData) {
 
 export async function deleteRole(id: string) {
   const session = await getSession()
-  if (session?.role !== 'owner') return { error: 'Forbidden' }
+  if (session?.role !== 'admin') return { error: 'Forbidden: Only admin can manage settings' }
 
   // Issue 1: Prevent deleting roles that are in use
   const staffList = await readJSON<any>(DB_FILES.STAFF).catch(() => [])

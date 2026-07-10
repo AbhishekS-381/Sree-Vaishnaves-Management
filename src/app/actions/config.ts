@@ -16,8 +16,8 @@ export type Config = {
 
 export async function toggleModule(moduleId: keyof Config, isActive: boolean) {
   const session = await getSession();
-  if (session?.role !== 'owner') {
-    return { error: 'Forbidden' };
+  if (session?.role !== 'admin') {
+    return { error: 'Forbidden: Only admin can toggle modules' };
   }
 
   let configList = await readJSON<Config>(DB_FILES.CONFIG).catch(() => [])

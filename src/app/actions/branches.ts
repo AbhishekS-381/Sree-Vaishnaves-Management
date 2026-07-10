@@ -22,7 +22,7 @@ type Branch = {
 
 export async function addBranch(prevState: any, formData: FormData) {
   const session = await getSession()
-  if (session?.role !== 'owner') return { error: 'Forbidden' }
+  if (!session?.isGlobalAdmin) return { error: 'Forbidden: Only admin and owner can manage branches' }
 
   const name = formData.get('name') as string
   const address = formData.get('address') as string
@@ -84,7 +84,7 @@ export async function addBranch(prevState: any, formData: FormData) {
 
 export async function updateBranch(prevState: any, formData: FormData) {
   const session = await getSession()
-  if (session?.role !== 'owner') return { error: 'Forbidden' }
+  if (!session?.isGlobalAdmin) return { error: 'Forbidden: Only admin and owner can manage branches' }
 
   const id = formData.get('id') as string
   const name = formData.get('name') as string
@@ -150,7 +150,7 @@ export async function updateBranch(prevState: any, formData: FormData) {
 
 export async function deleteBranch(id: string) {
   const session = await getSession()
-  if (session?.role !== 'owner') return { error: 'Forbidden' }
+  if (!session?.isGlobalAdmin) return { error: 'Forbidden: Only admin and owner can manage branches' }
 
   // Issue 8: Block deletion if active staff exist in this branch
   const staffList = await readJSON<any>(DB_FILES.STAFF).catch(() => [])

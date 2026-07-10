@@ -28,21 +28,21 @@ describe('Settings Page RBAC', () => {
   })
 
   it('Root Admin can access settings page', async () => {
-    vi.mocked(auth.getSession).mockResolvedValue({ role: 'owner', isGlobalOwner: true, isRootAdmin: true } as any)
+    vi.mocked(auth.getSession).mockResolvedValue({ role: 'admin', isGlobalAdmin: true, isRootAdmin: true } as any)
     
     await SettingsPage()
     expect(redirect).not.toHaveBeenCalled()
   })
 
   it('Owner is redirected from settings page', async () => {
-    vi.mocked(auth.getSession).mockResolvedValue({ role: 'owner', isGlobalOwner: true, isRootAdmin: false } as any)
+    vi.mocked(auth.getSession).mockResolvedValue({ role: 'owner', isGlobalAdmin: true, isGlobalOwner: true, isRootAdmin: false } as any)
     
     await SettingsPage()
     expect(redirect).toHaveBeenCalledWith('/')
   })
 
   it('Manager is redirected from settings page', async () => {
-    vi.mocked(auth.getSession).mockResolvedValue({ role: 'manager', isGlobalOwner: false, isRootAdmin: false } as any)
+    vi.mocked(auth.getSession).mockResolvedValue({ role: 'manager', isGlobalAdmin: false, isRootAdmin: false } as any)
     
     await SettingsPage()
     expect(redirect).toHaveBeenCalledWith('/')

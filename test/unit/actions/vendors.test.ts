@@ -11,8 +11,8 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 
 describe('Vendor Actions', () => {
   beforeEach(() => { 
-    vi.resetAllMocks() 
-    vi.spyOn(auth, 'getSession').mockResolvedValue({ role: 'owner', isGlobalOwner: true, branchId: 'b1' } as any)
+    vi.clearAllMocks() 
+    vi.spyOn(auth, 'getSession').mockResolvedValue({ role: 'admin', isGlobalAdmin: true, isGlobalOwner: true, branchId: 'b1' } as any)
     vi.spyOn(auth, 'requireBranchAccess').mockResolvedValue('b1')
     vi.spyOn(auth, 'getSessionRole').mockResolvedValue('owner')
   })

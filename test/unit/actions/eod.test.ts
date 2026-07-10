@@ -4,7 +4,8 @@ import * as db from '@/lib/db'
 
 vi.mock('@/lib/db', () => ({
   withTransaction: vi.fn(),
-  readJSON: vi.fn(),
+  readJSON: vi.fn().mockResolvedValue([]),
+  writeJSON: vi.fn().mockResolvedValue(true),
   DB_FILES: new Proxy({}, { get: () => 'mock.json' })
 }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
@@ -13,8 +14,8 @@ import * as auth from '@/app/actions/auth'
 
 describe('EOD Actions', () => {
   beforeEach(() => { 
-    vi.resetAllMocks() 
-    vi.spyOn(auth, 'getSession').mockResolvedValue({ userId: 'test-user', role: 'owner', isGlobalOwner: true, branchId: 'b1' } as any)
+    vi.clearAllMocks() 
+    vi.spyOn(auth, 'getSession').mockResolvedValue({ userId: 'test-user', role: 'admin', isGlobalAdmin: true, isRootAdmin: true, branchId: 'b1' } as any)
     vi.spyOn(auth, 'requireBranchAccess').mockImplementation(async (b) => (b as string) || 'b1')
   })
 

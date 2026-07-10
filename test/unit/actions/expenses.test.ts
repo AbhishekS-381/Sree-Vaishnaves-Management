@@ -5,6 +5,8 @@ import * as auth from '@/app/actions/auth'
 
 vi.mock('@/lib/db', () => ({
   withTransaction: vi.fn(),
+  readJSON: vi.fn().mockResolvedValue([]),
+  writeJSON: vi.fn().mockResolvedValue(true),
   DB_FILES: new Proxy({}, { get: () => 'mock.json' })
 }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
@@ -15,8 +17,8 @@ vi.mock('@/app/actions/auth', () => ({
 
 describe('Expenses Actions', () => {
   beforeEach(() => {
-    vi.resetAllMocks()
-    vi.mocked(auth.getSession).mockResolvedValue({ role: 'owner', branchId: 'b1' } as any)
+    vi.clearAllMocks()
+    vi.mocked(auth.getSession).mockResolvedValue({ role: 'admin', isGlobalAdmin: true, branchId: 'b1' } as any)
   })
 
   it('updateExpense validates auth (no session)', async () => {
@@ -28,7 +30,7 @@ describe('Expenses Actions', () => {
   it('updateExpense validates role (non-owner)', async () => {
     vi.mocked(auth.getSession).mockResolvedValueOnce({ role: 'manager' } as any)
     const res = await updateExpense('exp1', {})
-    expect(res).toEqual({ error: 'Only owners can edit ledger expenses.' })
+    expect(res).toEqual({ error: 'Only admin and owner can edit ledger expenses.' })
   })
 
   it('updateExpense returns not found when expense missing', async () => {

@@ -10,7 +10,7 @@ vi.mock('next/headers', () => ({
 }))
 vi.mock('next/navigation', () => ({ redirect: vi.fn() }))
 vi.mock('@/lib/db', () => ({
-  readJSON: vi.fn(),
+  readJSON: vi.fn().mockResolvedValue([]),
   DB_FILES: new Proxy({}, { get: () => 'mock.json' })
 }))
 vi.mock('@/lib/jwt', () => ({
@@ -31,7 +31,7 @@ describe('Auth Actions', () => {
   let mockHeadersStore: any
 
   beforeEach(async () => {
-    vi.resetAllMocks()
+    vi.clearAllMocks()
     mockCookieStore = {
       get: vi.fn().mockReturnValue({ value: 'mock-token' }),
       set: vi.fn(),

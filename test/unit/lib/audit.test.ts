@@ -4,8 +4,8 @@ import * as db from '@/lib/db'
 import * as auth from '@/app/actions/auth'
 
 vi.mock('@/lib/db', () => ({
-  readJSON: vi.fn(),
-  writeJSON: vi.fn(),
+  readJSON: vi.fn().mockResolvedValue([]),
+  writeJSON: vi.fn().mockResolvedValue(true),
   DB_FILES: new Proxy({}, { get: () => 'mock.json' })
 }))
 vi.mock('@/app/actions/auth', () => ({
@@ -14,7 +14,7 @@ vi.mock('@/app/actions/auth', () => ({
 
 describe('audit.ts - logAction', () => {
   beforeEach(() => {
-    vi.resetAllMocks()
+    vi.clearAllMocks()
   })
 
   it('writes log with system user when no session', async () => {

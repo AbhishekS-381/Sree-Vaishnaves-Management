@@ -5,15 +5,15 @@ import * as auth from '@/app/actions/auth'
 
 vi.mock('@/lib/db', () => ({
   withTransaction: vi.fn(),
-  readJSON: vi.fn(),
-  writeJSON: vi.fn(),
+  readJSON: vi.fn().mockResolvedValue([]),
+  writeJSON: vi.fn().mockResolvedValue(true),
   DB_FILES: new Proxy({}, { get: () => 'mock.json' })
 }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 
 describe('Categories Actions', () => {
-  beforeEach(() => { vi.resetAllMocks() 
-    vi.spyOn(auth, 'getSession').mockResolvedValue({ role: 'owner', isGlobalOwner: true, branchId: 'b1' } as any)
+  beforeEach(() => { vi.clearAllMocks() 
+    vi.spyOn(auth, 'getSession').mockResolvedValue({ role: 'admin', isGlobalAdmin: true, isRootAdmin: true, branchId: 'b1' } as any)
     vi.spyOn(auth, 'requireBranchAccess').mockResolvedValue('b1')
     vi.spyOn(auth, 'getSessionRole').mockResolvedValue('owner')
   })

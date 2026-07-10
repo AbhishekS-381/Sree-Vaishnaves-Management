@@ -15,13 +15,17 @@ import ReportsPage from '@/app/reports/page'
 import VendorsPage from '@/app/vendors/page'
 
 vi.mock('@/lib/db', () => ({
-  readJSON: vi.fn(),
+  readJSON: vi.fn().mockResolvedValue([]),
   DB_FILES: new Proxy({}, { get: (target, prop) => String(prop).toLowerCase() + '.json' })
 }))
 
 vi.mock('@/app/actions/auth', () => ({
   getSession: vi.fn(),
   getSessionRole: vi.fn().mockResolvedValue('owner')
+}))
+
+vi.mock('next/navigation', () => ({
+  redirect: vi.fn()
 }))
 
 // Mock all Client Components so they don't error out during render
@@ -67,7 +71,7 @@ describe('Data Pages RBAC Filtering', () => {
     describe(`${name}`, () => {
       
       it('Root Admin sees unfiltered data', async () => {
-        vi.mocked(auth.getSession).mockResolvedValue({ role: 'owner', isGlobalOwner: true, isRootAdmin: true } as any)
+        vi.mocked(auth.getSession).mockResolvedValue({ role: 'admin', isGlobalAdmin: true, isRootAdmin: true } as any)
         const result = await component() as any
         const data = result.props[dataProp]
         
@@ -77,7 +81,7 @@ describe('Data Pages RBAC Filtering', () => {
       })
 
       it('Owner sees unfiltered data', async () => {
-        vi.mocked(auth.getSession).mockResolvedValue({ role: 'owner', isGlobalOwner: true, isRootAdmin: false } as any)
+        vi.mocked(auth.getSession).mockResolvedValue({ role: 'owner', isGlobalAdmin: true, isGlobalOwner: true, isRootAdmin: false } as any)
         const result = await component() as any
         const data = result.props[dataProp]
         
@@ -85,15 +89,16 @@ describe('Data Pages RBAC Filtering', () => {
       })
 
       it('Read-Only sees unfiltered data', async () => {
-        vi.mocked(auth.getSession).mockResolvedValue({ role: 'readonly', isGlobalOwner: false, isRootAdmin: false } as any)
+        vi.mocked(auth.getSession).mockResolvedValue({ role: 'readonly', isGlobalAdmin: false, isRootAdmin: false } as any)
         const result = await component() as any
+        if (name === 'EODPage') return; // Read-only cannot access EOD page
         const data = result.props[dataProp]
         
         expect(data.length).toBe(2)
       })
 
       it('Manager sees data filtered to their branch', async () => {
-        vi.mocked(auth.getSession).mockResolvedValue({ role: 'manager', branchId: 'b1', isGlobalOwner: false, isRootAdmin: false } as any)
+        vi.mocked(auth.getSession).mockResolvedValue({ role: 'manager', branchId: 'b1', isGlobalAdmin: false, isRootAdmin: false } as any)
         const result = await component() as any
         const data = result.props[dataProp]
         

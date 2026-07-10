@@ -7,7 +7,7 @@ export default async function InventoryPage() {
   let branches = await readJSON<any>(DB_FILES.BRANCHES)
   let items = await readJSON<any>(DB_FILES.INVENTORY).catch(() => [])
 
-  if (!session?.isGlobalOwner && session?.role !== 'readonly') {
+  if (!session?.isGlobalAdmin && session?.role !== 'readonly') {
     branches = branches.filter((b: any) => b.id === session?.branchId)
     items = items.filter((i: any) => i.branchId === session?.branchId)
   }

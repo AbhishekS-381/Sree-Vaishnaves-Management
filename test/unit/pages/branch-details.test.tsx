@@ -33,31 +33,31 @@ describe('Branch Details Page RBAC', () => {
   })
 
   it('Root Admin can access any branch', async () => {
-    vi.mocked(auth.getSession).mockResolvedValue({ role: 'owner', isGlobalOwner: true, isRootAdmin: true } as any)
+    vi.mocked(auth.getSession).mockResolvedValue({ role: 'admin', isGlobalAdmin: true, isRootAdmin: true } as any)
     await BranchPage({ params: { id: 'b1' } } as any)
     expect(redirect).not.toHaveBeenCalled()
   })
 
   it('Owner can access any branch', async () => {
-    vi.mocked(auth.getSession).mockResolvedValue({ role: 'owner', isGlobalOwner: true, isRootAdmin: false } as any)
+    vi.mocked(auth.getSession).mockResolvedValue({ role: 'owner', isGlobalAdmin: true, isGlobalOwner: true, isRootAdmin: false } as any)
     await BranchPage({ params: { id: 'b1' } } as any)
     expect(redirect).not.toHaveBeenCalled()
   })
 
   it('Read-Only can access any branch', async () => {
-    vi.mocked(auth.getSession).mockResolvedValue({ role: 'readonly', isGlobalOwner: false, isRootAdmin: false } as any)
+    vi.mocked(auth.getSession).mockResolvedValue({ role: 'readonly', isGlobalAdmin: false, isRootAdmin: false } as any)
     await BranchPage({ params: { id: 'b1' } } as any)
     expect(redirect).not.toHaveBeenCalled()
   })
 
   it('Manager can access their own branch', async () => {
-    vi.mocked(auth.getSession).mockResolvedValue({ role: 'manager', branchId: 'b1', isGlobalOwner: false, isRootAdmin: false } as any)
+    vi.mocked(auth.getSession).mockResolvedValue({ role: 'manager', branchId: 'b1', isGlobalAdmin: false, isRootAdmin: false } as any)
     await BranchPage({ params: { id: 'b1' } } as any)
     expect(redirect).not.toHaveBeenCalled()
   })
 
   it('Manager is redirected when accessing another branch', async () => {
-    vi.mocked(auth.getSession).mockResolvedValue({ role: 'manager', branchId: 'b2', isGlobalOwner: false, isRootAdmin: false } as any)
+    vi.mocked(auth.getSession).mockResolvedValue({ role: 'manager', branchId: 'b2', isGlobalAdmin: false, isRootAdmin: false } as any)
     await BranchPage({ params: { id: 'b1' } } as any)
     expect(redirect).toHaveBeenCalledWith('/')
   })

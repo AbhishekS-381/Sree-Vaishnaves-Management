@@ -4,7 +4,7 @@ import * as db from '@/lib/db'
 
 vi.mock('@/lib/db', () => ({
   withTransaction: vi.fn(),
-  readJSON: vi.fn(),
+  readJSON: vi.fn().mockResolvedValue([]),
   DB_FILES: new Proxy({}, { get: () => 'mock.json' })
 }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
@@ -15,7 +15,7 @@ vi.mock('@/app/actions/auth', () => ({
 }))
 
 describe('Attendance Actions', () => {
-  beforeEach(() => { vi.resetAllMocks() })
+  beforeEach(() => { vi.clearAllMocks() })
 
   it('getAttendanceByDate succeeds', async () => {
     vi.mocked(db.readJSON).mockResolvedValue([{ date: '2023-10-01', branchId: 'b1' }])

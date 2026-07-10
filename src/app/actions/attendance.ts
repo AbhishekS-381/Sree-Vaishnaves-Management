@@ -54,7 +54,7 @@ export async function saveAttendance(newLogs: Partial<AttendanceLog>[]) {
       // Time-lock validation
       const diffTime = Math.abs(new Date(now).getTime() - new Date(newLog.date).getTime())
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-      if (diffDays > 7 && userRole !== 'owner') {
+      if (diffDays > 7 && !session?.isGlobalAdmin) {
           timeLockError = true;
           return allLogs;
       }

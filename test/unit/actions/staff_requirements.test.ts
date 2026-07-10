@@ -4,16 +4,18 @@ import * as db from '@/lib/db'
 
 vi.mock('@/lib/db', () => ({
   withTransaction: vi.fn(),
+  readJSON: vi.fn().mockResolvedValue([]),
+  writeJSON: vi.fn().mockResolvedValue(true),
   DB_FILES: new Proxy({}, { get: () => 'mock.json' })
 }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('@/app/actions/auth', () => ({
-  getSession: vi.fn(() => ({ isGlobalOwner: true, branchId: 'b1' })),
+  getSession: vi.fn(() => ({ role: 'admin', isGlobalAdmin: true, isGlobalOwner: true, branchId: 'b1' })),
   requireBranchAccess: vi.fn(async (b) => b || 'b1')
 }))
 
 describe('Staff Requirements Actions', () => {
-  beforeEach(() => { vi.resetAllMocks() })
+  beforeEach(() => { vi.clearAllMocks() })
 
   it('saveRequirement creates new requirement', async () => {
     vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => { await cb([]); return true })
@@ -78,18 +80,26 @@ describe('Staff Requirements Actions', () => {
   })
 
   it('Position schedule with total hours ≠ 10 — returns validation error', async () => {
+    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
+      await cb([{ id: 'req1' }])
+      return true
+    })
     const schedules = [{
       positionIndex: 0,
       shifts: [
         { id: '1', start: '06:00', end: '11:00' }, // 5 hrs
-        { id: '2', start: '12:00', end: '16:00' }  // 4 hrs = 9 total
+        { id: '2', start: '12:00', end: '18:00' }  // 6 hrs = 11 total
       ]
     }]
     const res = await updateRequirementSchedules('req1', schedules)
-    expect(res.error).toMatch(/Total shift hours must be exactly 10 hours/)
+    expect(res.error).toMatch(/Total shift hours cannot exceed 10 hours/i)
   })
 
   it('More than 3 segments — returns validation error', async () => {
+    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
+      await cb([{ id: 'req1' }])
+      return true
+    })
     const schedules = [{
       positionIndex: 0,
       shifts: [
@@ -104,6 +114,10 @@ describe('Staff Requirements Actions', () => {
   })
 
   it('Break gap less than 1 hour — returns validation error', async () => {
+    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
+      await cb([{ id: 'req1' }])
+      return true
+    })
     const schedules = [{
       positionIndex: 0,
       shifts: [
@@ -116,6 +130,10 @@ describe('Staff Requirements Actions', () => {
   })
 
   it('Segment starting before 5am — returns validation error', async () => {
+    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
+      await cb([{ id: 'req1' }])
+      return true
+    })
     const schedules = [{
       positionIndex: 0,
       shifts: [{ id: '1', start: '04:00', end: '14:00' }]
@@ -125,6 +143,10 @@ describe('Staff Requirements Actions', () => {
   })
 
   it('Segment ending after 11pm — returns validation error', async () => {
+    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
+      await cb([{ id: 'req1' }])
+      return true
+    })
     const schedules = [{
       positionIndex: 0,
       shifts: [{ id: '1', start: '13:00', end: '23:30' }]

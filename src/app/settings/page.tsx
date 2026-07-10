@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 
 export default async function SettingsPage() {
   const session = await getSession()
-  if (!session?.isGlobalAdmin) {
+  if (session?.role !== 'admin') {
     redirect('/')
   }
 

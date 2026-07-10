@@ -267,7 +267,7 @@ export default function SettingsClientPage({ roles, departments, categories, con
       </section>
 
       {/* System Users Settings (Owner Only) */}
-      {(sessionRole === 'owner' || sessionRole === 'admin' || sessionRole === 'SuperAdmin') && (
+      {sessionRole === 'admin' && (
         <section className="bg-card rounded-2xl border border-card shadow-lg shadow-black/20 p-6 flex flex-col h-full mt-8">
            <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">

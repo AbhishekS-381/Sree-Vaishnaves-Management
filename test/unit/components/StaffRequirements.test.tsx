@@ -18,7 +18,7 @@ describe('StaffRequirements', () => {
     expect(getByText(/No position requirements defined yet/)).toBeTruthy()
   })
   it('shows Balanced when filled === required', () => {
-    const staff = [{ id: 's1', branchId: 'b1', departmentId: 'd1', roleId: 'r1', isActive: true }, { id: 's2', branchId: 'b1', departmentId: 'd1', roleId: 'r1', isActive: true }]
+    const staff = [{ id: 's1', branchId: 'b1', departmentId: 'd1', roleId: 'r1', positionId: 'req1', isActive: true }, { id: 's2', branchId: 'b1', departmentId: 'd1', roleId: 'r1', positionId: 'req1', isActive: true }]
     const { getByText } = render(<StaffRequirements requirements={[req1]} staff={staff} branches={branches} departments={departments} roles={roles} />)
     expect(getByText('Balanced')).toBeTruthy()
   })
@@ -27,7 +27,7 @@ describe('StaffRequirements', () => {
     expect(container.textContent).toContain('Open')
   })
   it('shows Over status when overfilled', () => {
-    const staff = Array.from({ length: 5 }, (_, i) => ({ id: `s${i}`, branchId: 'b1', departmentId: 'd1', roleId: 'r1', isActive: true }))
+    const staff = Array.from({ length: 5 }, (_, i) => ({ id: `s${i}`, branchId: 'b1', departmentId: 'd1', roleId: 'r1', positionId: 'req1', isActive: true }))
     const { container } = render(<StaffRequirements requirements={[req1]} staff={staff} branches={branches} departments={departments} roles={roles} />)
     expect(container.textContent).toContain('Over')
   })

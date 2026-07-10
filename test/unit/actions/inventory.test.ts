@@ -10,7 +10,7 @@ vi.mock('@/lib/db', () => ({
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 
 describe('Inventory Actions', () => {
-  beforeEach(() => { vi.resetAllMocks() 
+  beforeEach(() => { vi.clearAllMocks() 
     vi.spyOn(auth, 'getSession').mockResolvedValue({ role: 'owner', isGlobalOwner: true, branchId: 'b1' } as any)
     vi.spyOn(auth, 'requireBranchAccess').mockResolvedValue('b1')
     vi.spyOn(auth, 'getSessionRole').mockResolvedValue('owner')

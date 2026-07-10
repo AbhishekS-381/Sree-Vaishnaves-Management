@@ -4,7 +4,7 @@ import * as db from '@/lib/db'
 import * as auth from '@/app/actions/auth'
 
 vi.mock('@/lib/db', () => ({
-  readJSON: vi.fn(),
+  readJSON: vi.fn().mockResolvedValue([]),
   DB_FILES: new Proxy({}, { get: (target, prop) => String(prop).toLowerCase() + '.json' })
 }))
 
@@ -21,7 +21,7 @@ describe('Dashboard Page RBAC', () => {
   const mockStaff = [{ id: 's1', branchId: 'b1' }, { id: 's2', branchId: 'b2' }]
   
   beforeEach(() => {
-    vi.resetAllMocks()
+    vi.clearAllMocks()
     vi.mocked(db.readJSON).mockResolvedValue([])
     vi.mocked(db.readJSON).mockImplementation(async (file: string) => {
       if (file.includes('branches')) return mockBranches

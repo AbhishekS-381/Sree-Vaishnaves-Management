@@ -16,7 +16,7 @@ function makeRequest(url: string, cookieValue?: string): NextRequest {
 
 describe('middleware.ts', () => {
   beforeEach(() => {
-    vi.resetAllMocks()
+    vi.clearAllMocks()
     process.env.JWT_SECRET = 'test-secret'
   })
 

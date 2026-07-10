@@ -10,7 +10,7 @@ vi.mock('../../../db/index', () => ({
 
 describe('Rate Limit Utility', () => {
   beforeEach(() => {
-    vi.resetAllMocks()
+    vi.clearAllMocks()
     vi.useFakeTimers()
   })
   

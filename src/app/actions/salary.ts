@@ -43,8 +43,8 @@ export async function savePayroll(prevState: any, formData: FormData) {
 
   // We need current staff list to map IDs -> Names/Base Salary
   let staffList = await readJSON<any>(DB_FILES.STAFF)
-  if (!session.isGlobalOwner) {
-    staffList = staffList.filter(s => s.branchId === session.branchId)
+  if (!session.isGlobalAdmin) {
+    staffList = staffList.filter((s: any) => s.branchId === session.branchId)
   }
 
   for (const key in rawData) {
@@ -93,7 +93,7 @@ export async function savePayroll(prevState: any, formData: FormData) {
 
 export async function markAsPaid(id: string) {
   const session = await getSession()
-  if (!session?.isGlobalOwner) return { error: 'Forbidden' }
+  if (!session?.isGlobalAdmin) return { error: 'Forbidden: Only admin and owner can mark payroll as paid' }
 
   let notFound = false;
   const success = await withTransaction<SalaryRecord>(DB_FILES.PAYROLL, (payrollDB) => {
