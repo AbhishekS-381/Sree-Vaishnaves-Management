@@ -64,11 +64,13 @@ export function UserModal({ isOpen, onClose, editData, branches = [] }: { isOpen
 
             <div>
                <label className="block text-sm font-medium text-slate-400 mb-1">System Role</label>
-               <select required name="role" value={selectedRole} onChange={e => setSelectedRole(e.target.value)} className="w-full bg-[#131018] border border-[#3b3054] rounded-xl px-4 py-2.5 text-white focus:border-[#c084fc] focus:outline-none">
+               <select required disabled={editData?.role === 'admin'} name={editData?.role === 'admin' ? undefined : "role"} value={selectedRole} onChange={e => setSelectedRole(e.target.value)} className="w-full bg-[#131018] border border-[#3b3054] rounded-xl px-4 py-2.5 text-white focus:border-[#c084fc] focus:outline-none disabled:opacity-50">
+                   {editData?.role === 'admin' && <option value="admin">System Admin</option>}
                    <option value="owner">Owner (Full Settings Access)</option>
                    <option value="manager">Manager (App Operation Access)</option>
                    <option value="readonly">Read-Only Analyst</option>
                </select>
+               {editData?.role === 'admin' && <input type="hidden" name="role" value="admin" />}
             </div>
 
             {selectedRole === 'manager' && (

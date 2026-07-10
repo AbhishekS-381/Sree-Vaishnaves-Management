@@ -303,7 +303,7 @@ export default function SettingsClientPage({ roles, departments, categories, con
                        >
                          <Pencil className="h-4 w-4" />
                        </button>
-                        {u.role !== 'owner' && (
+                        {u.role !== 'admin' && (
                           <button
                              onClick={() => setConfirmAction({
                                label: `Remove user "${u.name}"?`,

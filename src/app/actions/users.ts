@@ -75,7 +75,7 @@ export async function updateUser(prevState: any, formData: FormData) {
       alreadyExists = true; return list;
     }
 
-    if ((list[index] as any).isGlobalOwner && role !== 'owner') {
+    if (list[index].role === 'admin' && role !== 'admin') {
       isRootError = true; return list;
     }
 
@@ -92,7 +92,7 @@ export async function updateUser(prevState: any, formData: FormData) {
 
   if (notFound) return { error: 'Not found' }
   if (alreadyExists) return { error: 'Username taken by another user' }
-  if (isRootError) return { error: 'Cannot demote the root owner account' }
+  if (isRootError) return { error: 'Cannot demote the admin account' }
   if (!success) return { error: 'Transaction failed' }
   revalidatePath('/settings')
   return { success: true }
@@ -106,7 +106,7 @@ export async function deleteUser(id: string) {
   await withTransaction<User>(DB_FILES.USERS, (list) => {
     const index = list.findIndex(u => u.id === id)
     if (index !== -1) {
-      if ((list[index] as any).isGlobalOwner) {
+      if (list[index].role === 'admin') {
         isRootError = true
       } else {
         list[index].isActive = false
@@ -115,7 +115,7 @@ export async function deleteUser(id: string) {
     }
     return list
   })
-  if (isRootError) return { error: 'Cannot delete the root owner account' }
+  if (isRootError) return { error: 'Cannot delete the admin account' }
   revalidatePath('/settings')
   return { success: true }
 }
