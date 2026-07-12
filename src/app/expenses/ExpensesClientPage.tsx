@@ -8,7 +8,7 @@ import type { Expense } from '@/app/actions/eod'
 import { useDraft } from '@/lib/useDraft'
 import { useEffect } from 'react'
 
-export default function ExpensesClientPage({ branches, expenses, userRole, isGlobalAdmin, isReadOnly = false }: { branches: any[], expenses: any[], userRole: string, isGlobalAdmin: boolean, isReadOnly?: boolean }) {
+export default function ExpensesClientPage({ branches, expenses, categories, userRole, isGlobalAdmin, isReadOnly = false }: { branches: any[], expenses: any[], categories: any[], userRole: string, isGlobalAdmin: boolean, isReadOnly?: boolean }) {
   const [selectedBranch, setSelectedBranch] = useState('')
   const [dateFilter, setDateFilter] = useState('')
   const [search, setSearch] = useState('')
@@ -46,7 +46,8 @@ export default function ExpensesClientPage({ branches, expenses, userRole, isGlo
     if (dateFilter && ex.date !== dateFilter) return false
     if (search) {
       const q = search.toLowerCase()
-      return ex.category.toLowerCase().includes(q) || (ex.notes && ex.notes.toLowerCase().includes(q))
+      const catName = (categories.find(c => c.id === (ex as any).categoryId)?.name || '').toLowerCase()
+      return catName.includes(q) || (ex.notes && ex.notes.toLowerCase().includes(q))
     }
     return true
   }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
@@ -81,7 +82,7 @@ export default function ExpensesClientPage({ branches, expenses, userRole, isGlo
     try {
         const res = await updateExpense(editingExpense.id, {
             amount: editingExpense.amount,
-            category: editingExpense.category,
+            categoryId: (editingExpense as any).categoryId,
             date: editingExpense.date,
             notes: editingExpense.notes
         })
@@ -153,7 +154,7 @@ export default function ExpensesClientPage({ branches, expenses, userRole, isGlo
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
          <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-5">
             <h3 className="text-amber-400 text-sm font-bold uppercase tracking-wider mb-2">Filtered Total</h3>
-            <span className="text-3xl font-black text-amber-500">₹{totalFiltered.toLocaleString()}</span>
+            <span className="text-3xl font-black text-amber-500">₹{totalFiltered.toLocaleString('en-IN')}</span>
          </div>
       </div>
 
@@ -178,7 +179,7 @@ export default function ExpensesClientPage({ branches, expenses, userRole, isGlo
                 <tr key={ex.id} className="border-b border-white/5 hover:bg-white/[0.02]">
                   <td className="p-4 font-medium text-slate-200">{ex.date}</td>
                   <td className="p-4">
-                     <span className="font-bold text-slate-300">{ex.category}</span>
+                     <span className="font-bold text-slate-300">{categories.find(c => c.id === (ex as any).categoryId)?.name || 'Unknown'}</span>
                      <div className="text-xs text-slate-500">{branchName}</div>
                   </td>
                   <td className="p-4">
@@ -190,7 +191,7 @@ export default function ExpensesClientPage({ branches, expenses, userRole, isGlo
                      {ex.notes || '-'}
                   </td>
                   <td className="p-4 text-right">
-                     <span className="font-bold text-amber-400">₹{Number(ex.amount).toLocaleString()}</span>
+                     <span className="font-bold text-amber-400">₹{Number(ex.amount).toLocaleString('en-IN')}</span>
                   </td>
                   {isOwner && (
                      <td className="p-4 text-right">
@@ -243,13 +244,17 @@ export default function ExpensesClientPage({ branches, expenses, userRole, isGlo
               
               <div>
                 <label className="block text-sm font-medium text-slate-400 mb-1">Category</label>
-                <input 
-                  type="text" 
-                  value={editingExpense.category}
-                  onChange={e => setEditingExpense({...editingExpense, category: e.target.value})}
+                <select 
+                  value={(editingExpense as any).categoryId}
+                  onChange={e => setEditingExpense({...editingExpense, categoryId: e.target.value} as any)}
                   className="w-full px-4 py-2.5 bg-[#131018] border border-white/10 rounded-xl text-slate-200 focus:ring-2 focus:ring-primary focus:outline-none"
                   required
-                />
+                >
+                  <option value="">Select Category</option>
+                  {categories.map((c: any) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
               </div>
 
               <div>

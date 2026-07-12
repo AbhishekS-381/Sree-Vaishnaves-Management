@@ -25,22 +25,18 @@ export async function saveRequirement(id: string | null, branchId: string, depar
     }
 
     const success = await withTransaction<any>(DB_FILES.STAFF_REQUIREMENTS, (reqs) => {
-      // Issue 21: Duplicate check for edits
-      if (id) {
-        const duplicateExists = reqs.some((r: any) => 
-          r.id !== id && 
-          r.branchId === enforcedBranchId && 
-          r.departmentId === departmentId && 
-          r.roleId === roleId && 
-          r.specialtyId === specialtyId
-        )
-        if (duplicateExists) throw new Error('DUPLICATE_REQUIREMENT')
-      }
-
-      const existingIndex = reqs.findIndex((r: any) => 
-        (id && r.id === id) || 
-        (!id && r.branchId === enforcedBranchId && r.departmentId === departmentId && r.roleId === roleId && r.specialtyId === specialtyId)
+      // Issue 21: Duplicate check for edits & creations
+      const duplicateExists = reqs.some((r: any) => 
+        (id ? r.id !== id : true) && 
+        r.branchId === enforcedBranchId && 
+        r.departmentId === departmentId && 
+        r.roleId === roleId && 
+        r.specialtyId === specialtyId
       )
+      
+      if (duplicateExists) throw new Error('DUPLICATE_REQUIREMENT')
+
+      const existingIndex = id ? reqs.findIndex((r: any) => r.id === id) : -1;
 
       if (existingIndex >= 0) {
         reqs[existingIndex].branchId = enforcedBranchId

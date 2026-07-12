@@ -1,4 +1,5 @@
 import { Shift, PositionSchedule } from '@/app/actions/staff_requirements'
+import { randomUUID } from 'crypto'
 
 export const timeToMins = (timeStr: string) => {
   const [h, m] = timeStr.split(':').map(Number)
@@ -76,7 +77,7 @@ export function generateSchedules({
       
       if (endMarker - currentMarker >= minSegmentHours * 60) {
         shifts.push({
-          id: `gen_${p}_${s}_${Date.now()}`,
+          id: `shift_${randomUUID()}`,
           start: minsToTime(currentMarker),
           end: minsToTime(endMarker)
         })

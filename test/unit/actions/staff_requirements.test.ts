@@ -6,7 +6,10 @@ vi.mock('@/lib/db', () => ({
   withTransaction: vi.fn(),
   readJSON: vi.fn().mockResolvedValue([]),
   writeJSON: vi.fn().mockResolvedValue(true),
-  DB_FILES: new Proxy({}, { get: () => 'mock.json' })
+  DB_FILES: {
+    STAFF: 'staff.json',
+    STAFF_REQUIREMENTS: 'reqs.json'
+  }
 }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('@/app/actions/auth', () => ({
@@ -32,13 +35,46 @@ describe('Staff Requirements Actions', () => {
     expect(res).toEqual({ success: true })
   })
 
-  it('saveRequirement updates existing by match (no id)', async () => {
+  it('saveRequirement blocks role/department changes when staff assigned', async () => {
+    vi.mocked(db.readJSON).mockImplementation(async (file) => {
+      if (file === db.DB_FILES.STAFF_REQUIREMENTS) {
+        return [{ id: 'req1', roleId: 'oldRole', departmentId: 'oldDept' }]
+      }
+      if (file === db.DB_FILES.STAFF) {
+        return [{ positionId: 'req1', isActive: true }]
+      }
+      return []
+    })
+    const res = await saveRequirement('req1', 'b1', 'newDept', 'newRole', 5)
+    expect(res.error).toMatch(/Cannot change role\/department/)
+  })
+
+  it('saveRequirement warns when requiredCount is reduced below filled count', async () => {
+    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
+      await cb([{ id: 'req1', branchId: 'b1', departmentId: 'd1', roleId: 'r1', requiredCount: 5 }])
+      return true
+    })
+    vi.mocked(db.readJSON).mockImplementation(async (file) => {
+      if (file === db.DB_FILES.STAFF_REQUIREMENTS) return [{ id: 'req1', roleId: 'r1', departmentId: 'd1' }]
+      if (file === db.DB_FILES.STAFF) {
+        return [
+          { positionId: 'req1', isActive: true },
+          { positionId: 'req1', isActive: true }
+        ] // 2 filled
+      }
+      return []
+    })
+    const res = await saveRequirement('req1', 'b1', 'd1', 'r1', 1) // Set to 1, but 2 are filled
+    expect(res).toEqual({ success: true, warning: '1 staff member(s) exceed the new headcount. Please reassign them.' })
+  })
+
+  it('saveRequirement rejects duplicate by match (no id)', async () => {
     vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
       await cb([{ id: 'req1', branchId: 'b1', departmentId: 'd1', roleId: 'r1', requiredCount: 2, specialtyId: undefined }])
       return true
     })
     const res = await saveRequirement(null, 'b1', 'd1', 'r1', 5, undefined)
-    expect(res).toEqual({ success: true })
+    expect(res).toEqual({ error: 'A position with this Role, Department, and Branch already exists.' })
   })
 
   it('saveRequirement handles transaction failure', async () => {
@@ -47,9 +83,19 @@ describe('Staff Requirements Actions', () => {
     expect(res).toEqual({ error: 'Failed to save requirement' })
   })
 
-  it('deleteRequirement succeeds', async () => {
-    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
-      await cb([{ id: 'req1' }])
+  it('deleteRequirement succeeds and keeps other requirements', async () => {
+    vi.mocked(db.withTransaction).mockImplementation(async (file, cb) => {
+      if (file === db.DB_FILES.STAFF) {
+        const staff = await cb([{ positionId: 'req1' }])
+        expect(staff[0].positionId).toBeUndefined()
+        return true
+      }
+      if (file === db.DB_FILES.STAFF_REQUIREMENTS) {
+        const reqs = await cb([{ id: 'req1' }, { id: 'other' }])
+        expect(reqs).toHaveLength(1)
+        expect(reqs[0].id).toBe('other')
+        return true
+      }
       return true
     })
     const res = await deleteRequirement('req1')
@@ -153,5 +199,15 @@ describe('Staff Requirements Actions', () => {
     }]
     const res = await updateRequirementSchedules('req1', schedules)
     expect(res.error).toMatch(/cannot end after 23:00/)
+  })
+
+  it('updateRequirementSchedules handles transaction failure', async () => {
+    vi.mocked(db.withTransaction).mockResolvedValue(false)
+    const schedules = [{
+      positionIndex: 0,
+      shifts: [{ id: '1', start: '10:00', end: '15:00' }]
+    }]
+    const res = await updateRequirementSchedules('req1', schedules)
+    expect(res).toEqual({ error: 'Failed to update schedules' })
   })
 })

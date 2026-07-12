@@ -214,11 +214,11 @@ export default function PayrollClientPage({ staff, savedRecords, attendanceLogs 
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <div>
                       <p className="text-xs text-slate-500 mb-1">Monthly Salary</p>
-                      <p className="text-slate-300">{s.monthlySalary ? `₹${s.monthlySalary.toLocaleString()}` : '—'}</p>
+                      <p className="text-slate-300">{s.monthlySalary ? `₹${s.monthlySalary.toLocaleString('en-IN')}` : '—'}</p>
                     </div>
                     <div>
                       <p className="text-xs text-slate-500 mb-1">Payable</p>
-                      <p className="font-bold text-emerald-400">₹{pay.toLocaleString()}</p>
+                      <p className="font-bold text-emerald-400">₹{pay.toLocaleString('en-IN')}</p>
                     </div>
                     <div>
                       <p className="text-xs text-slate-500 mb-1">Days Worked</p>
@@ -277,7 +277,7 @@ export default function PayrollClientPage({ staff, savedRecords, attendanceLogs 
                         {s.exitDate && <div className="text-[10px] text-red-400 font-bold uppercase mt-1">Exiting: {s.exitDate}</div>}
                       </td>
                       <td className="px-6 py-4 text-slate-300">
-                        {s.monthlySalary ? `₹${s.monthlySalary.toLocaleString()}` : <span className="text-slate-600 italic">Not set</span>}
+                        {s.monthlySalary ? `₹${s.monthlySalary.toLocaleString('en-IN')}` : <span className="text-slate-600 italic">Not set</span>}
                       </td>
                       <td className="px-6 py-4">
                         <input
@@ -304,7 +304,7 @@ export default function PayrollClientPage({ staff, savedRecords, attendanceLogs 
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
-                          <span className="font-bold text-emerald-400 text-lg">₹{pay.toLocaleString()}</span>
+                          <span className="font-bold text-emerald-400 text-lg">₹{pay.toLocaleString('en-IN')}</span>
                         </div>
                       </td>
                       <td className="px-6 py-4">
@@ -349,7 +349,7 @@ export default function PayrollClientPage({ staff, savedRecords, attendanceLogs 
                 <tr>
                   <td colSpan={4} className="px-6 py-4 text-right font-bold text-slate-300">Total Payable:</td>
                   <td className="px-6 py-4 font-bold text-xl text-white">
-                    ₹{visibleStaff.reduce((sum, s) => sum + calculatePay(s.monthlySalary || 0, entries[s.id]?.days || 0, entries[s.id]?.advances || 0), 0).toLocaleString()}
+                    ₹{visibleStaff.reduce((sum, s) => sum + calculatePay(s.monthlySalary || 0, entries[s.id]?.days || 0, entries[s.id]?.advances || 0), 0).toLocaleString('en-IN')}
                   </td>
                   <td colSpan={2}></td>
                 </tr>

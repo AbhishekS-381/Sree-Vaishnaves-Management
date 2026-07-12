@@ -53,4 +53,15 @@ describe('audit.ts - logAction', () => {
     // Should not throw
     await expect(logAction('READ', 'REPORT', 'Viewed report')).resolves.toBeUndefined()
   })
+
+  it('handles readJSON returning a non-array (e.g. object)', async () => {
+    vi.mocked(db.readJSON).mockResolvedValueOnce({} as any)
+    await logAction('TEST', 'Entity', 'Details')
+    expect(db.writeJSON).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.arrayContaining([
+        expect.objectContaining({ action: 'TEST' })
+      ])
+    )
+  })
 })

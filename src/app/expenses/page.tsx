@@ -14,8 +14,9 @@ export default async function ExpensesPage() {
   }
 
   branches = branches.filter((b: any) => b.isActive !== false)
+  const categories = await readJSON<any>(DB_FILES.CATEGORIES).catch(() => [])
 
   return (
-    <ExpensesClientPage branches={branches} expenses={expenses} userRole={userRole || ''} isGlobalAdmin={session?.isGlobalAdmin ?? false} isReadOnly={session?.role === 'readonly'} />
+    <ExpensesClientPage branches={branches} expenses={expenses} categories={categories} userRole={userRole || ''} isGlobalAdmin={session?.isGlobalAdmin ?? false} isReadOnly={session?.role === 'readonly'} />
   )
 }

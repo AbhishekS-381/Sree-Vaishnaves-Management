@@ -31,9 +31,14 @@ export async function addVendor(prevState: any, formData: FormData) {
     return { error: 'Forbidden' }
   }
 
+  let alreadyExists = false;
   const success = await withTransaction<Vendor>(DB_FILES.VENDORS, (vendors) => {
+    if (vendors.some(v => v.name.toLowerCase() === name.toLowerCase() && v.branchId === branchId)) {
+      alreadyExists = true;
+      return vendors;
+    }
     vendors.push({
-      id: `ven_${randomUUID().split('-')[0]}`,
+      id: `ven_${randomUUID()}`,
       branchId,
       name,
       phone,
@@ -42,6 +47,8 @@ export async function addVendor(prevState: any, formData: FormData) {
     })
     return vendors
   })
+
+  if (alreadyExists) return { error: 'A vendor with this name already exists in this branch' }
 
   if (!success) return { error: 'Transaction failed' }
   revalidatePath('/vendors')
@@ -52,13 +59,13 @@ export async function addVendorBill(prevState: any, formData: FormData) {
   const vendorId = formData.get('vendorId') as string
   const vendorName = formData.get('vendorName') as string
   const amount = Number(formData.get('amount'))
-  const category = formData.get('category') as string
+  const categoryId = (formData.get('categoryId') || formData.get('category')) as string
   const date = formData.get('date') as string
   const invoiceRef = formData.get('invoiceRef') as string
   let branchId = formData.get('branchId') as string
   const isPaid = formData.get('isPaid') === 'on'
 
-  if (!vendorId || !amount || !category || !date || !branchId) {
+  if (!vendorId || !amount || !categoryId || !date || !branchId) {
      return { error: 'Please fill all required bill fields' }
   }
   
@@ -76,10 +83,10 @@ export async function addVendorBill(prevState: any, formData: FormData) {
 
   const success = await withTransaction<Expense>(DB_FILES.EXPENSES, (expenses) => {
     expenses.push({
-      id: `venexp_${randomUUID().split('-')[0]}`,
+      id: `venexp_${randomUUID()}`,
       branchId,
       amount,
-      category,
+      categoryId,
       source: 'vendor',
       date,
       notes,

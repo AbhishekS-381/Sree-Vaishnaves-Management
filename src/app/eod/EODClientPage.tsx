@@ -9,13 +9,10 @@ import { useEODSave } from '@/hooks/useEODSave'
 type Expense = {
   id: string
   amount: number
-  category: string
+  categoryId: string
   notes?: string
 }
 
-const DEFAULT_CATEGORIES = [
-  'Raw materials', 'Gas / fuel', 'Electricity', 'Maintenance', 'Packaging', 'Miscellaneous'
-]
 
 export default function EODClientPage({ branches, categories }: { branches: any[], categories: any[] }) {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0])
@@ -68,7 +65,7 @@ export default function EODClientPage({ branches, categories }: { branches: any[
       setExpenses(exs.map(ex => ({
         id: ex.id,
         amount: ex.amount,
-        category: ex.category,
+        categoryId: (ex as any).categoryId,
         notes: ex.notes
       })))
     } else {
@@ -105,12 +102,12 @@ export default function EODClientPage({ branches, categories }: { branches: any[
     }
   }, [income, expenses, notes, openingFloat, actualClosingFloat, locked, selectedBranch, date, loadingInitial, saveDraft])
 
-  const addExpense = (cat: string) => {
+  const addExpense = (catId: string) => {
     if (locked) return;
     setExpenses([...expenses, {
       id: Math.random().toString(),
       amount: 0,
-      category: cat,
+      categoryId: catId,
       notes: ''
     }])
   }
@@ -269,7 +266,7 @@ export default function EODClientPage({ branches, categories }: { branches: any[
              
              <div className="mt-8 pt-4 border-t border-white/5 flex items-center justify-between">
                <span className="font-medium text-slate-400">Total Income</span>
-               <span className="text-2xl font-bold tracking-tight text-white">₹{totalIncome.toLocaleString()}</span>
+               <span className="text-2xl font-bold tracking-tight text-white">₹{totalIncome.toLocaleString('en-IN')}</span>
              </div>
            </div>
 
@@ -313,12 +310,12 @@ export default function EODClientPage({ branches, categories }: { branches: any[
                  <div className="bg-[#131018] rounded-xl p-4 border border-white/5 space-y-3">
                    <div className="flex justify-between text-sm">
                       <span className="text-slate-400">Expected Closing Float:</span>
-                      <span className="font-bold text-slate-200">₹{expectedClosingFloat.toLocaleString()}</span>
+                      <span className="font-bold text-slate-200">₹{expectedClosingFloat.toLocaleString('en-IN')}</span>
                    </div>
                    <div className="flex justify-between text-sm border-t border-white/5 pt-3">
                       <span className="text-slate-400">Cash Discrepancy:</span>
                       <span className={`font-black ${cashDiscrepancy === 0 ? 'text-emerald-400' : cashDiscrepancy < 0 ? 'text-red-400' : 'text-amber-400'}`}>
-                         {cashDiscrepancy > 0 ? '+' : ''}₹{cashDiscrepancy.toLocaleString()}
+                         {cashDiscrepancy > 0 ? '+' : ''}₹{cashDiscrepancy.toLocaleString('en-IN')}
                       </span>
                    </div>
                    {cashDiscrepancy !== 0 && (
@@ -356,11 +353,14 @@ export default function EODClientPage({ branches, categories }: { branches: any[
              
              {!locked && (
                 <div className="flex flex-wrap gap-2 mb-6">
-                  {(categories && categories.length > 0 ? categories : DEFAULT_CATEGORIES.map(name => ({ name }))).map((cat: any) => (
-                    <button key={cat.name} onClick={() => addExpense(cat.name)} className="text-xs font-semibold px-3 py-1.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition" style={cat.color ? { borderColor: `${cat.color}40`, color: cat.color } : {}}>
+                  {categories.map((cat: any) => (
+                    <button key={cat.id} onClick={() => addExpense(cat.id)} className="text-xs font-semibold px-3 py-1.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition" style={cat.color ? { borderColor: `${cat.color}40`, color: cat.color } : {}}>
                       + {cat.name}
                     </button>
                   ))}
+                  {categories.length === 0 && (
+                     <div className="text-sm text-slate-500 italic">No expense categories found. Add them in Settings.</div>
+                  )}
                 </div>
              )}
 
@@ -376,9 +376,9 @@ export default function EODClientPage({ branches, categories }: { branches: any[
                       <div className="flex-1">
                         <span 
                           className="text-xs font-bold uppercase tracking-wide block mb-1"
-                          style={{ color: categories.find(c => c.name === ex.category)?.color || '#94a3b8' }}
+                          style={{ color: categories.find(c => c.id === ex.categoryId)?.color || '#94a3b8' }}
                         >
-                          {ex.category}
+                          {categories.find(c => c.id === ex.categoryId)?.name || 'Unknown'}
                         </span>
                         <input 
                           type="text" 
@@ -413,7 +413,7 @@ export default function EODClientPage({ branches, categories }: { branches: any[
              <div className="mt-auto pt-6 border-t border-white/5 space-y-4">
                <div className="flex items-center justify-between text-slate-400 font-medium">
                  <span>Total Expenses</span>
-                 <span className="text-amber-400 tracking-tight">₹{totalExpenses.toLocaleString()}</span>
+                 <span className="text-amber-400 tracking-tight">₹{totalExpenses.toLocaleString('en-IN')}</span>
                </div>
                
                <div className="flex items-center justify-between bg-[#131018] rounded-xl p-4 border border-white/5 shadow-inner">
@@ -422,7 +422,7 @@ export default function EODClientPage({ branches, categories }: { branches: any[
                    <span className="font-semibold text-slate-300">Net Profit for today</span>
                  </div>
                  <span className={`text-2xl font-black tracking-tight ${netIncome >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                   ₹{netIncome.toLocaleString()}
+                   ₹{netIncome.toLocaleString('en-IN')}
                  </span>
                </div>
              </div>

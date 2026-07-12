@@ -17,6 +17,12 @@ describe('Users Actions', () => {
   })
 
   // ─── addUser ──────────────────────────────────────────────────────────────
+  it('addUser validates global admin role', async () => {
+    vi.mocked(auth.getSession).mockResolvedValueOnce({ role: 'manager', isGlobalAdmin: false } as any)
+    const res = await addUser({}, { get: () => 'Alice' } as any)
+    expect(res).toEqual({ error: 'Forbidden' })
+  })
+
   it('addUser validates required fields', async () => {
     const res = await addUser({}, { get: () => null } as any)
     expect(res).toEqual({ error: 'All fields required' })
@@ -47,6 +53,12 @@ describe('Users Actions', () => {
   })
 
   // ─── updateUser ──────────────────────────────────────────────────────────
+  it('updateUser validates global admin role', async () => {
+    vi.mocked(auth.getSession).mockResolvedValueOnce({ role: 'manager', isGlobalAdmin: false } as any)
+    const res = await updateUser({}, { get: () => 'test' } as any)
+    expect(res).toEqual({ error: 'Forbidden' })
+  })
+
   it('updateUser validates required fields', async () => {
     const res = await updateUser({}, { get: () => null } as any)
     expect(res).toEqual({ error: 'Invalid data' })
@@ -84,6 +96,12 @@ describe('Users Actions', () => {
   })
 
   // ─── deleteUser ──────────────────────────────────────────────────────────
+  it('deleteUser validates global admin role', async () => {
+    vi.mocked(auth.getSession).mockResolvedValueOnce({ role: 'manager', isGlobalAdmin: false } as any)
+    const res = await deleteUser('u1')
+    expect(res).toEqual({ error: 'Forbidden' })
+  })
+
   it('deleteUser succeeds', async () => {
     vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
       await cb([{ id: 'u1' }])

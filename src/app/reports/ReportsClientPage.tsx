@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Store, Calendar, TrendingUp, TrendingDown, Download, IndianRupee, PieChart, BarChart3 } from 'lucide-react'
 
-export default function ReportsClientPage({ branches, eodData, expensesData, payrollData, attendanceData, staffData }: { branches: any[], eodData: any[], expensesData: any[], payrollData: any[], attendanceData: any[], staffData: any[] }) {
+export default function ReportsClientPage({ branches, eodData, expensesData, payrollData, attendanceData, staffData, categories = [] }: { branches: any[], eodData: any[], expensesData: any[], payrollData: any[], attendanceData: any[], staffData: any[], categories?: any[] }) {
   const [selectedBranch, setSelectedBranch] = useState(branches[0]?.id || '')
   
   const today = new Date()
@@ -77,8 +77,9 @@ export default function ReportsClientPage({ branches, eodData, expensesData, pay
   filteredExpenses.forEach(e => {
      const amt = Number(e.amount) || 0
      totalExpenses += amt
-     if (e.category) {
-        expensesByCategory[e.category] = (expensesByCategory[e.category] || 0) + amt
+     if (e.categoryId) {
+        const catName = categories.find(c => c.id === e.categoryId)?.name || 'Unknown'
+        expensesByCategory[catName] = (expensesByCategory[catName] || 0) + amt
      }
   })
 
@@ -191,7 +192,7 @@ export default function ReportsClientPage({ branches, eodData, expensesData, pay
                <div className="p-2 bg-emerald-500/10 rounded-lg"><IndianRupee size={20} /></div>
                <span className="font-semibold text-sm uppercase tracking-wider">Total Revenue</span>
             </div>
-            <div className="text-3xl font-black text-white mt-4">₹{totalIncome.toLocaleString()}</div>
+            <div className="text-3xl font-black text-white mt-4">₹{totalIncome.toLocaleString('en-IN')}</div>
             <div className={`mt-2 text-xs font-semibold ${momChangeValue >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                {momChangeValue >= 0 ? '↗' : '↘'} {Math.abs(momChangePercent)}% vs last month
             </div>
@@ -202,7 +203,7 @@ export default function ReportsClientPage({ branches, eodData, expensesData, pay
                <div className="p-2 bg-amber-500/10 rounded-lg"><TrendingDown size={20} /></div>
                <span className="font-semibold text-sm uppercase tracking-wider">Total Ledger Exp.</span>
             </div>
-            <div className="text-3xl font-black text-white mt-4">₹{totalExpenses.toLocaleString()}</div>
+            <div className="text-3xl font-black text-white mt-4">₹{totalExpenses.toLocaleString('en-IN')}</div>
          </div>
 
          <div className="bg-card border border-white/5 rounded-2xl p-6 shadow-lg shadow-black/20">
@@ -210,7 +211,7 @@ export default function ReportsClientPage({ branches, eodData, expensesData, pay
                <div className="p-2 bg-blue-500/10 rounded-lg"><BarChart3 size={20} /></div>
                <span className="font-semibold text-sm uppercase tracking-wider">Salary Costs</span>
             </div>
-            <div className="text-3xl font-black text-white mt-4">₹{totalSalaryPayable.toLocaleString()}</div>
+            <div className="text-3xl font-black text-white mt-4">₹{totalSalaryPayable.toLocaleString('en-IN')}</div>
             <div className="mt-2 text-xs font-semibold text-slate-400">
                {salaryPercentOfRevenue}% of Total Revenue
             </div>
@@ -222,7 +223,7 @@ export default function ReportsClientPage({ branches, eodData, expensesData, pay
                <span className="font-bold text-sm uppercase tracking-wider">Net Profit</span>
             </div>
             <div className={`text-4xl font-black mt-4 ${netProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                ₹{netProfit.toLocaleString()}
+                ₹{netProfit.toLocaleString('en-IN')}
             </div>
             <div className="mt-2 text-xs font-semibold opacity-80 text-slate-300">
                 (Revenue - Ledger - Salaries)
@@ -245,7 +246,7 @@ export default function ReportsClientPage({ branches, eodData, expensesData, pay
                     <div>
                        <div className="flex items-center justify-between text-sm mb-2">
                           <span className="text-slate-300 font-medium">Dine-In</span>
-                          <span className="font-bold text-white">₹{dineInTotal.toLocaleString()} ({Math.round(dineInTotal/totalIncome*100)}%)</span>
+                          <span className="font-bold text-white">₹{dineInTotal.toLocaleString('en-IN')} ({Math.round(dineInTotal/totalIncome*100)}%)</span>
                        </div>
                        <div className="w-full bg-[#131018] rounded-full h-3">
                           <div className="bg-purple-500 h-3 rounded-full" style={{width: `${Math.round(dineInTotal/totalIncome*100)}%`}}></div>
@@ -254,7 +255,7 @@ export default function ReportsClientPage({ branches, eodData, expensesData, pay
                     <div>
                        <div className="flex items-center justify-between text-sm mb-2">
                           <span className="text-slate-300 font-medium">Takeaway</span>
-                          <span className="font-bold text-white">₹{takeawayTotal.toLocaleString()} ({Math.round(takeawayTotal/totalIncome*100)}%)</span>
+                          <span className="font-bold text-white">₹{takeawayTotal.toLocaleString('en-IN')} ({Math.round(takeawayTotal/totalIncome*100)}%)</span>
                        </div>
                        <div className="w-full bg-[#131018] rounded-full h-3">
                           <div className="bg-emerald-500 h-3 rounded-full" style={{width: `${Math.round(takeawayTotal/totalIncome*100)}%`}}></div>
@@ -280,7 +281,7 @@ export default function ReportsClientPage({ branches, eodData, expensesData, pay
                         <div key={cat} className="flex items-center justify-between border-b border-white/5 pb-2 last:border-0 last:pb-0">
                            <span className="text-slate-300 text-sm uppercase tracking-wide font-bold">{cat}</span>
                            <div className="text-right">
-                              <span className="block font-bold text-amber-400">₹{val.toLocaleString()}</span>
+                              <span className="block font-bold text-amber-400">₹{val.toLocaleString('en-IN')}</span>
                            </div>
                         </div>
                     ))}

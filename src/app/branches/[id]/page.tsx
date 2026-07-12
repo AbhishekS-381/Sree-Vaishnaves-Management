@@ -94,16 +94,16 @@ export default async function BranchDetailPage({ params }: { params: Promise<{ i
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="bg-card p-6 rounded-2xl border border-card shadow-lg flex flex-col">
           <p className="text-sm font-semibold text-slate-400 mb-1">This Month Income</p>
-          <p className="text-3xl font-black text-emerald-400">₹{thisMonthIncome.toLocaleString()}</p>
+          <p className="text-3xl font-black text-emerald-400">₹{thisMonthIncome.toLocaleString('en-IN')}</p>
         </div>
         <div className="bg-card p-6 rounded-2xl border border-card shadow-lg flex flex-col">
           <p className="text-sm font-semibold text-slate-400 mb-1">This Month Expenses</p>
-          <p className="text-3xl font-black text-rose-400">₹{thisMonthExpenses.toLocaleString()}</p>
+          <p className="text-3xl font-black text-rose-400">₹{thisMonthExpenses.toLocaleString('en-IN')}</p>
         </div>
         <div className="bg-card p-6 rounded-2xl border border-card shadow-lg flex flex-col">
           <p className="text-sm font-semibold text-slate-400 mb-1">This Month Profit</p>
           <p className={`text-3xl font-black ${thisMonthProfit >= 0 ? 'text-primary' : 'text-amber-400'}`}>
-            ₹{thisMonthProfit.toLocaleString()}
+            ₹{thisMonthProfit.toLocaleString('en-IN')}
           </p>
         </div>
         <div className="bg-card p-6 rounded-2xl border border-card shadow-lg flex flex-col">

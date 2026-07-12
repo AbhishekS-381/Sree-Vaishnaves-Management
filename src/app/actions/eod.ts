@@ -10,7 +10,7 @@ export type Expense = {
   id: string
   branchId: string
   amount: number
-  category: string
+  categoryId: string
   source: 'eod' | 'vendor'
   date: string
   notes?: string
@@ -100,7 +100,7 @@ export async function saveEODEntry(
       }
     } else {
       allEOD.push({
-        id: `eod_${randomUUID().split('-')[0]}`,
+        id: `eod_${randomUUID()}`,
         branchId: entryData.branchId,
         date: entryData.date,
         income: entryData.income,
@@ -122,10 +122,10 @@ export async function saveEODEntry(
   const expSuccess = await withTransaction<Expense>(DB_FILES.EXPENSES, (allExpenses) => {
     const otherExpenses = allExpenses.filter(ex => !(ex.date === entryData.date && ex.branchId === entryData.branchId && ex.source === 'eod'))
     const newExpenses = expensesOut.map(ex => ({
-      id: `exp_${randomUUID().split('-')[0]}`,
+      id: `exp_${randomUUID()}`,
       branchId: ex.branchId,
       amount: ex.amount,
-      category: ex.category,
+      categoryId: (ex as any).categoryId,
       source: 'eod' as const,
       date: ex.date,
       notes: ex.notes || '',

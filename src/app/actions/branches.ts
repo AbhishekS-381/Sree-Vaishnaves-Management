@@ -60,9 +60,14 @@ export async function addBranch(prevState: any, formData: FormData) {
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message || 'Validation failed' };
 
+  let alreadyExists = false
   const success = await withTransaction<Branch>(DB_FILES.BRANCHES, (list) => {
+    if (list.some(b => b.isActive !== false && b.name.toLowerCase() === name.toLowerCase())) {
+      alreadyExists = true
+      return list
+    }
     list.push({
-      id: `br_${randomUUID().split('-')[0]}`,
+      id: `br_${randomUUID()}`,
       name,
       address,
       phone,
@@ -76,6 +81,7 @@ export async function addBranch(prevState: any, formData: FormData) {
     return list
   })
 
+  if (alreadyExists) return { error: 'A branch with this name already exists' }
   if (!success) return { error: 'Failed to add branch due to a concurrent write.' }
 
   revalidatePath('/branches')
@@ -120,10 +126,15 @@ export async function updateBranch(prevState: any, formData: FormData) {
   if (!id || !parsed.success) return { error: parsed.error?.issues[0]?.message || 'Invalid data' }
 
   let notFound = false
+  let alreadyExists = false
   const success = await withTransaction<Branch>(DB_FILES.BRANCHES, (list) => {
     const index = list.findIndex(r => r.id === id)
     if (index === -1) {
       notFound = true
+      return list
+    }
+    if (list.some(b => b.isActive !== false && b.name.toLowerCase() === name.toLowerCase() && b.id !== id)) {
+      alreadyExists = true
       return list
     }
     list[index] = { 
@@ -141,6 +152,7 @@ export async function updateBranch(prevState: any, formData: FormData) {
   })
 
   if (notFound) return { error: 'Not found' }
+  if (alreadyExists) return { error: 'A branch with this name already exists' }
   if (!success) return { error: 'Transaction failed' }
 
   revalidatePath('/branches')

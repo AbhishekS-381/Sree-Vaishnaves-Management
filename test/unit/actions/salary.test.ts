@@ -49,6 +49,29 @@ describe('Salary Actions', () => {
     expect((res as any).success).toBe(true)
   })
 
+  it('savePayroll filters staff for non-admins', async () => {
+    vi.mocked(auth.getSession).mockResolvedValue({ role: 'manager', isGlobalAdmin: false, branchId: 'b1' } as any)
+    vi.mocked(db.readJSON).mockResolvedValue([
+      { id: 's1', name: 'Alice', branchId: 'b1', monthlySalary: 3000 },
+      { id: 's2', name: 'Bob', branchId: 'b2', monthlySalary: 4000 }
+    ])
+    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
+      const records = await cb([])
+      // Should only include s1, not s2
+      expect(records.some((r: any) => r.staffId === 's2')).toBe(false)
+      expect(records.some((r: any) => r.staffId === 's1')).toBe(true)
+      return true
+    })
+    const fd = {
+      get: (k: string) => k === 'month' ? '10' : k === 'year' ? '2023' : null,
+      entries: () => [
+        ['staff_s1_days', '25'],
+        ['staff_s2_days', '30'] // This should be ignored due to branchId
+      ]
+    } as any
+    await savePayroll({}, fd)
+  })
+
   it('savePayroll handles transaction failure', async () => {
     vi.mocked(db.readJSON).mockResolvedValue([])
     vi.mocked(db.withTransaction).mockResolvedValue(false)

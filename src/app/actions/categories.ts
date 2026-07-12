@@ -26,7 +26,7 @@ export async function addCategory(prevState: any, formData: FormData) {
       alreadyExists = true;
       return cats;
     }
-    cats.push({ id: randomUUID(), name, color })
+    cats.push({ id: `cat_${randomUUID()}`, name, color })
     return cats;
   })
 
@@ -47,34 +47,24 @@ export async function updateCategory(prevState: any, formData: FormData) {
   if (!id || !name) return { error: 'Missing required fields' }
 
   let notFound = false;
-  let oldName = '';
+  let alreadyExists = false;
   const success = await withTransaction<ExpenseCategory>(DB_FILES.CATEGORIES, (cats) => {
     const idx = cats.findIndex(c => c.id === id)
     if (idx === -1) {
       notFound = true;
       return cats;
     }
-    oldName = cats[idx].name
+    if (cats.some(c => c.name.toLowerCase() === name.toLowerCase() && c.id !== id)) {
+      alreadyExists = true;
+      return cats;
+    }
     cats[idx] = { ...cats[idx], name, color }
     return cats;
   })
 
   if (notFound) return { error: 'Category not found' }
+  if (alreadyExists) return { error: 'Category name already exists' }
   if (!success) return { error: 'Transaction failed' }
-
-  if (oldName && oldName !== name) {
-     const expenses = await readJSON<Expense>(DB_FILES.EXPENSES).catch(() => []);
-     let updated = false;
-     expenses.forEach(ex => {
-        if (ex.category === oldName) {
-           ex.category = name;
-           updated = true;
-        }
-     });
-     if (updated) {
-        await writeJSON(DB_FILES.EXPENSES, expenses);
-     }
-  }
 
   revalidatePath('/settings')
   revalidatePath('/eod')

@@ -59,4 +59,14 @@ describe('middleware.ts', () => {
     const res = await middleware(req)
     expect(res.status).toBe(307) // redirect to /login
   })
+
+  it('throws an error if JWT_SECRET is not set', async () => {
+    const originalSecret = process.env.JWT_SECRET
+    delete process.env.JWT_SECRET
+    const req = makeRequest('http://localhost/dashboard', 'valid-token')
+    const res = await middleware(req)
+    expect(res.status).toBe(307)
+    expect(res.headers.get('location')).toContain('/login')
+    process.env.JWT_SECRET = originalSecret
+  })
 })

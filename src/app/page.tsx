@@ -101,8 +101,8 @@ export default async function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card title="Total Branches" value={branches.length} icon={Store} color="lilac" />
         <Card title="Active Staff" value={activeStaff} icon={Users} color="purple" />
-        <Card title="Today's Collection" value={`₹${todaysCollection.toLocaleString()}`} icon={IndianRupee} color="emerald" />
-        <Card title="Net Balance" value={`₹${netBalance.toLocaleString()}`} icon={TrendingUp} color="amber" />
+        <Card title="Today's Collection" value={`₹${todaysCollection.toLocaleString('en-IN')}`} icon={IndianRupee} color="emerald" />
+        <Card title="Net Balance" value={`₹${netBalance.toLocaleString('en-IN')}`} icon={TrendingUp} color="amber" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

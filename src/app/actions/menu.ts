@@ -7,22 +7,22 @@ import { getSession, requireBranchAccess } from './auth'
 
 export type MenuItem = {
   id: string
-  branchId: string
   name: string
-  category: string
+  categoryId: string
   price: number
+  branchId: string
   isAvailable: boolean
   createdAt: string
 }
 
 export async function addMenuItem(prevState: any, formData: FormData) {
   const name = formData.get('name') as string
-  const category = formData.get('category') as string
+  const categoryId = formData.get('categoryId') as string
   const price = Number(formData.get('price'))
   let branchId = formData.get('branchId') as string
 
-  if (!name || !category || !price || !branchId) {
-    return { error: 'All fields are required' }
+  if (!name || !price || !branchId || !categoryId) {
+    return { error: 'Missing required fields' }
   }
 
   try {
@@ -31,21 +31,25 @@ export async function addMenuItem(prevState: any, formData: FormData) {
     return { error: 'Forbidden' }
   }
 
-  const newItem: MenuItem = {
-    id: `mn_${randomUUID().split('-')[0]}`,
-    name,
-    category,
-    price,
-    branchId,
-    isAvailable: true,
-    createdAt: new Date().toISOString()
-  }
-
+  let alreadyExists = false;
   const success = await withTransaction<MenuItem>(DB_FILES.MENU, (menu) => {
-    menu.push(newItem)
+    if (menu.some(m => m.name.toLowerCase() === name.toLowerCase() && m.branchId === branchId && m.categoryId === categoryId)) {
+      alreadyExists = true;
+      return menu;
+    }
+    menu.push({
+      id: `mn_${randomUUID()}`,
+      name,
+      categoryId,
+      price: Number(price),
+      branchId,
+      isAvailable: true,
+      createdAt: new Date().toISOString()
+    })
     return menu
   })
 
+  if (alreadyExists) return { error: 'A menu item with this name already exists in this category and branch' }
   if (!success) return { error: 'Failed to add menu item' }
   revalidatePath('/menu')
   return { success: true }

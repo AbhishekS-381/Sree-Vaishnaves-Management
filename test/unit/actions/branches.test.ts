@@ -19,6 +19,12 @@ describe('Branches Actions', () => {
   })
 
   // ─── addBranch ────────────────────────────────────────────────────────────
+  it('addBranch validates global admin role', async () => {
+    vi.mocked(auth.getSession).mockResolvedValueOnce({ role: 'manager', isGlobalAdmin: false } as any)
+    const res = await addBranch({}, { get: () => '' } as any)
+    expect(res).toEqual({ error: 'Forbidden: Only admin and owner can manage branches' })
+  })
+
   it('addBranch validates missing fields (name/address/phone)', async () => {
     const res = await addBranch({}, { get: () => '' } as any)
     // branches.ts returns the first zod issue or a custom error
@@ -40,6 +46,12 @@ describe('Branches Actions', () => {
   })
 
   // ─── updateBranch ────────────────────────────────────────────────────────
+  it('updateBranch validates global admin role', async () => {
+    vi.mocked(auth.getSession).mockResolvedValueOnce({ role: 'manager', isGlobalAdmin: false } as any)
+    const res = await updateBranch({}, { get: () => '' } as any)
+    expect(res).toEqual({ error: 'Forbidden: Only admin and owner can manage branches' })
+  })
+
   it('updateBranch validates missing id/name', async () => {
     const res = await updateBranch({}, { get: () => '' } as any)
     expect(res.error).toBeDefined()
@@ -70,6 +82,12 @@ describe('Branches Actions', () => {
   })
 
   // ─── deleteBranch ────────────────────────────────────────────────────────
+  it('deleteBranch validates global admin role', async () => {
+    vi.mocked(auth.getSession).mockResolvedValueOnce({ role: 'manager', isGlobalAdmin: false } as any)
+    const res = await deleteBranch('b1')
+    expect(res).toEqual({ error: 'Forbidden: Only admin and owner can manage branches' })
+  })
+
   it('deleteBranch handles not found', async () => {
     vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => { await cb([]); return true })
     const res = await deleteBranch('b1')

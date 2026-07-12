@@ -43,4 +43,25 @@ describe('Attendance Actions', () => {
     const res = await saveAttendance([{ date: todayStr, staffId: 's1' }, { date: todayStr, staffId: 's2' }])
     expect(res).toEqual({ success: true })
   })
+
+  it('saveAttendance handles branch access error', async () => {
+    const { requireBranchAccess } = await import('@/app/actions/auth')
+    vi.mocked(requireBranchAccess).mockRejectedValueOnce(new Error('Forbidden'))
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+    const res = await saveAttendance([{ date: todayStr, staffId: 's1', branchId: 'b2' }])
+    expect(res).toEqual({ error: 'Forbidden: Branch access denied.' })
+  })
+
+  it('saveAttendance blocks future dates', async () => {
+    const futureDate = new Date()
+    futureDate.setDate(futureDate.getDate() + 2) // Future date
+    
+    vi.mocked(db.withTransaction).mockImplementation(async (f, cb) => {
+      await cb([])
+      return true
+    })
+    
+    const res = await saveAttendance([{ date: futureDate.toISOString().split('T')[0], staffId: 's1' }])
+    expect(res).toEqual({ error: 'Cannot mark attendance for future dates' })
+  })
 })

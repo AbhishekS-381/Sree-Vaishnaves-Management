@@ -29,6 +29,15 @@ describe('Menu Categories Actions', () => {
     expect(res).toEqual({ success: true })
   })
 
+  it('addMenuCategory rejects duplicate category', async () => {
+    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
+      await cb([{ id: 'existing_id', name: 'ExistingName' }])
+      return true
+    })
+    const res = await addMenuCategory({}, { get: () => 'ExistingName' } as any)
+    expect(res).toEqual({ error: 'Category name already exists' })
+  })
+
   it('addMenuCategory handles transaction failure', async () => {
     vi.mocked(db.withTransaction).mockResolvedValue(false)
     const res = await addMenuCategory({}, { get: () => 'test' } as any)
@@ -43,7 +52,7 @@ describe('Menu Categories Actions', () => {
   it('updateMenuCategory handles not found', async () => {
     vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => { await cb([]); return true })
     const res = await updateMenuCategory({}, { get: () => 'test' } as any)
-    expect(res).toEqual({ error: 'Not found' })
+    expect(res).toEqual({ error: 'Category not found' })
   })
 
   it('updateMenuCategory succeeds', async () => {
@@ -53,6 +62,18 @@ describe('Menu Categories Actions', () => {
     })
     const res = await updateMenuCategory({}, { get: () => 'test' } as any)
     expect(res).toEqual({ success: true })
+  })
+
+  it('updateMenuCategory rejects duplicate category', async () => {
+    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
+      await cb([
+        { id: 'test', name: 'Old' },
+        { id: 'other', name: 'ExistingName' }
+      ])
+      return true
+    })
+    const res = await updateMenuCategory({}, { get: (k: string) => k === 'id' ? 'test' : 'ExistingName' } as any)
+    expect(res).toEqual({ error: 'Category name already exists' })
   })
 
   it('deleteMenuCategory succeeds', async () => {

@@ -4,13 +4,14 @@ import { getSession } from '@/app/actions/auth'
 
 export default async function ReportsPage() {
   const session = await getSession();
-  let [branches, eod, expenses, payroll, attendance, staff] = await Promise.all([
+  let [branches, eod, expenses, payroll, attendance, staff, categories] = await Promise.all([
     readJSON<any>(DB_FILES.BRANCHES),
     readJSON<any>(DB_FILES.EOD).catch(() => []),
     readJSON<any>(DB_FILES.EXPENSES).catch(() => []),
     readJSON<any>(DB_FILES.PAYROLL).catch(() => []),
     readJSON<any>(DB_FILES.ATTENDANCE).catch(() => []),
-    readJSON<any>(DB_FILES.STAFF).catch(() => [])
+    readJSON<any>(DB_FILES.STAFF).catch(() => []),
+    readJSON<any>(DB_FILES.CATEGORIES).catch(() => [])
   ]);
 
   if (!session?.isGlobalAdmin && session?.role !== 'readonly') {
@@ -32,6 +33,7 @@ export default async function ReportsPage() {
       payrollData={payroll}
       attendanceData={attendance}
       staffData={staff}
+      categories={categories}
     />
   )
 }

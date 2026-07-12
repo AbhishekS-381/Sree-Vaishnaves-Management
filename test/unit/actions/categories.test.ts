@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { addCategory, updateCategory } from '@/app/actions/categories'
+import { addCategory, updateCategory, deleteCategory } from '@/app/actions/categories'
 import * as db from '@/lib/db'
 import * as auth from '@/app/actions/auth'
 
@@ -14,11 +14,15 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 describe('Categories Actions', () => {
   beforeEach(() => { vi.clearAllMocks() 
     vi.spyOn(auth, 'getSession').mockResolvedValue({ role: 'admin', isGlobalAdmin: true, isRootAdmin: true, branchId: 'b1' } as any)
-    vi.spyOn(auth, 'requireBranchAccess').mockResolvedValue('b1')
-    vi.spyOn(auth, 'getSessionRole').mockResolvedValue('owner')
   })
 
   // ─── addCategory ──────────────────────────────────────────────────────────
+  it('addCategory validates role', async () => {
+    vi.mocked(auth.getSession).mockResolvedValueOnce({ isGlobalAdmin: false } as any)
+    const res = await addCategory({}, { get: () => 'name' } as any)
+    expect(res).toEqual({ error: 'Forbidden' })
+  })
+
   it('addCategory validates name', async () => {
     const res = await addCategory({}, { get: () => null } as any)
     expect(res).toEqual({ error: 'Name is required' })
@@ -46,6 +50,12 @@ describe('Categories Actions', () => {
   })
 
   // ─── updateCategory ──────────────────────────────────────────────────────
+  it('updateCategory validates role', async () => {
+    vi.mocked(auth.getSession).mockResolvedValueOnce({ isGlobalAdmin: false } as any)
+    const res = await updateCategory({}, { get: () => 'name' } as any)
+    expect(res).toEqual({ error: 'Forbidden' })
+  })
+
   it('updateCategory validates id/name', async () => {
     const res = await updateCategory({}, { get: () => null } as any)
     expect(res).toEqual({ error: 'Missing required fields' })
@@ -57,7 +67,22 @@ describe('Categories Actions', () => {
     expect(res).toEqual({ error: 'Category not found' })
   })
 
-  it('updateCategory succeeds without name change', async () => {
+  it('updateCategory rejects duplicate name', async () => {
+    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
+      await cb([
+        { id: '1', name: 'test' },
+        { id: '2', name: 'existing' }
+      ])
+      return true
+    })
+    const fd = {
+      get: (k: string) => k === 'id' ? '1' : k === 'name' ? 'existing' : null
+    } as any
+    const res = await updateCategory({}, fd)
+    expect(res).toEqual({ error: 'Category name already exists' })
+  })
+
+  it('updateCategory succeeds', async () => {
     vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
       await cb([{ id: 'test', name: 'test' }])
       return true
@@ -66,29 +91,43 @@ describe('Categories Actions', () => {
     expect(res).toEqual({ success: true })
   })
 
-  it('updateCategory cascades name changes', async () => {
-    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
-      // First call: categories
-      await cb([{ id: 'test', name: 'OldName' }])
-      return true
+  it('updateCategory handles transaction failure', async () => {
+    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => { 
+      await cb([{ id: 'test', name: 'test' }])
+      return false 
     })
-    vi.mocked(db.readJSON).mockResolvedValue([{ id: 'exp1', category: 'OldName' }])
-    
-    const res = await updateCategory({}, {
-      get: (k: string) => k === 'id' ? 'test' : 'NewName'
-    } as any)
-    expect(res).toEqual({ success: true })
-    
-    expect(db.withTransaction).toHaveBeenCalledTimes(1)
-    expect(db.readJSON).toHaveBeenCalled()
-    expect(db.writeJSON).toHaveBeenCalled()
+    const res = await updateCategory({}, { get: () => 'test' } as any)
+    expect(res).toEqual({ error: 'Transaction failed' })
   })
 
-  it('updateCategory handles transaction failure', async () => {
-    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => { await cb([]); return false })
-    // Should return not-found since empty list, before transaction failure
-    const res = await updateCategory({}, { get: () => 'test' } as any)
-    // Either category not found OR transaction failed depending on flow
-    expect(['Category not found', 'Transaction failed']).toContain((res as any).error)
+  // ─── deleteCategory ──────────────────────────────────────────────────────
+  it('deleteCategory validates role', async () => {
+    vi.mocked(auth.getSession).mockResolvedValueOnce({ isGlobalAdmin: false } as any)
+    const res = await deleteCategory('1')
+    expect(res).toEqual({ error: 'Forbidden' })
+  })
+
+  it('deleteCategory handles not found', async () => {
+    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => { await cb([]); return true })
+    const res = await deleteCategory('1')
+    expect(res).toEqual({ error: 'Category not found' })
+  })
+
+  it('deleteCategory handles transaction failure', async () => {
+    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
+      await cb([{ id: '1', name: 'test' }])
+      return false
+    })
+    const res = await deleteCategory('1')
+    expect(res).toEqual({ error: 'Transaction failed' })
+  })
+
+  it('deleteCategory succeeds', async () => {
+    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
+      await cb([{ id: '1', name: 'test' }])
+      return true
+    })
+    const res = await deleteCategory('1')
+    expect(res).toEqual({ success: true })
   })
 })

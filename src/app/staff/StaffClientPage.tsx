@@ -204,7 +204,7 @@ export default function StaffClientPage({ initialStaff, branches, departments, r
                     {getBranch(s.branchId)}
                   </td>
                   <td className="px-6 py-4 text-sm text-emerald-400 font-medium hidden sm:table-cell">
-                    {s.monthlySalary ? `₹${s.monthlySalary.toLocaleString()}` : '-'}
+                    {s.monthlySalary ? `₹${s.monthlySalary.toLocaleString('en-IN')}` : '-'}
                   </td>
                   <td className="px-6 py-4">
                     {s.isActive ? (

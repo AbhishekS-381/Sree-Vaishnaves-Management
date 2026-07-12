@@ -26,7 +26,7 @@ export async function addDepartment(prevState: any, formData: FormData) {
   if (!parsed.success) return { error: 'Name is required' }
 
   const newDept: Department = {
-    id: `dept_${randomUUID().split('-')[0]}`,
+    id: `dept_${randomUUID()}`,
     name,
     isActive: true
   }
@@ -57,10 +57,15 @@ export async function updateDepartment(prevState: any, formData: FormData) {
   if (!id || !parsed.success) return { error: 'Invalid data' }
 
   let notFound = false
+  let alreadyExists = false
   const success = await withTransaction<Department>(DB_FILES.DEPARTMENTS, (list) => {
     const index = list.findIndex(d => d.id === id)
     if (index === -1) {
       notFound = true
+      return list
+    }
+    if (list.some(d => d.isActive !== false && d.name.toLowerCase() === name.toLowerCase() && d.id !== id)) {
+      alreadyExists = true
       return list
     }
     list[index].name = name
@@ -68,6 +73,7 @@ export async function updateDepartment(prevState: any, formData: FormData) {
   })
 
   if (notFound) return { error: 'Not found' }
+  if (alreadyExists) return { error: 'Department name already exists' }
   if (!success) return { error: 'Transaction failed' }
   revalidatePath('/settings')
   return { success: true }
@@ -133,7 +139,7 @@ export async function addRole(prevState: any, formData: FormData) {
   if (!parsed.success) return { error: 'Name is required' }
 
   const newItem: Role = {
-    id: `role_${randomUUID().split('-')[0]}`,
+    id: `role_${randomUUID()}`,
     name,
     isChef,
     departmentIds,
@@ -168,10 +174,15 @@ export async function updateRole(prevState: any, formData: FormData) {
   if (!id || !parsed.success) return { error: 'Invalid data' }
 
   let notFound = false
+  let alreadyExists = false
   const success = await withTransaction<Role>(DB_FILES.ROLES, (list) => {
     const index = list.findIndex(r => r.id === id)
     if (index === -1) {
       notFound = true
+      return list
+    }
+    if (list.some(r => r.isActive !== false && r.name.toLowerCase() === name.toLowerCase() && r.id !== id)) {
+      alreadyExists = true
       return list
     }
     list[index] = { ...list[index], name, isChef, departmentIds }
@@ -179,6 +190,7 @@ export async function updateRole(prevState: any, formData: FormData) {
   })
 
   if (notFound) return { error: 'Not found' }
+  if (alreadyExists) return { error: 'Role name already exists' }
   if (!success) return { error: 'Transaction failed' }
   revalidatePath('/settings')
   return { success: true }

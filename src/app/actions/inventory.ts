@@ -13,6 +13,8 @@ export type InventoryItem = {
   currentQuantity: number
   threshold: number
   updatedAt: string
+  isActive?: boolean
+  deletedAt?: string
 }
 
 export type StockAdjustment = {
@@ -42,28 +44,35 @@ export async function addInventoryItem(prevState: any, formData: FormData) {
     return { error: 'Forbidden' }
   }
 
+  let alreadyExists = false;
   const newItem: InventoryItem = {
-    id: `inv_${randomUUID().split('-')[0]}`,
+    id: `inv_${randomUUID()}`,
     branchId,
     name,
     unit,
     currentQuantity: quantity,
     threshold,
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
+    isActive: true
   }
 
   const success = await withTransaction<InventoryItem>(DB_FILES.INVENTORY, (items) => {
+    if (items.some(i => i.isActive !== false && i.name.toLowerCase() === name.toLowerCase() && i.branchId === branchId && i.unit === unit)) {
+      alreadyExists = true;
+      return items;
+    }
     items.push(newItem)
     return items
   })
 
+  if (alreadyExists) return { error: 'An inventory item with this name and unit already exists in this branch' }
   if (!success) return { error: 'Transaction failed' }
   
   // If starting quantity > 0, log adjustment
   if (quantity > 0) {
      await withTransaction<StockAdjustment>(DB_FILES.STOCK_ADJUSTMENTS, (logs) => {
        logs.push({
-          id: `adj_${randomUUID().split('-')[0]}`,
+          id: `adj_${randomUUID()}`,
           itemId: newItem.id,
           branchId,
           type: 'increase',
@@ -126,7 +135,7 @@ export async function adjustStock(prevState: any, formData: FormData) {
   // Log adjustment
   await withTransaction<StockAdjustment>(DB_FILES.STOCK_ADJUSTMENTS, (logs) => {
     logs.push({
-      id: `adj_${randomUUID().split('-')[0]}`,
+      id: `adj_${randomUUID()}`,
       itemId,
       branchId,
       type,
@@ -137,6 +146,76 @@ export async function adjustStock(prevState: any, formData: FormData) {
     return logs
   })
   
+  revalidatePath('/inventory')
+  return { success: true }
+}
+
+export async function updateInventoryItem(prevState: any, formData: FormData) {
+  const id = formData.get('id') as string
+  const name = formData.get('name') as string
+  const unit = formData.get('unit') as string
+  const threshold = Number(formData.get('threshold'))
+  let branchId = formData.get('branchId') as string
+
+  if (!id || !name || !unit || threshold < 0 || !branchId) {
+    return { error: 'Invalid input' }
+  }
+
+  try {
+    branchId = await requireBranchAccess(branchId)
+  } catch (e) {
+    return { error: 'Forbidden' }
+  }
+
+  let notFound = false;
+  let alreadyExists = false;
+
+  const success = await withTransaction<InventoryItem>(DB_FILES.INVENTORY, (items) => {
+    const itemIndex = items.findIndex(i => i.id === id)
+    if (itemIndex === -1) {
+      notFound = true;
+      return items;
+    }
+    if (items.some(i => i.isActive !== false && i.name.toLowerCase() === name.toLowerCase() && i.branchId === branchId && i.unit === unit && i.id !== id)) {
+      alreadyExists = true;
+      return items;
+    }
+
+    items[itemIndex] = {
+      ...items[itemIndex],
+      name,
+      unit,
+      threshold,
+      updatedAt: new Date().toISOString()
+    }
+    return items
+  })
+
+  if (notFound) return { error: 'Item not found' }
+  if (alreadyExists) return { error: 'An inventory item with this name and unit already exists in this branch' }
+  if (!success) return { error: 'Transaction failed' }
+
+  revalidatePath('/inventory')
+  return { success: true }
+}
+
+export async function deleteInventoryItem(id: string) {
+  let notFound = false;
+  const success = await withTransaction<InventoryItem>(DB_FILES.INVENTORY, (items) => {
+    const itemIndex = items.findIndex(i => i.id === id)
+    if (itemIndex === -1) {
+      notFound = true;
+      return items;
+    }
+    items[itemIndex].isActive = false;
+    items[itemIndex].deletedAt = new Date().toISOString();
+    items[itemIndex].updatedAt = new Date().toISOString();
+    return items
+  })
+
+  if (notFound) return { error: 'Item not found' }
+  if (!success) return { error: 'Transaction failed' }
+
   revalidatePath('/inventory')
   return { success: true }
 }

@@ -23,11 +23,27 @@ describe('Vendor Actions', () => {
     expect(res).toEqual({ error: 'Invalid input fields' })
   })
 
-  it('addVendor succeeds', async () => {
-    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => { await cb([]); return true })
+  it('addVendor succeeds and generates UUID', async () => {
+    let savedList: any[] = []
+    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => { 
+      savedList = await cb([]); 
+      return true 
+    })
     const fd = { get: (k: string) => k === 'amount' ? '100' : 'test' } as any
     const res = await addVendor({}, fd)
     expect(res).toEqual({ success: true })
+    expect(savedList.length).toBe(1)
+    expect(savedList[0].id).toMatch(/^ven_12345678-1234-1234-1234-123456789012$/)
+  })
+
+  it('addVendor rejects duplicate vendor by name and branch', async () => {
+    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
+      await cb([{ name: 'test', branchId: 'b1', id: 'ven_1' }])
+      return true
+    })
+    const fd = { get: (k: string) => k === 'amount' ? '100' : 'test' } as any
+    const res = await addVendor({}, fd)
+    expect(res).toEqual({ error: 'A vendor with this name already exists in this branch' })
   })
 
   it('addVendor handles transaction failure', async () => {
@@ -43,11 +59,19 @@ describe('Vendor Actions', () => {
     expect(res).toEqual({ error: 'Please fill all required bill fields' })
   })
 
-  it('addVendorBill succeeds with invoiceRef', async () => {
-    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => { await cb([]); return true })
-    const fd = { get: (k: string) => k === 'amount' ? '100' : k === 'isPaid' ? 'on' : 'test' } as any
+  it('addVendorBill succeeds with invoiceRef and checks categoryId', async () => {
+    let savedList: any[] = []
+    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => { 
+      savedList = await cb([]); 
+      return true 
+    })
+    const fd = { get: (k: string) => k === 'amount' ? '100' : k === 'isPaid' ? 'on' : k === 'categoryId' ? 'cat_id' : 'test' } as any
     const res = await addVendorBill({}, fd)
     expect(res).toEqual({ success: true })
+    expect(savedList.length).toBe(1)
+    expect(savedList[0].id).toMatch(/^venexp_12345678-1234-1234-1234-123456789012$/)
+    expect(savedList[0].categoryId).toBe('cat_id')
+    expect(savedList[0].category).toBeUndefined()
   })
 
   it('addVendorBill succeeds without invoiceRef', async () => {

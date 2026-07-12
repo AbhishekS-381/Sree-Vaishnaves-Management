@@ -53,7 +53,7 @@ export async function addStaff(prevState: any, formData: FormData) {
   }
 
   const newStaff: Staff = {
-    id: `st_${randomUUID().split('-')[0]}`,
+    id: `st_${randomUUID()}`,
     name,
     phone,
     branchId,
@@ -70,7 +70,12 @@ export async function addStaff(prevState: any, formData: FormData) {
     endTime
   }
 
+  let alreadyExists = false
   const success = await withTransaction<Staff>(DB_FILES.STAFF, (staffList) => {
+    if (staffList.some(s => s.isActive && !s.deletedAt && s.name.toLowerCase() === name.toLowerCase() && s.phone === phone && s.branchId === branchId)) {
+      alreadyExists = true
+      return staffList
+    }
     if (newStaff.positionId) {
       const existingIndices = staffList
         .filter(s => s.isActive === true && s.positionId === newStaff.positionId)
@@ -88,6 +93,9 @@ export async function addStaff(prevState: any, formData: FormData) {
     return staffList
   })
 
+  if (alreadyExists) {
+    return { error: 'A staff member with this name and phone number already exists in this branch' }
+  }
   if (!success) {
     return { error: 'Failed to save data' }
   }
@@ -127,6 +135,7 @@ export async function updateStaff(prevState: any, formData: FormData) {
 
   let notFound = false
   let forbidden = false
+  let alreadyExists = false
   const success = await withTransaction<Staff>(DB_FILES.STAFF, (staffList) => {
     const index = staffList.findIndex(s => s.id === id)
     if (index === -1) {
@@ -139,6 +148,14 @@ export async function updateStaff(prevState: any, formData: FormData) {
       forbidden = true
       return staffList
     }
+
+    // Check for duplicate name+phone combo in same branch
+    if (staffList.some(s => s.isActive && !s.deletedAt && s.name.toLowerCase() === name.toLowerCase() && s.phone === phone && s.branchId === branchId && s.id !== id)) {
+      alreadyExists = true
+      return staffList
+    }
+    
+    const oldPositionId = staffList[index].positionId;
     
     staffList[index] = {
       ...staffList[index],
@@ -161,7 +178,7 @@ export async function updateStaff(prevState: any, formData: FormData) {
     }
     
     // Update positionIndex if positionId changed
-    if (positionId && staffList[index].positionId !== positionId) {
+    if (positionId && oldPositionId !== positionId) {
       const existingIndices = staffList
         .filter(s => s.isActive === true && s.positionId === positionId && s.id !== id)
         .map(s => s.positionIndex)
@@ -181,6 +198,7 @@ export async function updateStaff(prevState: any, formData: FormData) {
 
   if (notFound) return { error: 'Staff not found' }
   if (forbidden) return { error: 'Forbidden: Cannot edit staff from another branch' }
+  if (alreadyExists) return { error: 'A staff member with this name and phone number already exists in this branch' }
   if (!success) return { error: 'Transaction failed' }
   revalidatePath('/', 'layout')
   return { success: true }

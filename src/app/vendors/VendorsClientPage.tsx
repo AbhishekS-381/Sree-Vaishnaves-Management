@@ -156,12 +156,12 @@ export default function VendorsClientPage({ branches, vendors, expenses, categor
                  </div>
                  <div className="bg-[#131018] p-3 rounded-xl border border-white/5">
                     <span className="text-slate-500 block mb-1">Lifetime Paid</span>
-                    <span className="font-bold text-emerald-400 text-lg">₹{(vendor.totalPaid).toLocaleString()}</span>
+                    <span className="font-bold text-emerald-400 text-lg">₹{(vendor.totalPaid).toLocaleString('en-IN')}</span>
                  </div>
                  {vendor.totalUnpaid > 0 && (
                    <div className="bg-[#131018] p-3 rounded-xl border border-red-500/20 col-span-2">
                       <span className="text-slate-500 block mb-1">Unpaid Balance</span>
-                      <span className="font-bold text-red-500 text-lg">₹{(vendor.totalUnpaid).toLocaleString()}</span>
+                      <span className="font-bold text-red-500 text-lg">₹{(vendor.totalUnpaid).toLocaleString('en-IN')}</span>
                    </div>
                  )}
               </div>
@@ -190,10 +190,10 @@ export default function VendorsClientPage({ branches, vendors, expenses, categor
                     ) : (
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">PAID</span>
                     )}
-                    ₹{Number(ex.amount).toLocaleString()}
+                    ₹{Number(ex.amount).toLocaleString('en-IN')}
                  </div>
                  <div className="text-xs text-slate-400 mt-1 flex items-center gap-2">
-                   <span className="text-[#c084fc] font-medium">{ex.category}</span>
+                   <span className="text-[#c084fc] font-medium">{categories?.find(c => c.id === (ex as any).categoryId)?.name || 'Unknown'}</span>
                    <span>• {ex.date}</span>
                  </div>
                </div>
@@ -309,10 +309,10 @@ export default function VendorsClientPage({ branches, vendors, expenses, categor
 
               <div>
                 <label className="block text-sm font-medium text-slate-400 mb-1">Expense Category</label>
-                <select required name="category" defaultValue={billDraftState.category || billTarget.supplyType} className="w-full bg-[#131018] border border-[#3b3054] rounded-xl px-4 py-2.5 text-white focus:border-[#c084fc] focus:outline-none">
-                    <option value={billTarget.supplyType}>{billTarget.supplyType} (Default)</option>
-                    {categories.map((c: any) => (
-                       <option key={c.id} value={c.name}>{c.name}</option>
+                <select required name="categoryId" defaultValue={billDraftState.categoryId || ''} className="w-full bg-[#131018] border border-[#3b3054] rounded-xl px-4 py-2.5 text-white focus:border-[#c084fc] focus:outline-none">
+                    <option value="">Select Category</option>
+                    {categories?.map((c: any) => (
+                       <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
                 </select>
               </div>

@@ -43,7 +43,7 @@ export default function MenuClientPage({ branches, initialMenu, categories }: { 
     saveDraft('add', data)
   }
 
-  const { search, setSearch, filteredMenu, groupedMenu } = useMenuFilters(initialMenu, selectedBranch)
+  const { search, setSearch, filteredMenu, groupedMenu } = useMenuFilters(initialMenu, selectedBranch, categories)
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -202,9 +202,9 @@ export default function MenuClientPage({ branches, initialMenu, categories }: { 
               
               <div>
                 <label className="block text-sm font-medium text-slate-400 mb-1">Category</label>
-                <select name="category" required defaultValue={addDraftState.category || ''} className="w-full bg-[#131018] border border-[#3b3054] rounded-xl px-4 py-2 text-white focus:border-[#c084fc] focus:outline-none">
+                <select name="categoryId" required defaultValue={addDraftState.categoryId || ''} className="w-full bg-[#131018] border border-[#3b3054] rounded-xl px-4 py-2 text-white focus:border-[#c084fc] focus:outline-none">
                    <option value="">Select Category</option>
-                   {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                   {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
               

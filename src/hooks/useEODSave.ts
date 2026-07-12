@@ -4,7 +4,7 @@ import { saveEODEntry } from '@/app/actions/eod'
 type Expense = {
   id: string
   amount: number
-  category: string
+  categoryId: string
   notes?: string
 }
 
@@ -35,7 +35,7 @@ export function useEODSave(selectedBranch: string, date: string) {
       branchId: selectedBranch,
       date,
       amount: ex.amount,
-      category: ex.category,
+      categoryId: ex.categoryId,
       notes: ex.notes
     }))
 

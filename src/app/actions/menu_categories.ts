@@ -18,15 +18,17 @@ export async function addMenuCategory(prevState: any, formData: FormData) {
   const name = formData.get('name') as string
   if (!name) return { error: 'Name is required' }
 
-  const newItem = {
-    id: `mcat_${randomUUID().split('-')[0]}`,
-    name
-  }
-
-  const success = await withTransaction<MenuCategory>(DB_FILES.MENU_CATEGORIES, (list) => {
-    list.push(newItem)
-    return list
+  let alreadyExists = false;
+  const success = await withTransaction<MenuCategory>(DB_FILES.MENU_CATEGORIES, (cats) => {
+    if (cats.some(c => c.name.toLowerCase() === name.toLowerCase())) {
+      alreadyExists = true;
+      return cats;
+    }
+    cats.push({ id: `mcat_${randomUUID()}`, name })
+    return cats;
   })
+
+  if (alreadyExists) return { error: 'Category name already exists' }
 
   if (!success) return { error: 'Failed to add menu category' }
   revalidatePath('/settings')
@@ -44,18 +46,24 @@ export async function updateMenuCategory(prevState: any, formData: FormData) {
 
   if (!id || !name) return { error: 'Invalid data' }
 
-  let notFound = false
-  const success = await withTransaction<MenuCategory>(DB_FILES.MENU_CATEGORIES, (list) => {
-    const index = list.findIndex(c => c.id === id)
-    if (index === -1) {
-      notFound = true
-      return list
+  let notFound = false;
+  let alreadyExists = false;
+  const success = await withTransaction<MenuCategory>(DB_FILES.MENU_CATEGORIES, (cats) => {
+    const idx = cats.findIndex(c => c.id === id)
+    if (idx === -1) {
+      notFound = true;
+      return cats;
     }
-    list[index].name = name
-    return list
+    if (cats.some(c => c.name.toLowerCase() === name.toLowerCase() && c.id !== id)) {
+      alreadyExists = true;
+      return cats;
+    }
+    cats[idx].name = name;
+    return cats;
   })
 
-  if (notFound) return { error: 'Not found' }
+  if (notFound) return { error: 'Category not found' }
+  if (alreadyExists) return { error: 'Category name already exists' }
   if (!success) return { error: 'Transaction failed' }
   revalidatePath('/settings')
   revalidatePath('/menu')

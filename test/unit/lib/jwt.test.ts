@@ -39,4 +39,13 @@ describe('jwt.ts', () => {
     const result = await verifyToken('invalid.token')
     expect(result).toBeNull()
   })
+
+  it('throws an error if JWT_SECRET is not set', async () => {
+    const originalSecret = process.env.JWT_SECRET
+    delete process.env.JWT_SECRET
+    // We need to re-import or clear require cache for this module, but wait - the function uses process.env inline
+    const { signToken } = await import('@/lib/jwt')
+    await expect(signToken({ userId: 'u1' } as any)).rejects.toThrow('JWT_SECRET environment variable is required')
+    process.env.JWT_SECRET = originalSecret
+  })
 })
