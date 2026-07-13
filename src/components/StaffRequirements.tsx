@@ -1,9 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { deleteRequirement } from "@/app/actions/staff_requirements"
 import { Plus, Pencil, Trash2, UserPlus, Search, Loader2 } from "lucide-react"
 import { RequirementModal } from "./RequirementModal"
+import { PositionsSummaryCards } from "./PositionsSummaryCards"
 
 type Requirement = {
   id: string
@@ -58,6 +59,19 @@ export function StaffRequirements({ requirements, staff, branches, departments, 
   const getBranch = (id: string) => branches.find((b) => b.id === id)?.name || id
   const getSpecialty = (id?: string) => id ? menuCategories.find((c: any) => c.id === id)?.name : null
 
+  // Memoised filtered list — used by both the summary cards and the table
+  const filteredRequirements = useMemo(() => {
+    return requirements.filter(req => {
+      if (filterBranch && req.branchId !== filterBranch) return false
+      if (filterDept && req.departmentId !== filterDept) return false
+      if (searchRole) {
+        const roleName = getRole(req.roleId).toLowerCase()
+        if (!roleName.includes(searchRole.toLowerCase())) return false
+      }
+      return true
+    })
+  }, [requirements, filterBranch, filterDept, searchRole, roles])
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -104,6 +118,9 @@ export function StaffRequirements({ requirements, staff, branches, departments, 
         </select>
       </div>
 
+      {/* Summary Cards — reactive to current filters */}
+      <PositionsSummaryCards requirements={filteredRequirements} staff={staff} />
+
       <div className="relative bg-card rounded-2xl border border-card shadow-lg shadow-black/20 overflow-hidden">
         {isPending && (
           <div className="absolute inset-0 bg-[#131018]/60 backdrop-blur-[2px] z-10 flex items-center justify-center rounded-2xl">
@@ -128,24 +145,8 @@ export function StaffRequirements({ requirements, staff, branches, departments, 
               </tr>
             </thead>
             <tbody className="divide-y divide-[#3b3054]">
-              {requirements.filter(req => {
-                if (filterBranch && req.branchId !== filterBranch) return false
-                if (filterDept && req.departmentId !== filterDept) return false
-                if (searchRole) {
-                  const roleName = getRole(req.roleId).toLowerCase()
-                  if (!roleName.includes(searchRole.toLowerCase())) return false
-                }
-                return true
-              }).length > 0 ? (
-                requirements.filter(req => {
-                  if (filterBranch && req.branchId !== filterBranch) return false
-                  if (filterDept && req.departmentId !== filterDept) return false
-                  if (searchRole) {
-                    const roleName = getRole(req.roleId).toLowerCase()
-                    if (!roleName.includes(searchRole.toLowerCase())) return false
-                  }
-                  return true
-                }).map((req) => {
+              {filteredRequirements.length > 0 ? (
+                filteredRequirements.map((req) => {
                   const assignedStaff = staff.filter((s) => 
                     s.isActive && s.positionId === req.id
                   )
