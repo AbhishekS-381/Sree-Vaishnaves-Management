@@ -1,18 +1,36 @@
 import { useState, useMemo } from 'react'
 
-export function useMenuFilters(initialMenu: any[], selectedBranch: string, categories: any[]) {
+export function useMenuFilters(initialMenu: any[], selectedBranch: string, categories: any[], branchMenuItems: any[], branchCategories: any[]) {
   const [search, setSearch] = useState('')
 
+  const enrichedMenu = useMemo(() => {
+    return initialMenu.map(m => {
+      const mapping = branchMenuItems.find((b: any) => b.menuItemId === m.id && b.branchId === selectedBranch)
+      return {
+        ...m,
+        price: mapping?.price || 0,
+        isAvailable: mapping?.isAvailable || false
+      }
+    })
+  }, [initialMenu, branchMenuItems, selectedBranch])
+
   const filteredMenu = useMemo(() => {
-    return initialMenu.filter(m => {
-      if (m.branchId !== selectedBranch) return false
-      
-      const catName = categories.find(c => c.id === m.categoryId)?.name || 'Unknown'
-      
+    return enrichedMenu.filter(m => {
+      const catName = categories.find((c: any) => c.id === m.categoryId)?.name || 'Unknown'
       if (search && !m.name.toLowerCase().includes(search.toLowerCase()) && !catName.toLowerCase().includes(search.toLowerCase())) return false
       return true
     })
-  }, [initialMenu, search, selectedBranch, categories])
+  }, [enrichedMenu, search, categories])
+
+  const enrichedCategories = useMemo(() => {
+    return categories.map((c: any) => {
+      const mapping = branchCategories.find((b: any) => b.categoryId === c.id && b.branchId === selectedBranch)
+      return {
+        ...c,
+        isAvailable: mapping?.isAvailable || false
+      }
+    })
+  }, [categories, branchCategories, selectedBranch])
 
   const groupedMenu = useMemo(() => {
     return filteredMenu.reduce((acc, curr) => {
@@ -23,5 +41,5 @@ export function useMenuFilters(initialMenu: any[], selectedBranch: string, categ
     }, {} as Record<string, any[]>)
   }, [filteredMenu, categories])
 
-  return { search, setSearch, filteredMenu, groupedMenu }
+  return { search, setSearch, filteredMenu, groupedMenu, enrichedCategories }
 }

@@ -10,7 +10,11 @@ vi.mock('@/lib/db', () => ({
 
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('@/lib/audit', () => ({ logAction: vi.fn() }))
-vi.mock('@/app/actions/auth', () => ({ getSession: vi.fn().mockResolvedValue({ role: 'owner', branchId: 'b1' }), getSessionRole: vi.fn().mockResolvedValue('owner'), requireBranchAccess: vi.fn().mockImplementation(async (b) => b || 'b1') }))
+vi.mock('@/app/actions/auth', () => ({ 
+  getSession: vi.fn().mockResolvedValue({ role: 'owner', branchId: 'b1', isGlobalAdmin: true }), 
+  getSessionRole: vi.fn().mockResolvedValue('owner'), 
+  requireBranchAccess: vi.fn().mockImplementation(async (b) => b || 'b1') 
+}))
 
 describe('menu Actions', () => {
   beforeEach(() => { vi.clearAllMocks() })
@@ -22,6 +26,7 @@ describe('menu Actions', () => {
         if (k === 'isPaid' || k === 'currentState' || k === 'currentlyActive') return 'on'
         if (k === 'username') return 'new_user'
         if (k === 'branchId') return 'b1'
+        if (k === 'name' || k === 'categoryId') return 'test_value'
         return 'test_value'
       },
       getAll: (k: string) => ['test_value'],
@@ -48,27 +53,25 @@ describe('menu Actions', () => {
       expect(res.success).toBe(true)
       expect(savedList.length).toBe(1)
       expect(savedList[0].id).toMatch(/^mn_12345678-1234-1234-1234-123456789012$/)
-      // verify no '.category' string property
       expect(savedList[0].category).toBeUndefined()
     })
 
     it('rejects duplicate menu item', async () => {
       const fd = getValidFormData()
       vi.mocked(db.withTransaction).mockImplementation(async (f, cb) => {
-        // mock existing menu item with same name, categoryId, branchId
-        await cb([{ id: 'mn_old', name: 'test_value', categoryId: 'test_value', branchId: 'b1' }])
+        await cb([{ id: 'mn_old', name: 'test_value', categoryId: 'test_value' }])
         return true
       })
       const res = await (actions as any).addMenuItem({}, fd)
-      expect(res.error).toBe('A menu item with this name already exists in this category and branch')
+      expect(res.error).toBe('A menu item with this name already exists in this category')
     })
 
-    it('handles branch access error', async () => {
-      const { requireBranchAccess } = await import('@/app/actions/auth')
-      vi.mocked(requireBranchAccess).mockRejectedValueOnce(new Error('Forbidden'))
+    it('blocks non-admin from adding menu item', async () => {
+      const { getSession } = await import('@/app/actions/auth')
+      vi.mocked(getSession).mockResolvedValueOnce({ role: 'manager', isGlobalAdmin: false, branchId: 'b1' } as any)
       const fd = getValidFormData()
       const res = await (actions as any).addMenuItem({}, fd)
-      expect(res.error).toBe('Forbidden')
+      expect(res.error).toBe('Forbidden: Admin or Owner access required')
     })
   })
 
@@ -76,40 +79,32 @@ describe('menu Actions', () => {
     it('succeeds with valid id', async () => {
       vi.mocked(db.withTransaction).mockImplementation(async (f, cb) => { await cb([{id: 'test_value'}]); return true })
       vi.mocked(db.readJSON).mockResolvedValue([{id: 'test_value'}])
-      const res = await (actions as any).toggleMenuItemStatus('test_value', true)
+      const res = await (actions as any).toggleMenuItemStatus('b1', 'test_value', true)
     })
 
     it('blocks non-admin from toggling other branch item', async () => {
       const { getSession } = await import('@/app/actions/auth')
       vi.mocked(getSession).mockResolvedValueOnce({ role: 'manager', isGlobalAdmin: false, branchId: 'b1' } as any)
-      vi.mocked(db.withTransaction).mockImplementation(async (f, cb) => {
-        const menu = await cb([{id: 'test_value', branchId: 'b2', isAvailable: true}])
-        expect(menu[0].isAvailable).toBe(true) // Unchanged
-        return true
-      })
-      await (actions as any).toggleMenuItemStatus('test_value', true)
+      const res = await (actions as any).toggleMenuItemStatus('b2', 'test_value', true)
+      expect(res.error).toBe('Forbidden')
     })
   })
 
   describe('deleteMenuItem', () => {
-    it('succeeds with valid id', async () => {
+    it('succeeds with valid id for admin', async () => {
       vi.mocked(db.withTransaction).mockImplementation(async (f, cb) => {
-        const remaining = await cb([{id: 'test_value', branchId: 'b1'}]);
-        expect(remaining.length).toBe(0)
+        await cb([{id: 'test_value', menuItemId: 'test_value'}]);
         return true
       })
       await (actions as any).deleteMenuItem('test_value')
+      expect(vi.mocked(db.withTransaction)).toHaveBeenCalledTimes(2)
     })
 
-    it('blocks non-admin from deleting other branch item', async () => {
+    it('blocks non-admin from deleting item', async () => {
       const { getSession } = await import('@/app/actions/auth')
       vi.mocked(getSession).mockResolvedValueOnce({ role: 'manager', isGlobalAdmin: false, branchId: 'b1' } as any)
-      vi.mocked(db.withTransaction).mockImplementation(async (f, cb) => {
-        const remaining = await cb([{id: 'test_value', branchId: 'b2'}]);
-        expect(remaining.length).toBe(1) // Kept
-        return true
-      })
-      await (actions as any).deleteMenuItem('test_value')
+      const res = await (actions as any).deleteMenuItem('test_value')
+      expect(res.error).toBe('Forbidden: Admin or Owner access required')
     })
   })
 

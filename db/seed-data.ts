@@ -4,6 +4,8 @@ export const seedData: Record<string, string> = {};
 
 seedData['advances.json'] = `[]`;
 seedData['attendance.json'] = `[]`;
+seedData['branch_categories.json'] = `[]`;
+seedData['branch_menu_items.json'] = `[]`;
 seedData['branches.json'] = `[{"id":"br_6bd135a5-8c68-4a94-91f7-cdb1d7d02636","name":"Sree Vaishnaves","address":"Rajiv Gandhi Road","phone":"9080441018","status":"operational"},{"id":"br_a5e95425-4c07-42c2-b7b5-22dc9a4563bf","name":"Vaishnaves Classic","address":"Talap","phone":"555-0101","status":"maintenance","internalStartTime":"05:00","internalEndTime":"23:00","customerStartTime":"06:00","customerEndTime":"22:00"}]`;
 seedData['categories.json'] = `[{"id":"cat_2d4f2f53-27e6-42fc-a4c3-b0fc6cfcebe2","name":"Maintenance","color":"#f87171"},{"id":"cat_bb7621c5-bf43-4a18-8f83-e18e6c7d3cf2","name":"Raw materials","color":"#4ade80"},{"id":"cat_a21094ce-7db6-4443-bf6b-67e42d76378e","name":"Packaging","color":"#fbbf24"},{"id":"cat_1d803d27-775e-49b8-a764-500e5de83669","name":"Gas / fuel","color":"#60a5fa"},{"id":"cat_0f055376-79ba-47f9-8131-b0439ef2a202","name":"Rent","color":"#c084fc"},{"id":"cat_e3abfb6c-bb9e-4e67-83eb-598dcd37d3de","name":"Electricity","color":"#fcd34d"}]`;
 seedData['config.json'] = `[{"id":"global","attendance":false,"payroll":false,"vendors":false,"inventory":false,"menu":false,"reports":false}]`;

@@ -9,6 +9,13 @@ type MenuCategory = {
   name: string
 }
 
+export type BranchMenuCategory = {
+  id: string
+  branchId: string
+  categoryId: string
+  isAvailable: boolean
+}
+
 import { getSession } from '@/app/actions/auth';
 
 export async function addMenuCategory(prevState: any, formData: FormData) {
@@ -79,9 +86,36 @@ export async function deleteMenuCategory(id: string) {
     return list.filter(c => c.id !== id)
   })
 
+  // Clean up branch mapping
+  await withTransaction<BranchMenuCategory>(DB_FILES.BRANCH_CATEGORIES, (cats) => {
+    return cats.filter(c => c.categoryId !== id)
+  })
+
   if (!success) return { error: 'Failed to delete menu category' }
-    revalidatePath('/settings')
-    revalidatePath('/menu')
-    revalidatePath('/staff')
-    return { success: true }
+  revalidatePath('/settings')
+  revalidatePath('/menu')
+  revalidatePath('/staff')
+  return { success: true }
+}
+
+export async function toggleBranchCategory(branchId: string, categoryId: string, currentState: boolean) {
+  const session = await getSession()
+  if (!session) return { error: 'Unauthorized' }
+  if (!session.isGlobalAdmin && branchId !== session.branchId) return { error: 'Forbidden' };
+
+  await withTransaction<BranchMenuCategory>(DB_FILES.BRANCH_CATEGORIES, (cats) => {
+    const cat = cats.find(c => c.branchId === branchId && c.categoryId === categoryId)
+    if (cat) {
+      cat.isAvailable = !currentState
+    } else {
+      cats.push({
+        id: `bcat_${randomUUID()}`,
+        branchId,
+        categoryId,
+        isAvailable: !currentState
+      })
+    }
+    return cats
+  })
+  revalidatePath('/menu')
 }

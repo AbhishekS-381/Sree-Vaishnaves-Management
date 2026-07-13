@@ -102,11 +102,16 @@ describe('Data Pages RBAC Filtering', () => {
         const result = await component() as any
         const data = result.props[dataProp]
         
-        // Only items with branchId === 'b1'
-        // EXCEPT branches page filters by branchId, which might be `b.id === branchId`. 
-        // Let's check the result length. It should be 1.
-        expect(data.length).toBe(1)
-        expect(data[0].branchId === 'b1' || data[0].id === 'b1').toBe(true)
+        if (name === 'MenuPage') {
+          // Menu items are global, so they aren't filtered by branch
+          expect(data.length).toBe(2)
+        } else {
+          // Only items with branchId === 'b1'
+          // EXCEPT branches page filters by branchId, which might be `b.id === branchId`. 
+          // Let's check the result length. It should be 1.
+          expect(data.length).toBe(1)
+          expect(data[0].branchId === 'b1' || data[0].id === 'b1').toBe(true)
+        }
       })
     })
   })
