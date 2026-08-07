@@ -7,6 +7,8 @@ import { randomUUID } from 'crypto'
 type MenuCategory = {
   id: string
   name: string
+  sortOrder?: number
+  isActive?: boolean
 }
 
 export type BranchMenuCategory = {
@@ -23,15 +25,16 @@ export async function addMenuCategory(prevState: any, formData: FormData) {
   if (!session?.isGlobalAdmin) return { error: 'Forbidden: Admin or Owner access required' };
 
   const name = formData.get('name') as string
+  const sortOrder = Number(formData.get('sortOrder')) || Date.now()
   if (!name) return { error: 'Name is required' }
 
   let alreadyExists = false;
   const success = await withTransaction<MenuCategory>(DB_FILES.MENU_CATEGORIES, (cats) => {
-    if (cats.some(c => c.name.toLowerCase() === name.toLowerCase())) {
+    if (cats.some(c => c.name.toLowerCase() === name.toLowerCase() && c.isActive !== false)) {
       alreadyExists = true;
       return cats;
     }
-    cats.push({ id: `mcat_${randomUUID()}`, name })
+    cats.push({ id: `mcat_${randomUUID()}`, name, sortOrder, isActive: true })
     return cats;
   })
 
@@ -50,6 +53,7 @@ export async function updateMenuCategory(prevState: any, formData: FormData) {
 
   const id = formData.get('id') as string
   const name = formData.get('name') as string
+  const sortOrderStr = formData.get('sortOrder') as string
 
   if (!id || !name) return { error: 'Invalid data' }
 
@@ -61,11 +65,14 @@ export async function updateMenuCategory(prevState: any, formData: FormData) {
       notFound = true;
       return cats;
     }
-    if (cats.some(c => c.name.toLowerCase() === name.toLowerCase() && c.id !== id)) {
+    if (cats.some(c => c.name.toLowerCase() === name.toLowerCase() && c.id !== id && c.isActive !== false)) {
       alreadyExists = true;
       return cats;
     }
     cats[idx].name = name;
+    if (sortOrderStr) {
+      cats[idx].sortOrder = Number(sortOrderStr);
+    }
     return cats;
   })
 
@@ -83,12 +90,11 @@ export async function deleteMenuCategory(id: string) {
   if (!session?.isGlobalAdmin) return { error: 'Forbidden: Admin or Owner access required' };
 
   const success = await withTransaction<MenuCategory>(DB_FILES.MENU_CATEGORIES, (list) => {
-    return list.filter(c => c.id !== id)
-  })
-
-  // Clean up branch mapping
-  await withTransaction<BranchMenuCategory>(DB_FILES.BRANCH_CATEGORIES, (cats) => {
-    return cats.filter(c => c.categoryId !== id)
+    const cat = list.find(c => c.id === id)
+    if (cat) {
+      cat.isActive = false
+    }
+    return list
   })
 
   if (!success) return { error: 'Failed to delete menu category' }
@@ -98,7 +104,7 @@ export async function deleteMenuCategory(id: string) {
   return { success: true }
 }
 
-export async function toggleBranchCategory(branchId: string, categoryId: string, currentState: boolean) {
+export async function setBranchCategoryAvailability(branchId: string, categoryId: string, isAvailable: boolean) {
   const session = await getSession()
   if (!session) return { error: 'Unauthorized' }
   if (!session.isGlobalAdmin && branchId !== session.branchId) return { error: 'Forbidden' };
@@ -106,13 +112,13 @@ export async function toggleBranchCategory(branchId: string, categoryId: string,
   await withTransaction<BranchMenuCategory>(DB_FILES.BRANCH_CATEGORIES, (cats) => {
     const cat = cats.find(c => c.branchId === branchId && c.categoryId === categoryId)
     if (cat) {
-      cat.isAvailable = !currentState
+      cat.isAvailable = isAvailable
     } else {
       cats.push({
         id: `bcat_${randomUUID()}`,
         branchId,
         categoryId,
-        isAvailable: !currentState
+        isAvailable
       })
     }
     return cats

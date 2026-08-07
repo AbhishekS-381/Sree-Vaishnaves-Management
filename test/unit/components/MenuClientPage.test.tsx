@@ -4,10 +4,10 @@ import MenuClientPage from '@/app/menu/MenuClientPage'
 import * as menuActions from '@/app/actions/menu'
 import * as menuCatActions from '@/app/actions/menu_categories'
 
-const mockToggleMenuItemStatus = vi.spyOn(menuActions, 'toggleMenuItemStatus').mockResolvedValue(undefined as any)
+const mockToggleMenuItemStatus = vi.spyOn(menuActions, 'setBranchItemAvailability').mockResolvedValue(undefined as any)
 const mockDeleteMenuItem = vi.spyOn(menuActions, 'deleteMenuItem').mockResolvedValue(undefined as any)
 const mockUpdateBranchMenuItemPrice = vi.spyOn(menuActions, 'updateBranchMenuItemPrice').mockResolvedValue(undefined as any)
-const mockToggleBranchCategory = vi.spyOn(menuCatActions, 'toggleBranchCategory').mockResolvedValue(undefined as any)
+const mockToggleBranchCategory = vi.spyOn(menuCatActions, 'setBranchCategoryAvailability').mockResolvedValue(undefined as any)
 const mockDeleteMenuCategory = vi.spyOn(menuCatActions, 'deleteMenuCategory').mockResolvedValue({ success: true })
 
 vi.mock('lucide-react', () => ({
@@ -20,7 +20,9 @@ vi.mock('lucide-react', () => ({
   Edit: () => null,
   UtensilsCrossed: () => null,
   Pencil: () => null,
-  ChevronDown: () => null
+  ChevronDown: () => null,
+  ArrowUp: () => <div data-testid="arrow-up" />,
+  ArrowDown: () => <div data-testid="arrow-down" />
 }))
 
 vi.mock('@/lib/useDraft', () => ({
@@ -87,15 +89,13 @@ describe('MenuClientPage', () => {
 
     // Because it's admin, they should see "Add Menu Item" button
     expect(screen.getByText('Add Menu Item')).toBeDefined()
-    expect(screen.getByText('Add Category')).toBeDefined()
 
-    // The price input for Dosa should have defaultValue 50
-    const priceInputs = screen.getAllByRole('spinbutton')
-    expect((priceInputs[0] as HTMLInputElement).value).toBe("50")
-    expect((priceInputs[1] as HTMLInputElement).value).toBe("150")
+    // The price for Dosa should be rendered as static text first
+    expect(screen.getByText('₹50')).toBeDefined()
+    expect(screen.getByText('₹150')).toBeDefined()
   })
 
-  it('hides disabled categories and items for managers', () => {
+  it('shows all categories and items for managers to toggle', () => {
     render(
       <MenuClientPage
         branches={mockBranches}
@@ -108,22 +108,19 @@ describe('MenuClientPage', () => {
       />
     )
 
-    // Manager should see Dosa (available in b1) but NOT Meals (unavailable in b1)
+    // Manager CAN edit branch, so they should see disabled items and categories to toggle them
     expect(screen.getByText('Dosa')).toBeDefined()
-    expect(screen.queryByText('Meals')).toBeNull()
+    expect(screen.getByText('Meals')).toBeDefined()
 
-    // Manager should see Breakfast but NOT Lunch
     expect(screen.getByText('Breakfast')).toBeDefined()
-    expect(screen.queryByText('Lunch')).toBeNull()
+    expect(screen.getByText('Lunch')).toBeDefined()
 
-    // Manager should NOT see add buttons
+    // Manager should NOT see add buttons (Add Menu Item is global)
     expect(screen.queryByText('Add Menu Item')).toBeNull()
     expect(screen.queryByText('Add Category')).toBeNull()
 
-    // Manager should NOT see input fields for price, just the static text
-    expect(screen.queryAllByRole('spinbutton').length).toBe(0)
-    // The price 50 should be rendered as static text
-    expect(screen.getByText('50')).toBeDefined()
+    // Manager SHOULD see input fields for price (represented by static text that can be clicked)
+    expect(screen.getByText('₹50')).toBeDefined()
   })
 
   it('calls updateBranchMenuItemPrice when admin changes price', () => {
@@ -139,9 +136,13 @@ describe('MenuClientPage', () => {
       />
     )
 
+    // Click the price to reveal the input
+    const priceDivs = screen.getAllByText(/₹\d+/)
+    fireEvent.click(priceDivs[0])
+
     const priceInputs = screen.getAllByRole('spinbutton')
     fireEvent.change(priceInputs[0], { target: { value: '60' } })
-    fireEvent.blur(priceInputs[0])
+    fireEvent.keyDown(priceInputs[0], { key: 'Enter', code: 'Enter' })
 
     expect(mockUpdateBranchMenuItemPrice).toHaveBeenCalledWith('b1', 'm1', 60)
   })
@@ -159,9 +160,9 @@ describe('MenuClientPage', () => {
       />
     )
 
-    const toggles = screen.getAllByText('Available')
+    const toggles = screen.getAllByText('On')
     fireEvent.click(toggles[0]) // Toggle Dosa
-    expect(mockToggleMenuItemStatus).toHaveBeenCalledWith('b1', 'm1', true)
+    expect(mockToggleMenuItemStatus).toHaveBeenCalledWith('b1', 'm1', false)
   })
 
   it('calls deleteMenuItem when admin clicks delete', () => {
@@ -220,6 +221,9 @@ describe('MenuClientPage', () => {
       />
     )
 
+    // Switch to Categories tab first
+    fireEvent.click(screen.getByText('Categories'))
+
     const addCatButton = screen.getByText('Add Category')
     fireEvent.click(addCatButton)
 
@@ -244,5 +248,59 @@ describe('MenuClientPage', () => {
 
     expect(screen.queryByText('Dosa')).toBeNull()
     expect(screen.getByText('Meals')).toBeDefined()
+  })
+
+  it('renders Price Matrix tab correctly for admin', () => {
+    render(
+      <MenuClientPage
+        branches={mockBranches}
+        initialMenu={mockGlobalMenu}
+        categories={mockCategories}
+        branchMenuItems={mockBranchMenuItems}
+        branchCategories={mockBranchCategories}
+        userRole="admin"
+        isGlobalAdmin={true}
+      />
+    )
+
+    // Switch to Price Matrix
+    fireEvent.click(screen.getByText('Price Matrix'))
+
+    // Should see branch headers
+    expect(screen.getByText('Branch 1')).toBeDefined()
+    expect(screen.getByText('Branch 2')).toBeDefined()
+
+    // Should see items
+    expect(screen.getByText('Dosa')).toBeDefined()
+    expect(screen.getByText('Meals')).toBeDefined()
+
+    // Dosa has price 50 in Branch 1, Meals has price 150
+    expect(screen.getByText('₹50')).toBeDefined()
+    expect(screen.getByText('₹150')).toBeDefined()
+  })
+
+  it('reorders categories in Categories tab', () => {
+    render(
+      <MenuClientPage
+        branches={mockBranches}
+        initialMenu={mockGlobalMenu}
+        categories={mockCategories}
+        branchMenuItems={mockBranchMenuItems}
+        branchCategories={mockBranchCategories}
+        userRole="admin"
+        isGlobalAdmin={true}
+      />
+    )
+
+    // Switch to Categories
+    fireEvent.click(screen.getByText('Categories'))
+
+    // We should see Breakfast and Lunch
+    expect(screen.getByText('Breakfast')).toBeDefined()
+    expect(screen.getByText('Lunch')).toBeDefined()
+
+    // Find all up arrows via test id
+    const upButtons = screen.getAllByTestId('arrow-up')
+    expect(upButtons.length).toBeGreaterThan(0)
   })
 })

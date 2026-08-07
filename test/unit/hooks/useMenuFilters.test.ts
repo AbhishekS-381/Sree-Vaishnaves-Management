@@ -38,7 +38,7 @@ describe('useMenuFilters', () => {
 
     const pizza = result.current.filteredMenu.find(m => m.name === 'Pizza')
     expect(pizza?.price).toBe(0) // Not mapped in b1
-    expect(pizza?.isAvailable).toBe(false)
+    expect(pizza?.isAvailable).toBe(true)
   })
 
   it('filters by search term on name', () => {

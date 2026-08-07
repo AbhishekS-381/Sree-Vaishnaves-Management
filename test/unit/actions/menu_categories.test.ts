@@ -87,4 +87,28 @@ describe('Menu Categories Actions', () => {
     const res = await deleteMenuCategory('mc1')
     expect(res).toEqual({ error: 'Failed to delete menu category' })
   })
+
+  describe('setBranchCategoryAvailability', () => {
+    it('succeeds for admin across branches', async () => {
+      vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => { await cb([]); return true })
+      const { setBranchCategoryAvailability } = await import('@/app/actions/menu_categories')
+      const res = await setBranchCategoryAvailability('b2', 'cat1', false)
+      expect(res).toBeUndefined() // success returns undefined
+    })
+
+    it('succeeds for manager in own branch', async () => {
+      vi.mocked(auth.getSession).mockResolvedValueOnce({ role: 'manager', isGlobalAdmin: false, branchId: 'b1' } as any)
+      vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => { await cb([]); return true })
+      const { setBranchCategoryAvailability } = await import('@/app/actions/menu_categories')
+      const res = await setBranchCategoryAvailability('b1', 'cat1', false)
+      expect(res).toBeUndefined()
+    })
+
+    it('blocks manager from modifying other branch', async () => {
+      vi.mocked(auth.getSession).mockResolvedValueOnce({ role: 'manager', isGlobalAdmin: false, branchId: 'b1' } as any)
+      const { setBranchCategoryAvailability } = await import('@/app/actions/menu_categories')
+      const res = await setBranchCategoryAvailability('b2', 'cat1', false)
+      expect(res).toEqual({ error: 'Forbidden' })
+    })
+  })
 })
