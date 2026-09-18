@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from 'react'
-import { Store, Calendar, TrendingUp, TrendingDown, Download, IndianRupee, PieChart, BarChart3 } from 'lucide-react'
+import { Store, Calendar, TrendingUp, TrendingDown, Download, IndianRupee, PieChart, BarChart3, ReceiptText, Activity } from 'lucide-react'
 
 export default function ReportsClientPage({ branches, eodData, expensesData, payrollData, attendanceData, staffData, categories = [] }: { branches: any[], eodData: any[], expensesData: any[], payrollData: any[], attendanceData: any[], staffData: any[], categories?: any[] }) {
   const [selectedBranch, setSelectedBranch] = useState(branches[0]?.id || '')
@@ -96,6 +96,42 @@ export default function ReportsClientPage({ branches, eodData, expensesData, pay
     if (a.status === 'absent') absentCount++
   })
   const absenteeismRate = filteredAttendance.length > 0 ? ((absentCount / filteredAttendance.length) * 100).toFixed(1) : '0.0'
+
+  // Billing compliance — days where billing gap < ₹500
+  const daysWithBillingData = filteredEOD.filter(e => e.billing?.totalBillAmount > 0).length
+  const daysWithGoodReconciliation = filteredEOD.filter(e => {
+    if (!e.billing?.totalBillAmount) return false
+    const collected = (e.income?.dineInCash || 0) + (e.income?.dineInUpi || 0) +
+                      (e.income?.takeawayCash || 0) + (e.income?.takeawayUpi || 0)
+    const billed = e.billing.totalBillAmount - (e.billing.voids || 0)
+    return Math.abs(collected - billed) <= 500
+  }).length
+  const billingComplianceScore = daysWithBillingData > 0
+    ? Math.round((daysWithGoodReconciliation / daysWithBillingData) * 100)
+    : null
+
+  // GST totals
+  const totalGSTCollected = filteredEOD.reduce((sum, e) => sum + (e.billing?.gstCollected || 0), 0)
+
+  // Footfall
+  const totalCovers = filteredEOD.reduce((sum, e) => sum + (e.billing?.dineInCovers || 0), 0)
+  const totalTakeawayOrders = filteredEOD.reduce((sum, e) => sum + (e.billing?.takeawayOrders || 0), 0)
+  const avgCoverValue = totalCovers > 0 ? Math.round(totalIncome / totalCovers) : null
+
+  // Discount/void totals
+  const totalDiscounts = filteredEOD.reduce((sum, e) => sum + (e.billing?.discounts || 0), 0)
+  const totalVoids = filteredEOD.reduce((sum, e) => sum + (e.billing?.voids || 0), 0)
+
+  // Day type breakdown
+  const dayTypeCounts: Record<string, { count: number; revenue: number }> = {}
+  filteredEOD.forEach(e => {
+    const tag = e.ops?.unusualEvent || 'Normal'
+    if (!dayTypeCounts[tag]) dayTypeCounts[tag] = { count: 0, revenue: 0 }
+    dayTypeCounts[tag].count++
+    const rev = (e.income?.dineInCash || 0) + (e.income?.dineInUpi || 0) +
+                (e.income?.takeawayCash || 0) + (e.income?.takeawayUpi || 0)
+    dayTypeCounts[tag].revenue += rev
+  })
 
   // Grand total P&L
   // In real phase 3, Salary would be an expense. We subtract it if totalSalaryPayable should be deducted from monthly profit.
@@ -315,6 +351,77 @@ export default function ReportsClientPage({ branches, eodData, expensesData, pay
            </div>
          </div>
       </div>
+
+      {/* Billing Intelligence — only show if data exists */}
+      {(billingComplianceScore !== null || totalGSTCollected > 0 || totalCovers > 0) && (
+        <div className="bg-card border border-white/5 rounded-2xl overflow-hidden shadow-sm">
+          <div className="bg-[#252033] px-6 py-4 border-b border-[#3b3054] flex items-center gap-2">
+            <ReceiptText size={18} className="text-blue-400"/>
+            <h2 className="text-lg font-bold text-slate-100">Billing Intelligence</h2>
+          </div>
+          <div className="p-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+            {billingComplianceScore !== null && (
+              <div className="bg-[#131018] p-4 rounded-xl border border-white/5">
+                <div className="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Billing Compliance</div>
+                <div className={`text-3xl font-black ${billingComplianceScore >= 80 ? 'text-emerald-400' : billingComplianceScore >= 60 ? 'text-amber-400' : 'text-red-400'}`}>
+                  {billingComplianceScore}%
+                </div>
+                <div className="text-xs text-slate-500 mt-1">{daysWithGoodReconciliation}/{daysWithBillingData} days within ₹500 gap</div>
+              </div>
+            )}
+            {totalGSTCollected > 0 && (
+              <div className="bg-[#131018] p-4 rounded-xl border border-white/5">
+                <div className="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">GST Collected</div>
+                <div className="text-3xl font-black text-violet-400">₹{totalGSTCollected.toLocaleString('en-IN')}</div>
+                <div className="text-xs text-slate-500 mt-1">For the period</div>
+              </div>
+            )}
+            {avgCoverValue !== null && (
+              <div className="bg-[#131018] p-4 rounded-xl border border-white/5">
+                <div className="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Avg Cover Value</div>
+                <div className="text-3xl font-black text-blue-400">₹{avgCoverValue.toLocaleString('en-IN')}</div>
+                <div className="text-xs text-slate-500 mt-1">{totalCovers.toLocaleString()} covers total</div>
+              </div>
+            )}
+            {totalDiscounts > 0 && (
+              <div className="bg-[#131018] p-4 rounded-xl border border-white/5">
+                <div className="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Discounts Given</div>
+                <div className="text-3xl font-black text-amber-400">₹{totalDiscounts.toLocaleString('en-IN')}</div>
+                <div className="text-xs text-slate-500 mt-1">Voids: ₹{totalVoids.toLocaleString('en-IN')}</div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Day Type Revenue Analysis — only show if any ops data exists */}
+      {Object.keys(dayTypeCounts).length > 1 && (
+        <div className="bg-card border border-white/5 rounded-2xl overflow-hidden shadow-sm">
+          <div className="bg-[#252033] px-6 py-4 border-b border-[#3b3054] flex items-center gap-2">
+            <Activity size={18} className="text-amber-400"/>
+            <h2 className="text-lg font-bold text-slate-100">Revenue by Day Type</h2>
+          </div>
+          <div className="p-6">
+            <div className="space-y-3">
+              {Object.entries(dayTypeCounts)
+                .sort((a, b) => b[1].revenue / b[1].count - a[1].revenue / a[1].count)
+                .map(([tag, data]) => (
+                <div key={tag} className="flex items-center justify-between border-b border-white/5 pb-3 last:border-0 last:pb-0">
+                  <div>
+                    <span className="text-sm font-semibold text-slate-300">{tag}</span>
+                    <span className="text-xs text-slate-500 ml-2">{data.count} day{data.count !== 1 ? 's' : ''}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="block font-bold text-white">₹{Math.round(data.revenue / data.count).toLocaleString('en-IN')}</span>
+                    <span className="text-xs text-slate-500">avg/day</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
 
     </div>
   )

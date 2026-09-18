@@ -5,19 +5,24 @@ import { redirect } from 'next/navigation'
 
 export default async function EODPage() {
   const session = await getSession();
-  if (session?.role === 'readonly') {
-    redirect('/')
-  }
+  if (session?.role === 'readonly') redirect('/')
+
   let branches = await readJSON<any>(DB_FILES.BRANCHES)
   const categories = await readJSON<any>(DB_FILES.CATEGORIES).catch(() => [])
+
+  // NEW: pass attendance data so client can auto-fill staffOnDuty
+  const attendance = await readJSON<any>(DB_FILES.ATTENDANCE).catch(() => [])
 
   if (!session?.isGlobalAdmin) {
     branches = branches.filter((b: any) => b.id === session?.branchId)
   }
-  
   branches = branches.filter((b: any) => b.isActive !== false)
 
   return (
-    <EODClientPage branches={branches} categories={categories} />
+    <EODClientPage
+      branches={branches}
+      categories={categories}
+      attendance={attendance}   // NEW prop
+    />
   )
 }

@@ -39,13 +39,13 @@ describe('EOD Actions', () => {
   })
 
   it('saveEODEntry returns error if locked', async () => {
-    vi.spyOn(auth, 'getSession').mockResolvedValueOnce({ userId: 'test-user', role: 'owner', isGlobalOwner: false, branchId: 'b1' } as any)
+    vi.spyOn(auth, 'getSession').mockResolvedValueOnce({ userId: 'test-user', role: 'manager', isGlobalAdmin: false, isGlobalOwner: false, branchId: 'b1' } as any)
     vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
       await cb([{ date: '2023-10-01', branchId: 'b1', status: 'locked' }])
       return true
     })
     const res = await saveEODEntry(
-      { date: '2023-10-01', branchId: 'b1', income: { dineInCash: 0, dineInUpi: 0, takeawayCash: 0, takeawayUpi: 0 }, openingFloat: 0, actualClosingFloat: 0, notes: '' },
+      { date: '2023-10-01', branchId: 'b1', income: { dineInCash: 100, dineInUpi: 0, takeawayCash: 0, takeawayUpi: 0 }, openingFloat: 0, actualClosingFloat: 0, notes: '' },
       []
     )
     expect(res).toEqual({ error: 'EOD for this date is already locked.' })
@@ -80,9 +80,37 @@ describe('EOD Actions', () => {
   it('saveEODEntry handles transaction failure', async () => {
     vi.mocked(db.withTransaction).mockResolvedValue(false)
     const res = await saveEODEntry(
-      { date: '2023-10-01', branchId: 'b1', income: { dineInCash: 0, dineInUpi: 0, takeawayCash: 0, takeawayUpi: 0 }, openingFloat: 0, actualClosingFloat: 0, notes: '' },
+      { date: '2023-10-01', branchId: 'b1', income: { dineInCash: 100, dineInUpi: 0, takeawayCash: 0, takeawayUpi: 0 }, openingFloat: 0, actualClosingFloat: 0, notes: '' },
       []
     )
     expect(res).toEqual({ error: 'Transaction failed' })
+  })
+
+  it('saveEODEntry returns error if total income is 0 and zeroRevenueConfirmed is false', async () => {
+    const res = await saveEODEntry(
+      { date: '2023-10-01', branchId: 'b1', income: { dineInCash: 0, dineInUpi: 0, takeawayCash: 0, takeawayUpi: 0 }, openingFloat: 0, actualClosingFloat: 0, notes: '', ops: { staffOnDuty: 0, powerCutHours: 0, unusualEvent: '', kitchenIssue: false, zeroRevenueConfirmed: false } },
+      []
+    )
+    expect(res).toEqual({ error: 'ZERO_REVENUE_UNCONFIRMED' })
+  })
+
+  it('saveEODEntry succeeds if total income is 0 and zeroRevenueConfirmed is true', async () => {
+    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
+      await cb([])
+      return true
+    })
+    const res = await saveEODEntry(
+      { date: '2023-10-01', branchId: 'b1', income: { dineInCash: 0, dineInUpi: 0, takeawayCash: 0, takeawayUpi: 0 }, openingFloat: 0, actualClosingFloat: 0, notes: '', ops: { staffOnDuty: 0, powerCutHours: 0, unusualEvent: '', kitchenIssue: false, zeroRevenueConfirmed: true } },
+      []
+    )
+    expect(res).toEqual({ success: true })
+  })
+
+  it('saveEODEntry returns error if negative billing amount provided', async () => {
+    const res = await saveEODEntry(
+      { date: '2023-10-01', branchId: 'b1', income: { dineInCash: 100, dineInUpi: 0, takeawayCash: 0, takeawayUpi: 0 }, openingFloat: 0, actualClosingFloat: 0, notes: '', billing: { totalBillAmount: -100, billCount: 0, dineInCovers: 0, takeawayOrders: 0, cashCollectedAsBilled: 0, upiCollectedAsBilled: 0, voids: 0, discounts: 0, gstCollected: 0 } },
+      []
+    )
+    expect(res).toEqual({ error: 'Too small: expected number to be >=0' })
   })
 })

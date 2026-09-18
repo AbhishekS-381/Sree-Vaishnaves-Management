@@ -33,9 +33,27 @@ export type EODEntry = {
   openingFloat?: number
   actualClosingFloat?: number
   notes: string
-  status: 'draft' | 'locked'
+  status: 'draft' | 'submitted' | 'locked'
   createdAt: string
   updatedAt: string
+  billing?: {
+    totalBillAmount: number
+    billCount: number
+    dineInCovers: number
+    takeawayOrders: number
+    cashCollectedAsBilled: number
+    upiCollectedAsBilled: number
+    voids: number
+    discounts: number
+    gstCollected: number
+  }
+  ops?: {
+    staffOnDuty: number
+    powerCutHours: number
+    unusualEvent: string
+    kitchenIssue: boolean
+    zeroRevenueConfirmed: boolean
+  }
 }
 
 import { z } from 'zod'
@@ -50,14 +68,43 @@ export async function saveEODEntry(
     takeawayCash: z.number().int().min(0),
     takeawayUpi: z.number().int().min(0),
   });
+  
+  const billingSchema = z.object({
+    totalBillAmount: z.number().int().min(0),
+    billCount: z.number().int().min(0),
+    dineInCovers: z.number().int().min(0),
+    takeawayOrders: z.number().int().min(0),
+    cashCollectedAsBilled: z.number().int().min(0),
+    upiCollectedAsBilled: z.number().int().min(0),
+    voids: z.number().int().min(0),
+    discounts: z.number().int().min(0),
+    gstCollected: z.number().int().min(0),
+  }).optional()
+
+  const opsSchema = z.object({
+    staffOnDuty: z.number().int().min(0),
+    powerCutHours: z.number().min(0).max(24),
+    unusualEvent: z.string().max(100),
+    kitchenIssue: z.boolean(),
+    zeroRevenueConfirmed: z.boolean(),
+  }).optional()
+
   const eodSchema = z.object({
     branchId: z.string().min(1),
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     income: incomeSchema,
     notes: z.string().max(2000).optional(),
+    billing: billingSchema,
+    ops: opsSchema,
   });
   const parsed = eodSchema.safeParse(entryData);
   if (!parsed.success) return { error: parsed.error.issues[0].message };
+
+  const { income, ops } = parsed.data
+  const totalIncome = income.dineInCash + income.dineInUpi + income.takeawayCash + income.takeawayUpi
+  if (totalIncome === 0 && !ops?.zeroRevenueConfirmed) {
+    return { error: 'ZERO_REVENUE_UNCONFIRMED' }
+  }
 
   try {
     entryData.branchId = await requireBranchAccess(entryData.branchId);
@@ -95,6 +142,8 @@ export async function saveEODEntry(
         income: entryData.income,
         openingFloat: entryData.openingFloat,
         actualClosingFloat: entryData.actualClosingFloat,
+        billing: entryData.billing ?? undefined,
+        ops: entryData.ops ?? undefined,
         notes: entryData.notes,
         updatedAt: now
       }
@@ -106,8 +155,10 @@ export async function saveEODEntry(
         income: entryData.income,
         openingFloat: entryData.openingFloat,
         actualClosingFloat: entryData.actualClosingFloat,
+        billing: entryData.billing ?? undefined,
+        ops: entryData.ops ?? undefined,
         notes: entryData.notes,
-        status: 'draft',
+        status: 'submitted',
         createdAt: now,
         updatedAt: now
       })

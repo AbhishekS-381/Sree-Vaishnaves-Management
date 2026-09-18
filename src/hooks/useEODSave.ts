@@ -15,20 +15,51 @@ type Income = {
   takeawayUpi: number
 }
 
+type Billing = {
+  totalBillAmount: number
+  billCount: number
+  dineInCovers: number
+  takeawayOrders: number
+  cashCollectedAsBilled: number
+  upiCollectedAsBilled: number
+  voids: number
+  discounts: number
+  gstCollected: number
+} | null
+
+type Ops = {
+  staffOnDuty: number
+  powerCutHours: number
+  unusualEvent: string
+  kitchenIssue: boolean
+  zeroRevenueConfirmed: boolean
+} | null
+
 export function useEODSave(selectedBranch: string, date: string) {
   const [isSaving, setIsSaving] = useState(false)
 
-  const handleSave = async (income: Income, expenses: Expense[], notes: string, openingFloat: number | '', actualClosingFloat: number | '') => {
+  const handleSave = async (
+    income: Income,
+    expenses: Expense[],
+    notes: string,
+    openingFloat: number | '',
+    actualClosingFloat: number | '',
+    billing: Billing,
+    ops: Ops
+  ) => {
     if (!selectedBranch || !date) return { error: 'Branch and Date are required' }
 
     setIsSaving(true)
+
     const entryData = {
       branchId: selectedBranch,
       date,
       income,
       openingFloat: openingFloat === '' ? undefined : Number(openingFloat),
       actualClosingFloat: actualClosingFloat === '' ? undefined : Number(actualClosingFloat),
-      notes
+      notes,
+      billing: billing ?? undefined,
+      ops: ops ?? undefined,
     }
 
     const expensesOut = expenses.map(ex => ({
@@ -40,19 +71,13 @@ export function useEODSave(selectedBranch: string, date: string) {
     }))
 
     try {
-      const res = await saveEODEntry(entryData, expensesOut)
+      const res = await saveEODEntry(entryData as any, expensesOut)
       setIsSaving(false)
-      if (res?.error) {
-        alert(res.error)
-        return { success: false }
-      } else {
-        alert('EOD Saved successfully!')
-        return { success: true }
-      }
+      // Return result — NO alert() calls here. Let the client handle UI feedback.
+      return res
     } catch (e) {
       setIsSaving(false)
-      alert('Failed to save EOD')
-      return { success: false }
+      return { error: 'Failed to save EOD. Please try again.' }
     }
   }
 
