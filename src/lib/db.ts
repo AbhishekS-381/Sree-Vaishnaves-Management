@@ -57,8 +57,7 @@ export const DB_FILES = {
   MENU_CATEGORIES: 'menu_categories.json',
   BRANCH_MENU_ITEMS: 'branch_menu_items.json',
   BRANCH_CATEGORIES: 'branch_categories.json',
-  AUDIT_LOGS: 'audit_logs.json',
-  RATE_LIMITS: 'rate_limits.json'
+  AUDIT_LOGS: 'audit_logs.json'
 };
 
 export async function readJSON<T>(filename: string): Promise<T[]> {

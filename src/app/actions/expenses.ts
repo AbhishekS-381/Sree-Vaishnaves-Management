@@ -5,6 +5,14 @@ import { revalidatePath } from 'next/cache'
 import { getSession } from '@/app/actions/auth'
 import { logAction } from '@/lib/audit'
 import type { Expense } from '@/app/actions/eod'
+import { z } from 'zod'
+
+const updateExpenseSchema = z.object({
+  amount:   z.number().int('Amount must be a whole number').min(0, 'Amount cannot be negative').optional(),
+  notes:    z.string().max(500, 'Notes too long').optional(),
+  date:     z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date').optional(),
+  category: z.string().max(100).optional(),
+})
 
 export async function updateExpense(id: string, updates: Partial<Expense>) {
   const session = await getSession()
@@ -14,6 +22,9 @@ export async function updateExpense(id: string, updates: Partial<Expense>) {
   if (!session.isGlobalAdmin) {
     return { error: 'Only admin and owner can edit ledger expenses.' }
   }
+
+  const parsed = updateExpenseSchema.safeParse(updates)
+  if (!parsed.success) return { error: parsed.error.issues[0].message }
 
   let oldData: Expense | null = null;
   let newData: Expense | null = null;

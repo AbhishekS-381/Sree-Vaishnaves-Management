@@ -5,6 +5,22 @@ import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'crypto'
 import { getSession, requireBranchAccess } from '@/app/actions/auth'
 import { logAction } from '@/lib/audit'
+import { z } from 'zod'
+
+const timeRegex = /^([01]\d|2[0-3]):[0-5]\d$/
+
+const addStaffSchema = z.object({
+  name:         z.string().min(1, 'Name is required').max(100, 'Name too long').trim(),
+  phone:        z.string().min(7, 'Phone too short').max(15, 'Phone too long').regex(/^[0-9+\-\s()]+$/, 'Invalid phone'),
+  departmentId: z.string().min(1, 'Department is required'),
+  roleId:       z.string().min(1, 'Role is required'),
+  branchId:     z.string().min(1, 'Branch is required'),
+  salary:       z.number().int('Salary must be a whole number').min(0, 'Salary cannot be negative'),
+  label:        z.string().max(50).optional(),
+  shiftType:    z.enum(['morning', 'evening', 'full']).optional(),
+  startTime:    z.string().regex(timeRegex, 'Invalid start time (HH:MM)').optional().or(z.literal('')),
+  endTime:      z.string().regex(timeRegex, 'Invalid end time (HH:MM)').optional().or(z.literal('')),
+})
 
 type Staff = {
   id: string
@@ -41,6 +57,19 @@ export async function addStaff(prevState: any, formData: FormData) {
   const positionId = formData.get('positionId') as string || undefined
   const startTime = formData.get('startTime') as string || undefined
   const endTime = formData.get('endTime') as string || undefined
+
+  const validation = addStaffSchema.safeParse({
+    name, phone, departmentId, roleId,
+    branchId: formData.get('branchId') as string,
+    salary: Number(formData.get('salary')) || 0,
+    label: label || undefined,
+    shiftType: shiftType || undefined,
+    startTime: startTime || undefined,
+    endTime: endTime || undefined,
+  })
+  if (!validation.success) {
+    return { error: validation.error.issues[0].message }
+  }
 
   try {
     branchId = await requireBranchAccess(branchId)
@@ -124,6 +153,19 @@ export async function updateStaff(prevState: any, formData: FormData) {
   const positionId = formData.get('positionId') as string || undefined
   const startTime = formData.get('startTime') as string || undefined
   const endTime = formData.get('endTime') as string || undefined
+
+  const validation = addStaffSchema.safeParse({
+    name, phone, departmentId, roleId,
+    branchId: formData.get('branchId') as string,
+    salary: Number(formData.get('salary')) || 0,
+    label: label || undefined,
+    shiftType: shiftType || undefined,
+    startTime: startTime || undefined,
+    endTime: endTime || undefined,
+  })
+  if (!validation.success) {
+    return { error: validation.error.issues[0].message }
+  }
 
   if (!id || !name) return { error: 'Invalid ID or Name' }
 

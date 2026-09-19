@@ -4,6 +4,13 @@ import { withTransaction, DB_FILES } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'crypto'
 import { getSession, requireBranchAccess } from './auth'
+import { z } from 'zod'
+
+const addMenuItemSchema = z.object({
+  name:       z.string().min(1, 'Item name is required').max(150, 'Name too long').trim(),
+  categoryId: z.string().min(1, 'Category is required'),
+  basePrice:  z.number().int('Price must be a whole number').min(0, 'Price cannot be negative'),
+})
 
 export type MenuItem = {
   id: string
@@ -33,9 +40,8 @@ export async function addMenuItem(prevState: any, formData: FormData) {
   const basePrice = Number(formData.get('basePrice')) || 0
   const isAvailableGlobally = formData.get('isAvailableGlobally') !== 'false'
 
-  if (!name || !categoryId) {
-    return { error: 'Missing required fields' }
-  }
+  const parsed = addMenuItemSchema.safeParse({ name, categoryId, basePrice })
+  if (!parsed.success) return { error: parsed.error.issues[0].message }
 
   const newItem: MenuItem = {
     id: `mn_${randomUUID()}`,

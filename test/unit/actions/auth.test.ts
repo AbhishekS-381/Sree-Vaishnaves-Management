@@ -86,12 +86,13 @@ describe('Auth Actions', () => {
     expect(redirect).toHaveBeenCalledWith('/')
   })
 
-  it('login succeeds and calls redirect with plain password (fallback)', async () => {
-    const { redirect } = await import('next/navigation')
+  it('login fails with plain password (fallback removed)', async () => {
+    const bcrypt = (await import('bcryptjs')).default
+    vi.mocked(bcrypt.compare).mockResolvedValue(false)
     vi.mocked(db.readJSON).mockResolvedValue([{ name: 'test', password: 'plain', role: 'owner' }])
     const fd = { get: (k: string) => k === 'name' ? 'test' : 'plain' } as any
-    await login({}, fd)
-    expect(redirect).toHaveBeenCalledWith('/')
+    const res = await login({}, fd)
+    expect(res).toEqual({ error: 'Invalid Credentials' })
   })
 
   it('login triggers pruneRateLimits randomly', async () => {
@@ -99,9 +100,11 @@ describe('Auth Actions', () => {
     const originalRandom = Math.random
     Math.random = () => 0.005 // Trigger the < 0.01 condition
     
+    const bcrypt = (await import('bcryptjs')).default
+    vi.mocked(bcrypt.compare).mockResolvedValue(true)
     const { redirect } = await import('next/navigation')
-    vi.mocked(db.readJSON).mockResolvedValue([{ name: 'test', password: 'plain', role: 'owner' }])
-    const fd = { get: (k: string) => k === 'name' ? 'test' : 'plain' } as any
+    vi.mocked(db.readJSON).mockResolvedValue([{ name: 'test', password: '$2a$10$hash', role: 'owner' }])
+    const fd = { get: (k: string) => k === 'name' ? 'test' : 'password' } as any
     
     // Prevent redirect throwing
     vi.mocked(redirect).mockImplementation(() => {})

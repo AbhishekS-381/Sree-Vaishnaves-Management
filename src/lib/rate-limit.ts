@@ -1,55 +1,52 @@
 import { db } from '../../db/index';
 import { sql } from 'drizzle-orm';
 
-// ── Configuration ──────────────────────────────────────────────
-const WINDOW_MS         = 60_000;     // 1 minute rolling window
-const MAX_ATTEMPTS      = 10;         // max attempts per window
-const BLOCK_DURATION_MS = 300_000;    // 5 min hard block after exceeding
-// ───────────────────────────────────────────────────────────────
+// ── Configuration ─────────────────────────────────────────────
+const WINDOW_MS           = 60_000;    // 1 minute rolling window
+const MAX_ATTEMPTS_IP     = 10;        // max attempts per IP per window
+const MAX_ATTEMPTS_USER   = 20;        // max attempts per username per hour
+const USER_WINDOW_MS      = 3_600_000; // 1 hour window for username limiter
+const BLOCK_DURATION_MS   = 300_000;   // 5 min hard block
+// ─────────────────────────────────────────────────────────────
 
 export type RateLimitResult =
   | { success: true }
   | { success: false; error: string; retryAfterMs: number };
 
-export async function checkRateLimit(ip: string): Promise<RateLimitResult> {
+async function atomicUpsert(
+  key: string,
+  windowMs: number,
+  maxAttempts: number
+): Promise<RateLimitResult> {
   const now = Date.now();
-  const key = `login:${ip}`;
 
   try {
-    // Single atomic upsert — no separate read, no race condition,
-    // works correctly across all Netlify function instances.
     const result = await db.execute(sql`
       INSERT INTO rate_limit (key, attempts, window_start, blocked_until)
       VALUES (${key}, 1, ${now}, 0)
       ON CONFLICT (key) DO UPDATE SET
 
         attempts = CASE
-          -- Already hard-blocked: freeze the counter
           WHEN rate_limit.blocked_until > ${now}
             THEN rate_limit.attempts
-
-          -- Window has expired: reset to 1 (this request)
-          WHEN rate_limit.window_start < ${now - WINDOW_MS}
+          WHEN rate_limit.window_start < ${now - windowMs}
             THEN 1
-
-          -- Same window, under limit: increment
           ELSE rate_limit.attempts + 1
         END,
 
         window_start = CASE
-          WHEN rate_limit.window_start < ${now - WINDOW_MS}
+          WHEN rate_limit.window_start < ${now - windowMs}
             THEN ${now}
           ELSE rate_limit.window_start
         END,
 
         blocked_until = CASE
-          -- Trigger hard block when the new attempt count hits the limit
           WHEN (
             CASE
-              WHEN rate_limit.window_start < ${now - WINDOW_MS} THEN 1
+              WHEN rate_limit.window_start < ${now - windowMs} THEN 1
               ELSE rate_limit.attempts + 1
             END
-          ) >= ${MAX_ATTEMPTS}
+          ) >= ${maxAttempts}
           AND rate_limit.blocked_until <= ${now}
             THEN ${now + BLOCK_DURATION_MS}
           ELSE rate_limit.blocked_until
@@ -64,7 +61,6 @@ export async function checkRateLimit(ip: string): Promise<RateLimitResult> {
       blocked_until: number;
     } | undefined;
 
-    // If DB returned nothing, fail open — don't block logins
     if (!row) return { success: true };
 
     if (Number(row.blocked_until) > now) {
@@ -78,36 +74,67 @@ export async function checkRateLimit(ip: string): Promise<RateLimitResult> {
     }
 
     return { success: true };
-
   } catch (err) {
-    // Fail open if table doesn't exist yet or DB is unreachable.
-    // Logins still work — you just temporarily lose rate limiting.
     console.error('Rate limit check failed (failing open):', err);
     return { success: true };
   }
 }
 
-// Call this on successful login to clear the counter for that IP.
-export async function resetRateLimit(ip: string): Promise<void> {
+// Check both IP-based and username-based limits.
+// Returns failure if either limit is exceeded.
+export async function checkRateLimit(
+  ip: string,
+  username?: string
+): Promise<RateLimitResult> {
+  // Check IP limit first
+  const ipResult = await atomicUpsert(
+    `login:ip:${ip}`,
+    WINDOW_MS,
+    MAX_ATTEMPTS_IP
+  );
+  if (!ipResult.success) return ipResult;
+
+  // Check username limit if username provided
+  // This catches credential stuffing attacks that rotate IPs
+  if (username && username.trim().length > 0) {
+    const userResult = await atomicUpsert(
+      `login:user:${username.toLowerCase()}`,
+      USER_WINDOW_MS,
+      MAX_ATTEMPTS_USER
+    );
+    if (!userResult.success) return userResult;
+  }
+
+  return { success: true };
+}
+
+// Reset both IP and username counters on successful login
+export async function resetRateLimit(
+  ip: string,
+  username?: string
+): Promise<void> {
   try {
-    const key = `login:${ip}`;
-    await db.execute(sql`DELETE FROM rate_limit WHERE key = ${key}`);
+    const ipKey = `login:ip:${ip}`;
+    await db.execute(sql`DELETE FROM rate_limit WHERE key = ${ipKey}`);
+
+    if (username && username.trim().length > 0) {
+      const userKey = `login:user:${username.toLowerCase()}`;
+      await db.execute(sql`DELETE FROM rate_limit WHERE key = ${userKey}`);
+    }
   } catch {
-    // Non-critical — ignore
+    // Non-critical
   }
 }
 
-// Prune stale rows to keep the table small.
-// Called inline from login at 1% probability — fire and forget.
 export async function pruneRateLimits(): Promise<void> {
   const now = Date.now();
   try {
     await db.execute(sql`
       DELETE FROM rate_limit
       WHERE blocked_until < ${now}
-        AND window_start  < ${now - WINDOW_MS}
+        AND window_start  < ${now - USER_WINDOW_MS}
     `);
   } catch {
-    // Non-critical — ignore
+    // Non-critical
   }
 }

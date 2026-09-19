@@ -4,6 +4,33 @@ import { withTransaction, DB_FILES } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'crypto'
 import { requireBranchAccess } from './auth'
+import { z } from 'zod'
+
+const VALID_UNITS = ['kg', 'litre', 'packet', 'piece', 'gram', 'ml', 'box', 'bottle'] as const
+
+const addInventorySchema = z.object({
+  name:      z.string().min(1, 'Item name is required').max(100, 'Name too long').trim(),
+  unit:      z.string().min(1, 'Unit is required').max(20, 'Unit too long'),
+  quantity:  z.number().int().min(0, 'Quantity cannot be negative'),
+  threshold: z.number().int().min(0, 'Threshold cannot be negative'),
+  branchId:  z.string().min(1, 'Branch is required'),
+})
+
+const adjustStockSchema = z.object({
+  itemId:   z.string().min(1, 'Item is required'),
+  branchId: z.string().min(1, 'Branch is required'),
+  type:     z.enum(['increase', 'decrease']),
+  amount:   z.number().int().min(1, 'Adjustment amount must be at least 1'),
+  reason:   z.string().min(1, 'Reason is required').max(200, 'Reason too long').trim(),
+})
+
+const updateInventorySchema = z.object({
+  id:        z.string().min(1),
+  name:      z.string().min(1, 'Item name is required').max(100, 'Name too long').trim(),
+  unit:      z.string().min(1, 'Unit is required').max(20, 'Unit too long'),
+  threshold: z.number().int().min(0, 'Threshold cannot be negative'),
+  branchId:  z.string().min(1, 'Branch is required'),
+})
 
 export type InventoryItem = {
   id: string
@@ -34,9 +61,13 @@ export async function addInventoryItem(prevState: any, formData: FormData) {
   const threshold = Number(formData.get('threshold'))
   let branchId = formData.get('branchId') as string
 
-  if (!name || !unit || quantity < 0 || threshold < 0 || !branchId) {
-    return { error: 'Invalid input' }
-  }
+  const parsed = addInventorySchema.safeParse({
+    name, unit,
+    quantity: Number(formData.get('quantity')),
+    threshold: Number(formData.get('threshold')),
+    branchId: formData.get('branchId') as string,
+  })
+  if (!parsed.success) return { error: parsed.error.issues[0].message }
 
   try {
     branchId = await requireBranchAccess(branchId)
@@ -95,9 +126,8 @@ export async function adjustStock(prevState: any, formData: FormData) {
   const amount = Number(formData.get('amount'))
   const reason = formData.get('reason') as string
 
-  if (!itemId || !branchId || amount <= 0 || !reason) {
-    return { error: 'Invalid adjustments' }
-  }
+  const parsed = adjustStockSchema.safeParse({ itemId, branchId, type, amount, reason })
+  if (!parsed.success) return { error: parsed.error.issues[0].message }
 
   try {
     branchId = await requireBranchAccess(branchId)
@@ -157,9 +187,12 @@ export async function updateInventoryItem(prevState: any, formData: FormData) {
   const threshold = Number(formData.get('threshold'))
   let branchId = formData.get('branchId') as string
 
-  if (!id || !name || !unit || threshold < 0 || !branchId) {
-    return { error: 'Invalid input' }
-  }
+  const parsed = updateInventorySchema.safeParse({
+    id, name, unit,
+    threshold: Number(formData.get('threshold')),
+    branchId: formData.get('branchId') as string,
+  })
+  if (!parsed.success) return { error: parsed.error.issues[0].message }
 
   try {
     branchId = await requireBranchAccess(branchId)

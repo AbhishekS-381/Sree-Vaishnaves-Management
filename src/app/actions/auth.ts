@@ -17,12 +17,12 @@ const loginSchema = z.object({
 export async function login(prevState: any, formData: FormData) {
   const headersList = await headers();
   const ip = headersList.get('x-forwarded-for') || headersList.get('x-real-ip') || 'unknown';
-  const rateLimit = await checkRateLimit(ip);
+  const name = formData.get('name') as string;
+  const rateLimit = await checkRateLimit(ip, name);
   if (!rateLimit.success) {
     return { error: rateLimit.error };
   }
 
-  const name = formData.get('name') as string
   const password = formData.get('password') as string
 
   const parsed = loginSchema.safeParse({ name, password });
@@ -35,17 +35,12 @@ export async function login(prevState: any, formData: FormData) {
 
   let isValidPassword = false;
   if (user && user.password) {
-    if (user.password.startsWith('$2a$') || user.password.startsWith('$2b$')) {
-      isValidPassword = await bcrypt.compare(password, user.password);
-    } else {
-      // Fallback for unmigrated passwords
-      isValidPassword = user.password === password;
-    }
+    isValidPassword = await bcrypt.compare(password, user.password);
   }
 
   if (user && isValidPassword) {
     // Clear rate limit counter on successful login
-    await resetRateLimit(ip);
+    await resetRateLimit(ip, name);
 
     // Prune stale rate limit rows ~1% of logins — fire and forget
     if (Math.random() < 0.01) {
@@ -71,6 +66,7 @@ export async function login(prevState: any, formData: FormData) {
     cookieStore.set('session', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production' && process.env.SECURE_COOKIE !== 'false',
+      sameSite: 'strict',
       maxAge: 60 * 60 * 2, // 2 hours
       path: '/',
     })

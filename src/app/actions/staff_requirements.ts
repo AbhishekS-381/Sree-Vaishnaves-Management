@@ -4,8 +4,12 @@ import { withTransaction, readJSON, DB_FILES } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'crypto'
 import { getSession, requireBranchAccess } from './auth'
+import { z } from 'zod'
 
 export async function saveRequirement(id: string | null, branchId: string, departmentId: string, roleId: string, requiredCount: number, specialtyId?: string, defaultSalary?: number, startTime?: string, endTime?: string, responsibility?: string) {
+  const parsed = z.string().max(500, 'Responsibility text cannot exceed 500 characters').safeParse(responsibility || '')
+  if (!parsed.success) return { error: parsed.error.issues[0].message }
+
   try {
     const enforcedBranchId = await requireBranchAccess(branchId)
 

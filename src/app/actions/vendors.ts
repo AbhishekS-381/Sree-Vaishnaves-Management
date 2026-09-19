@@ -5,6 +5,23 @@ import { Expense } from './eod'
 import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'crypto'
 import { getSession, requireBranchAccess } from './auth'
+import { z } from 'zod'
+
+const addVendorSchema = z.object({
+  name:        z.string().min(1, 'Vendor name is required').max(100, 'Name too long').trim(),
+  phone:       z.string().min(7, 'Phone too short').max(15, 'Phone too long').regex(/^[0-9+\-\s()]+$/, 'Invalid phone'),
+  supplyType:  z.string().min(1, 'Supply type is required').max(100, 'Supply type too long').trim(),
+  branchId:    z.string().min(1, 'Branch is required'),
+})
+
+const addVendorBillSchema = z.object({
+  vendorId:   z.string().min(1, 'Vendor is required'),
+  amount:     z.number().int('Amount must be a whole number').min(1, 'Amount must be positive'),
+  categoryId: z.string().min(1, 'Category is required'),
+  date:       z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format'),
+  branchId:   z.string().min(1, 'Branch is required'),
+  invoiceRef: z.string().max(100, 'Invoice ref too long').optional(),
+})
 
 export type Vendor = {
   id: string
@@ -21,9 +38,8 @@ export async function addVendor(prevState: any, formData: FormData) {
   const supplyType = formData.get('supplyType') as string
   let branchId = formData.get('branchId') as string
 
-  if (!name || !phone || !supplyType || !branchId) {
-    return { error: 'Invalid input fields' }
-  }
+  const parsed = addVendorSchema.safeParse({ name, phone, supplyType, branchId })
+  if (!parsed.success) return { error: parsed.error.issues[0].message }
 
   try {
     branchId = await requireBranchAccess(branchId)
@@ -65,11 +81,8 @@ export async function addVendorBill(prevState: any, formData: FormData) {
   let branchId = formData.get('branchId') as string
   const isPaid = formData.get('isPaid') === 'on'
 
-  if (!vendorId || !amount || !categoryId || !date || !branchId) {
-     return { error: 'Please fill all required bill fields' }
-  }
-  
-  if (!Number.isInteger(amount) || amount <= 0) return { error: 'Amount must be a positive whole number' };
+  const parsed = addVendorBillSchema.safeParse({ vendorId, amount, categoryId, date, branchId, invoiceRef: invoiceRef || undefined })
+  if (!parsed.success) return { error: parsed.error.issues[0].message }
 
   try {
     branchId = await requireBranchAccess(branchId)
