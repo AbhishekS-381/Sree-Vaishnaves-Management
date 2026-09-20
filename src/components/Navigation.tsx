@@ -8,18 +8,18 @@ import { useState } from 'react'
 import { logout } from '@/app/actions/auth'
 
 const navItems = [
-  { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-  { name: 'Menu', href: '/menu', icon: FileText },
-  { name: 'Inventory', href: '/inventory', icon: Package },
-  { name: 'Vendors', href: '/vendors', icon: Truck },
-  { name: 'EOD Entry', href: '/eod', icon: Store },
-  { name: 'Expenses', href: '/expenses', icon: FileText },
-  { name: 'Attendance', href: '/attendance', icon: Users },
-  { name: 'Payroll', href: '/payroll', icon: FileText },
-  { name: 'Reports', href: '/reports', icon: BarChart3 },
-  { name: 'Staff', href: '/staff', icon: Users },
-  { name: 'Branches', href: '/branches', icon: Store },
-  { name: 'Settings', href: '/settings', icon: Settings },
+  { name: 'Dashboard', href: '/management', icon: LayoutDashboard },
+  { name: 'Menu', href: '/management/menu', icon: FileText },
+  { name: 'Inventory', href: '/management/inventory', icon: Package },
+  { name: 'Vendors', href: '/management/vendors', icon: Truck },
+  { name: 'EOD Entry', href: '/management/eod', icon: Store },
+  { name: 'Expenses', href: '/management/expenses', icon: FileText },
+  { name: 'Attendance', href: '/management/attendance', icon: Users },
+  { name: 'Payroll', href: '/management/payroll', icon: FileText },
+  { name: 'Reports', href: '/management/reports', icon: BarChart3 },
+  { name: 'Staff', href: '/management/staff', icon: Users },
+  { name: 'Branches', href: '/management/branches', icon: Store },
+  { name: 'Settings', href: '/management/settings', icon: Settings },
 ]
 
 export function Navigation({ role, config, isGlobalOwner, isRootAdmin, userName }: { role: string, config: any, isGlobalOwner?: boolean, isRootAdmin?: boolean, userName?: string }) {
