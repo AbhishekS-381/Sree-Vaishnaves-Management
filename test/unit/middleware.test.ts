@@ -20,6 +20,18 @@ describe('middleware.ts', () => {
     process.env.JWT_SECRET = 'test-secret'
   })
 
+  it('allows public access to /', async () => {
+    const req = makeRequest('http://localhost/')
+    const res = await middleware(req)
+    expect(res.status).toBe(200) // next()
+  })
+
+  it('allows public access to non-management routes', async () => {
+    const req = makeRequest('http://localhost/some-api-route')
+    const res = await middleware(req)
+    expect(res.status).toBe(200) // next()
+  })
+
   it('redirects logged-in user away from /management/login', async () => {
     const { jwtVerify } = await import('jose')
     vi.mocked(jwtVerify).mockResolvedValue({ payload: { role: 'owner', isGlobalOwner: true } } as any)
