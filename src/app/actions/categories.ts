@@ -33,7 +33,7 @@ export async function addCategory(prevState: any, formData: FormData) {
   if (alreadyExists) return { error: 'Category already exists' }
   if (!success) return { error: 'Transaction failed' }
 
-  revalidatePath('/settings')
+  revalidatePath('/management/settings')
   return { success: true }
 }
 
@@ -66,11 +66,11 @@ export async function updateCategory(prevState: any, formData: FormData) {
   if (alreadyExists) return { error: 'Category name already exists' }
   if (!success) return { error: 'Transaction failed' }
 
-  revalidatePath('/settings')
-  revalidatePath('/eod')
-  revalidatePath('/vendors')
-  revalidatePath('/expenses')
-  revalidatePath('/reports')
+  revalidatePath('/management/settings')
+  revalidatePath('/management/eod')
+  revalidatePath('/management/vendors')
+  revalidatePath('/management/expenses')
+  revalidatePath('/management/reports')
   return { success: true }
 }
 
@@ -100,6 +100,6 @@ export async function deleteCategory(id: string) {
   // Wait, I can't read the category name after it's deleted. So I'll just skip the warning for now or return a general success.
   // Actually, I can just return success without the warning for brevity since it's a soft requirement, but let me do it properly.
   
-  revalidatePath('/settings')
+  revalidatePath('/management/settings')
   return { success: true }
 }

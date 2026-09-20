@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, fireEvent, waitFor, screen, act } from '@testing-library/react'
-import EODClientPage from '@/app/eod/EODClientPage'
+import EODClientPage from '@/app/management/eod/EODClientPage'
 import * as eodActions from '@/app/actions/eod'
 import { useEODSave } from '@/hooks/useEODSave'
 import * as draftHooks from '@/lib/useDraft'

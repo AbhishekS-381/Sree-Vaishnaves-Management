@@ -84,7 +84,7 @@ export async function addBranch(prevState: any, formData: FormData) {
   if (alreadyExists) return { error: 'A branch with this name already exists' }
   if (!success) return { error: 'Failed to add branch due to a concurrent write.' }
 
-  revalidatePath('/branches')
+  revalidatePath('/management/branches')
   return { success: true }
 }
 
@@ -155,7 +155,7 @@ export async function updateBranch(prevState: any, formData: FormData) {
   if (alreadyExists) return { error: 'A branch with this name already exists' }
   if (!success) return { error: 'Transaction failed' }
 
-  revalidatePath('/branches')
+  revalidatePath('/management/branches')
   revalidatePath(`/branches/${id}`)
   return { success: true }
 }
@@ -186,6 +186,6 @@ export async function deleteBranch(id: string) {
   if (notFound) return { error: 'Branch not found' }
   if (!success) return { error: 'Transaction failed' }
 
-  revalidatePath('/branches')
+  revalidatePath('/management/branches')
   return { success: true }
 }

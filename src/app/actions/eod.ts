@@ -188,8 +188,8 @@ export async function saveEODEntry(
   const session = await getSession();
   await logAction('SAVE_EOD', 'EOD', JSON.stringify({ income: entryData.income }), entryData.date);
 
-  revalidatePath('/eod')
-  revalidatePath('/expenses')
+  revalidatePath('/management/eod')
+  revalidatePath('/management/expenses')
   revalidatePath('/')
   
   if (!expSuccess) {

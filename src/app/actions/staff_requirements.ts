@@ -70,7 +70,7 @@ export async function saveRequirement(id: string | null, branchId: string, depar
     })
 
     if (!success) throw new Error('Transaction failed')
-    revalidatePath('/staff')
+    revalidatePath('/management/staff')
 
     // Warn if requiredCount was reduced below currently filled count
     if (id) {
@@ -119,7 +119,7 @@ export async function deleteRequirement(id: string) {
     })
     
     if (!success) throw new Error('Transaction failed')
-    revalidatePath('/staff')
+    revalidatePath('/management/staff')
     return { success: true }
   } catch (error) {
     console.error('Error deleting requirement:', error)
@@ -188,7 +188,7 @@ export async function updateRequirementSchedules(id: string, schedules: Position
     })
     
     if (!success) throw new Error('Transaction failed')
-    revalidatePath('/staff')
+    revalidatePath('/management/staff')
     return { success: true }
   } catch (error) {
     console.error('Error updating schedules:', error)

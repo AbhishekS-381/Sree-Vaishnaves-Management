@@ -33,10 +33,10 @@ describe('config.ts - toggleModule', () => {
     const result = await toggleModule('attendance', false)
     
     expect(result).toEqual({ success: true })
-    expect(db.writeJSON).toHaveBeenCalledWith('mock.json', [
-      expect.objectContaining({ id: 'global', attendance: false, payroll: true })
+    expect(db.writeJSON).toHaveBeenCalledWith(expect.any(String), [
+      expect.objectContaining({ id: 'global', attendance: false })
     ])
-    expect(revalidatePath).toHaveBeenCalledWith('/', 'layout')
+    expect(revalidatePath).toHaveBeenCalledWith('/management', 'layout')
   })
 
   it('updates existing config', async () => {

@@ -47,7 +47,7 @@ export async function addUser(prevState: any, formData: FormData) {
 
   if (alreadyExists) return { error: 'Username already exists' }
   if (!success) return { error: 'Transaction failed' }
-  revalidatePath('/settings')
+  revalidatePath('/management/settings')
   return { success: true }
 }
 
@@ -94,7 +94,7 @@ export async function updateUser(prevState: any, formData: FormData) {
   if (alreadyExists) return { error: 'Username taken by another user' }
   if (isRootError) return { error: 'Cannot demote the admin account' }
   if (!success) return { error: 'Transaction failed' }
-  revalidatePath('/settings')
+  revalidatePath('/management/settings')
   return { success: true }
 }
 
@@ -116,6 +116,6 @@ export async function deleteUser(id: string) {
     return list
   })
   if (isRootError) return { error: 'Cannot delete the admin account' }
-  revalidatePath('/settings')
+  revalidatePath('/management/settings')
   return { success: true }
 }

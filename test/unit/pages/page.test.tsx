@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import DashboardPage from '@/app/page'
+import DashboardPage from '@/app/management/page'
 import * as db from '@/lib/db'
 import * as auth from '@/app/actions/auth'
 

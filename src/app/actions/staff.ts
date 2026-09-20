@@ -132,7 +132,7 @@ export async function addStaff(prevState: any, formData: FormData) {
   const session = await getSession();
   await logAction('CREATE_STAFF', 'Staff', JSON.stringify({ name, roleId }), newStaff.id);
 
-  revalidatePath('/', 'layout')
+  revalidatePath('/management', 'layout')
   return { success: true }
 }
 
@@ -242,7 +242,7 @@ export async function updateStaff(prevState: any, formData: FormData) {
   if (forbidden) return { error: 'Forbidden: Cannot edit staff from another branch' }
   if (alreadyExists) return { error: 'A staff member with this name and phone number already exists in this branch' }
   if (!success) return { error: 'Transaction failed' }
-  revalidatePath('/', 'layout')
+  revalidatePath('/management', 'layout')
   return { success: true }
 }
 
@@ -274,7 +274,7 @@ export async function toggleStaffStatus(id: string, currentlyActive: boolean) {
   if (notFound) return { error: 'Staff not found' }
   if (forbidden) return { error: 'Forbidden: Cannot edit staff from another branch' }
   if (!success) return { error: 'Transaction failed' }
-  revalidatePath('/', 'layout')
+  revalidatePath('/management', 'layout')
   return { success: true }
 }
 
@@ -303,6 +303,6 @@ export async function deleteStaff(id: string) {
   
   await logAction('DELETE_STAFF', 'Staff', 'Deleted staff member', id);
 
-  revalidatePath('/', 'layout')
+  revalidatePath('/management', 'layout')
   return { success: true }
 }

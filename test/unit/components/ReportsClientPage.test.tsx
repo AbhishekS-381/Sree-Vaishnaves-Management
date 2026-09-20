@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import ReportsClientPage from '@/app/reports/ReportsClientPage'
+import ReportsClientPage from '@/app/management/reports/ReportsClientPage'
 
 // Mock Lucide icons
 vi.mock('lucide-react', () => ({

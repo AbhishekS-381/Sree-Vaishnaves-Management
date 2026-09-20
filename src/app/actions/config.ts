@@ -42,7 +42,7 @@ export async function toggleModule(moduleId: keyof Config, isActive: boolean) {
   configList[0] = globalConfig
 
   await writeJSON(DB_FILES.CONFIG, configList)
-  revalidatePath('/', 'layout')
+  revalidatePath('/management', 'layout')
   
   return { success: true }
 }

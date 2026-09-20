@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import SettingsPage from '@/app/settings/page'
+import SettingsPage from '@/app/management/settings/page'
 import * as db from '@/lib/db'
 import * as auth from '@/app/actions/auth'
 import { redirect } from 'next/navigation'
@@ -17,7 +17,7 @@ vi.mock('next/navigation', () => ({
   redirect: vi.fn()
 }))
 
-vi.mock('@/app/settings/SettingsClientPage', () => ({
+vi.mock('@/app/management/settings/SettingsClientPage', () => ({
   default: () => <div data-testid="settings-client" />
 }))
 
@@ -38,20 +38,20 @@ describe('Settings Page RBAC', () => {
     vi.mocked(auth.getSession).mockResolvedValue({ role: 'owner', isGlobalAdmin: true, isGlobalOwner: true, isRootAdmin: false } as any)
     
     await SettingsPage()
-    expect(redirect).toHaveBeenCalledWith('/')
+    expect(redirect).toHaveBeenCalledWith('/management')
   })
 
   it('Manager is redirected from settings page', async () => {
     vi.mocked(auth.getSession).mockResolvedValue({ role: 'manager', isGlobalAdmin: false, isRootAdmin: false } as any)
     
     await SettingsPage()
-    expect(redirect).toHaveBeenCalledWith('/')
+    expect(redirect).toHaveBeenCalledWith('/management')
   })
 
   it('Read-Only is redirected from settings page', async () => {
     vi.mocked(auth.getSession).mockResolvedValue({ role: 'readonly', isGlobalOwner: false, isRootAdmin: false } as any)
     
     await SettingsPage()
-    expect(redirect).toHaveBeenCalledWith('/')
+    expect(redirect).toHaveBeenCalledWith('/management')
   })
 })

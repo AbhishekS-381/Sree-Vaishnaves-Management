@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 
 export default async function EODPage() {
   const session = await getSession();
-  if (session?.role === 'readonly') redirect('/')
+  if (session?.role === 'readonly') redirect('/management')
 
   let branches = await readJSON<any>(DB_FILES.BRANCHES)
   const categories = await readJSON<any>(DB_FILES.CATEGORIES).catch(() => [])

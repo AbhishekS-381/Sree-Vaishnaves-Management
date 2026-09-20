@@ -6,7 +6,7 @@ import { redirect } from 'next/navigation'
 export default async function SettingsPage() {
   const session = await getSession()
   if (session?.role !== 'admin') {
-    redirect('/')
+    redirect('/management')
   }
 
   let [[roles, depts, categories, rawUsers, branches], configList] = await Promise.all([

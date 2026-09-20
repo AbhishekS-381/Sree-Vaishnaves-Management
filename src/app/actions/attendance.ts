@@ -93,7 +93,7 @@ export async function saveAttendance(newLogs: Partial<AttendanceLog>[]) {
   
   await logAction('UPDATE_ATTENDANCE', 'ATTENDANCE', `Updated attendance for ${newLogs.length} staff members. Dates: ${[...new Set(newLogs.map(n => n.date))].join(',')}`);
 
-  revalidatePath('/attendance')
+  revalidatePath('/management/attendance')
   revalidatePath('/')
   return { success: true }
 }

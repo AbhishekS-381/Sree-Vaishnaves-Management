@@ -81,9 +81,9 @@ describe('Auth Actions', () => {
     vi.mocked(bcrypt.compare).mockResolvedValue(true)
     const { redirect } = await import('next/navigation')
     vi.mocked(db.readJSON).mockResolvedValue([{ name: 'abhishek', password: '$2a$10$hash', role: 'owner' }])
-    const fd = { get: (k: string) => k === 'name' ? 'abhishek' : 'StrongPass1!' } as any
+    const fd = { get: (k: string) => k === 'name' ? 'abhishek' : 'StrongPass123' } as any
     await login({}, fd)
-    expect(redirect).toHaveBeenCalledWith('/')
+    expect(redirect).toHaveBeenCalledWith('/management')
   })
 
   it('login fails with plain password (fallback removed)', async () => {
@@ -124,10 +124,13 @@ describe('Auth Actions', () => {
 
   // ─── logout ──────────────────────────────────────────────────────────────
   it('logout deletes session and redirects', async () => {
+    const { cookies } = await import('next/headers')
     const { redirect } = await import('next/navigation')
+    const mockCookieStore = { delete: vi.fn() }
+    vi.mocked(cookies).mockReturnValue(mockCookieStore as any)
     await logout()
     expect(mockCookieStore.delete).toHaveBeenCalledWith('session')
-    expect(redirect).toHaveBeenCalledWith('/login')
+    expect(redirect).toHaveBeenCalledWith('/management/login')
   })
 
   // ─── getSession ──────────────────────────────────────────────────────────

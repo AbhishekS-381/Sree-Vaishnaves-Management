@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import MenuClientPage from '@/app/menu/MenuClientPage'
+import MenuClientPage from '@/app/management/menu/MenuClientPage'
 import * as menuActions from '@/app/actions/menu'
 import * as menuCatActions from '@/app/actions/menu_categories'
 

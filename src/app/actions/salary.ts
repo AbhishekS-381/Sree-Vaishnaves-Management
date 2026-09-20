@@ -87,7 +87,7 @@ export async function savePayroll(prevState: any, formData: FormData) {
   })
 
   if (!success) return { error: 'Transaction failed' }
-  revalidatePath('/payroll')
+  revalidatePath('/management/payroll')
   return { success: true, message: 'Payroll saved successfully' }
 }
 
@@ -106,6 +106,6 @@ export async function markAsPaid(id: string) {
 
   if (notFound) return { error: 'Record not found' }
   if (!success) return { error: 'Transaction failed' }
-  revalidatePath('/payroll')
+  revalidatePath('/management/payroll')
   return { success: true }
 }

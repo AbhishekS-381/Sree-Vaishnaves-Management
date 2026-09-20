@@ -59,8 +59,8 @@ export async function updateExpense(id: string, updates: Partial<Expense>) {
     id
   )
 
-  revalidatePath('/expenses')
-  revalidatePath('/reports')
+  revalidatePath('/management/expenses')
+  revalidatePath('/management/reports')
   return { success: true }
 }
 
@@ -78,7 +78,7 @@ export async function deleteExpense(id: string) {
   if (!success) return { error: 'Failed to delete' }
   const exp = deleted as unknown as Expense;
   await logAction('DELETE_EXPENSE', 'EXPENSE', `Deleted expense ${id} of amount ${exp.amount}`, id)
-  revalidatePath('/expenses')
-  revalidatePath('/reports')
+  revalidatePath('/management/expenses')
+  revalidatePath('/management/reports')
   return { success: true }
 }

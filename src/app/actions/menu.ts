@@ -85,7 +85,7 @@ export async function addMenuItem(prevState: any, formData: FormData) {
     return items
   })
 
-  revalidatePath('/menu')
+  revalidatePath('/management/menu')
   return { success: true }
 }
 
@@ -109,7 +109,7 @@ export async function setBranchItemAvailability(branchId: string, menuItemId: st
     }
     return items
   })
-  revalidatePath('/menu')
+  revalidatePath('/management/menu')
 }
 
 export async function updateBranchMenuItemPrice(branchId: string, menuItemId: string, price: number | null) {
@@ -132,7 +132,7 @@ export async function updateBranchMenuItemPrice(branchId: string, menuItemId: st
     }
     return items
   })
-  revalidatePath('/menu')
+  revalidatePath('/management/menu')
 }
 
 export async function deleteMenuItem(id: string) {
@@ -149,5 +149,5 @@ export async function deleteMenuItem(id: string) {
   })
   
   // Do NOT touch branch_menu_items to preserve historical order/ticket data
-  revalidatePath('/menu')
+  revalidatePath('/management/menu')
 }

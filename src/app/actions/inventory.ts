@@ -115,7 +115,7 @@ export async function addInventoryItem(prevState: any, formData: FormData) {
      })
   }
 
-  revalidatePath('/inventory')
+  revalidatePath('/management/inventory')
   return { success: true }
 }
 
@@ -176,7 +176,7 @@ export async function adjustStock(prevState: any, formData: FormData) {
     return logs
   })
   
-  revalidatePath('/inventory')
+  revalidatePath('/management/inventory')
   return { success: true }
 }
 
@@ -228,7 +228,7 @@ export async function updateInventoryItem(prevState: any, formData: FormData) {
   if (alreadyExists) return { error: 'An inventory item with this name and unit already exists in this branch' }
   if (!success) return { error: 'Transaction failed' }
 
-  revalidatePath('/inventory')
+  revalidatePath('/management/inventory')
   return { success: true }
 }
 
@@ -249,6 +249,6 @@ export async function deleteInventoryItem(id: string) {
   if (notFound) return { error: 'Item not found' }
   if (!success) return { error: 'Transaction failed' }
 
-  revalidatePath('/inventory')
+  revalidatePath('/management/inventory')
   return { success: true }
 }

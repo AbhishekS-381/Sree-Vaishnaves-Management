@@ -41,7 +41,7 @@ export async function addDepartment(prevState: any, formData: FormData) {
 
   if (alreadyExists) return { error: 'Department name already exists' }
   if (!success) return { error: 'Failed to add department' }
-  revalidatePath('/settings')
+  revalidatePath('/management/settings')
   return { success: true }
 }
 
@@ -75,7 +75,7 @@ export async function updateDepartment(prevState: any, formData: FormData) {
   if (notFound) return { error: 'Not found' }
   if (alreadyExists) return { error: 'Department name already exists' }
   if (!success) return { error: 'Transaction failed' }
-  revalidatePath('/settings')
+  revalidatePath('/management/settings')
   return { success: true }
 }
 
@@ -111,7 +111,7 @@ export async function deleteDepartment(id: string) {
   if (notFound) return { error: 'Department not found' }
   if (!success) return { error: 'Failed to delete department' }
 
-  revalidatePath('/settings')
+  revalidatePath('/management/settings')
   return { success: true }
 }
 
@@ -156,7 +156,7 @@ export async function addRole(prevState: any, formData: FormData) {
 
   if (alreadyExists) return { error: 'Role name already exists' }
   if (!success) return { error: 'Failed to add role' }
-  revalidatePath('/settings')
+  revalidatePath('/management/settings')
   return { success: true }
 }
 
@@ -192,7 +192,7 @@ export async function updateRole(prevState: any, formData: FormData) {
   if (notFound) return { error: 'Not found' }
   if (alreadyExists) return { error: 'Role name already exists' }
   if (!success) return { error: 'Transaction failed' }
-  revalidatePath('/settings')
+  revalidatePath('/management/settings')
   return { success: true }
 }
 
@@ -228,6 +228,6 @@ export async function deleteRole(id: string) {
   if (notFound) return { error: 'Role not found' }
   if (!success) return { error: 'Failed to delete role' }
 
-  revalidatePath('/settings')
+  revalidatePath('/management/settings')
   return { success: true }
 }

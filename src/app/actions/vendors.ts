@@ -67,7 +67,7 @@ export async function addVendor(prevState: any, formData: FormData) {
   if (alreadyExists) return { error: 'A vendor with this name already exists in this branch' }
 
   if (!success) return { error: 'Transaction failed' }
-  revalidatePath('/vendors')
+  revalidatePath('/management/vendors')
   return { success: true }
 }
 
@@ -110,8 +110,8 @@ export async function addVendorBill(prevState: any, formData: FormData) {
   })
 
   if (!success) return { error: 'Transaction failed' }
-  revalidatePath('/vendors')
-  revalidatePath('/expenses')
+  revalidatePath('/management/vendors')
+  revalidatePath('/management/expenses')
   return { success: true }
 }
 
@@ -138,7 +138,7 @@ export async function markVendorBillAsPaid(id: string) {
   if (notFound) return { error: 'Bill not found' }
   if (!success) return { error: 'Transaction failed' }
 
-  revalidatePath('/vendors')
-  revalidatePath('/expenses')
+  revalidatePath('/management/vendors')
+  revalidatePath('/management/expenses')
   return { success: true }
 }

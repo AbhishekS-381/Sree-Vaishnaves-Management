@@ -3,16 +3,16 @@ import * as db from '@/lib/db'
 import * as auth from '@/app/actions/auth'
 
 // Import all data pages
-import StaffPage from '@/app/staff/page'
-import AttendancePage from '@/app/attendance/page'
-import BranchesPage from '@/app/branches/page'
-import EODPage from '@/app/eod/page'
-import ExpensesPage from '@/app/expenses/page'
-import InventoryPage from '@/app/inventory/page'
-import MenuPage from '@/app/menu/page'
-import PayrollPage from '@/app/payroll/page'
-import ReportsPage from '@/app/reports/page'
-import VendorsPage from '@/app/vendors/page'
+import StaffPage from '@/app/management/staff/page'
+import AttendancePage from '@/app/management/attendance/page'
+import BranchesPage from '@/app/management/branches/page'
+import EODPage from '@/app/management/eod/page'
+import ExpensesPage from '@/app/management/expenses/page'
+import InventoryPage from '@/app/management/inventory/page'
+import MenuPage from '@/app/management/menu/page'
+import PayrollPage from '@/app/management/payroll/page'
+import ReportsPage from '@/app/management/reports/page'
+import VendorsPage from '@/app/management/vendors/page'
 
 vi.mock('@/lib/db', () => ({
   readJSON: vi.fn().mockResolvedValue([]),
@@ -29,16 +29,16 @@ vi.mock('next/navigation', () => ({
 }))
 
 // Mock all Client Components so they don't error out during render
-vi.mock('@/app/staff/StaffClientPage', () => ({ default: (props: any) => <div data-props={props} /> }))
-vi.mock('@/app/attendance/AttendanceClientPage', () => ({ default: (props: any) => <div data-props={props} /> }))
-vi.mock('@/app/branches/BranchesClientPage', () => ({ default: (props: any) => <div data-props={props} /> }))
-vi.mock('@/app/eod/EODClientPage', () => ({ default: (props: any) => <div data-props={props} /> }))
-vi.mock('@/app/expenses/ExpensesClientPage', () => ({ default: (props: any) => <div data-props={props} /> }))
-vi.mock('@/app/inventory/InventoryClientPage', () => ({ default: (props: any) => <div data-props={props} /> }))
-vi.mock('@/app/menu/MenuClientPage', () => ({ default: (props: any) => <div data-props={props} /> }))
+vi.mock('@/app/management/staff/StaffClientPage', () => ({ default: (props: any) => <div data-props={props} /> }))
+vi.mock('@/app/management/attendance/AttendanceClientPage', () => ({ default: (props: any) => <div data-props={props} /> }))
+vi.mock('@/app/management/branches/BranchesClientPage', () => ({ default: (props: any) => <div data-props={props} /> }))
+vi.mock('@/app/management/eod/EODClientPage', () => ({ default: (props: any) => <div data-props={props} /> }))
+vi.mock('@/app/management/expenses/ExpensesClientPage', () => ({ default: (props: any) => <div data-props={props} /> }))
+vi.mock('@/app/management/inventory/InventoryClientPage', () => ({ default: (props: any) => <div data-props={props} /> }))
+vi.mock('@/app/management/menu/MenuClientPage', () => ({ default: (props: any) => <div data-props={props} /> }))
 vi.mock('@/app/payroll/PayrollClientPage', () => ({ default: (props: any) => <div data-props={props} /> }))
-vi.mock('@/app/reports/ReportsClientPage', () => ({ default: (props: any) => <div data-props={props} /> }))
-vi.mock('@/app/vendors/VendorsClientPage', () => ({ default: (props: any) => <div data-props={props} /> }))
+vi.mock('@/app/management/reports/ReportsClientPage', () => ({ default: (props: any) => <div data-props={props} /> }))
+vi.mock('@/app/management/vendors/VendorsClientPage', () => ({ default: (props: any) => <div data-props={props} /> }))
 
 const pagesToTest = [
   { name: 'StaffPage', component: StaffPage, dataProp: 'initialStaff' },

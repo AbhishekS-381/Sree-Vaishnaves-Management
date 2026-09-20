@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import BranchPage from '@/app/branches/[id]/page'
+import BranchPage from '@/app/management/branches/[id]/page'
 import * as db from '@/lib/db'
 import * as auth from '@/app/actions/auth'
 import { redirect } from 'next/navigation'
@@ -59,6 +59,6 @@ describe('Branch Details Page RBAC', () => {
   it('Manager is redirected when accessing another branch', async () => {
     vi.mocked(auth.getSession).mockResolvedValue({ role: 'manager', branchId: 'b2', isGlobalAdmin: false, isRootAdmin: false } as any)
     await BranchPage({ params: { id: 'b1' } } as any)
-    expect(redirect).toHaveBeenCalledWith('/')
+    expect(redirect).toHaveBeenCalledWith('/management')
   })
 })

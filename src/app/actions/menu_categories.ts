@@ -41,9 +41,9 @@ export async function addMenuCategory(prevState: any, formData: FormData) {
   if (alreadyExists) return { error: 'Category name already exists' }
 
   if (!success) return { error: 'Failed to add menu category' }
-  revalidatePath('/settings')
-  revalidatePath('/menu')
-  revalidatePath('/staff')
+  revalidatePath('/management/settings')
+  revalidatePath('/management/menu')
+  revalidatePath('/management/staff')
   return { success: true }
 }
 
@@ -79,9 +79,9 @@ export async function updateMenuCategory(prevState: any, formData: FormData) {
   if (notFound) return { error: 'Category not found' }
   if (alreadyExists) return { error: 'Category name already exists' }
   if (!success) return { error: 'Transaction failed' }
-  revalidatePath('/settings')
-  revalidatePath('/menu')
-  revalidatePath('/staff')
+  revalidatePath('/management/settings')
+  revalidatePath('/management/menu')
+  revalidatePath('/management/staff')
   return { success: true }
 }
 
@@ -98,9 +98,9 @@ export async function deleteMenuCategory(id: string) {
   })
 
   if (!success) return { error: 'Failed to delete menu category' }
-  revalidatePath('/settings')
-  revalidatePath('/menu')
-  revalidatePath('/staff')
+  revalidatePath('/management/settings')
+  revalidatePath('/management/menu')
+  revalidatePath('/management/staff')
   return { success: true }
 }
 
@@ -123,5 +123,5 @@ export async function setBranchCategoryAvailability(branchId: string, categoryId
     }
     return cats
   })
-  revalidatePath('/menu')
+  revalidatePath('/management/menu')
 }
