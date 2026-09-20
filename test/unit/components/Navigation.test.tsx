@@ -53,4 +53,13 @@ describe('Navigation component', () => {
     expect(getByText('Staff')).toBeTruthy()
     expect(getByText('Settings')).toBeTruthy()
   })
+
+  it('all navigation links should point to /management paths', () => {
+    const { getByText } = render(<Navigation role="owner" isRootAdmin={true} config={{}}  />)
+    
+    // Test a few core links to ensure they have the correct /management prefix
+    expect(getByText('Dashboard').closest('a')?.getAttribute('href')).toBe('/management')
+    expect(getByText('Menu').closest('a')?.getAttribute('href')).toBe('/management/menu')
+    expect(getByText('Settings').closest('a')?.getAttribute('href')).toBe('/management/settings')
+  })
 })
