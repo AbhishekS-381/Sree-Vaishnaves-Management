@@ -64,4 +64,25 @@ describe('audit.ts - logAction', () => {
       ])
     )
   })
+
+  it('falls back to system user when getSession throws', async () => {
+    vi.mocked(auth.getSession).mockRejectedValue(new Error('no cookie store'))
+    vi.mocked(db.readJSON).mockResolvedValue([])
+    vi.mocked(db.writeJSON).mockResolvedValue(undefined)
+    await logAction('CREATE', 'STAFF', 'x')
+    const writtenLogs = vi.mocked(db.writeJSON).mock.calls[0][1] as any[]
+    expect(writtenLogs[0]).toMatchObject({ userId: 'system', userName: 'system' })
+  })
+
+  it('trims to the most recent 3000 entries', async () => {
+    vi.mocked(auth.getSession).mockResolvedValue({ userId: 'u1', name: 'Alice' } as any)
+    const existing = Array.from({ length: 3000 }, (_, i) => ({ id: `old_${i}`, action: 'OLD' }))
+    vi.mocked(db.readJSON).mockResolvedValue(existing as any)
+    vi.mocked(db.writeJSON).mockResolvedValue(undefined)
+    await logAction('NEW', 'STAFF', 'newest')
+    const writtenLogs = vi.mocked(db.writeJSON).mock.calls[0][1] as any[]
+    expect(writtenLogs).toHaveLength(3000)                 // capped
+    expect(writtenLogs[writtenLogs.length - 1].action).toBe('NEW') // newest kept
+    expect(writtenLogs[0].id).toBe('old_1')                // oldest dropped
+  })
 })

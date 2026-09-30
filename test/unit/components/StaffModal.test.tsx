@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render } from '@testing-library/react'
+import { render, fireEvent } from '@testing-library/react'
 import { StaffModal } from '@/components/StaffModal'
 
 vi.mock('lucide-react')
@@ -40,5 +40,90 @@ describe('StaffModal', () => {
   it('renders select elements for branch, dept, role, shift', () => {
     const { container } = render(<StaffModal isOpen={true} onClose={vi.fn()} branches={branches} departments={departments} roles={roles} />)
     expect(container.querySelectorAll('select').length).toBeGreaterThan(0)
+  })
+
+  it('shows a draft-restore banner when a draft exists', () => {
+    mockLoadDraft.mockReturnValueOnce({ name: 'Draft Person', phone: '9111' })
+    const { getByText } = render(<StaffModal isOpen={true} onClose={vi.fn()} branches={branches} departments={departments} roles={roles} />)
+    expect(getByText(/unsaved draft/i)).toBeTruthy()
+    expect(getByText('Restore')).toBeTruthy()
+    expect(getByText('Discard')).toBeTruthy()
+  })
+
+  it('discards a draft when Discard is clicked', () => {
+    mockLoadDraft.mockReturnValueOnce({ name: 'Draft Person' })
+    const { getByText, queryByText } = render(<StaffModal isOpen={true} onClose={vi.fn()} branches={branches} departments={departments} roles={roles} />)
+    fireEvent.click(getByText('Discard'))
+    expect(mockClearDraft).toHaveBeenCalledWith('add')
+    expect(queryByText(/unsaved draft/i)).toBeNull()
+  })
+
+  it('restores a draft into the form when Restore is clicked', () => {
+    mockLoadDraft.mockReturnValueOnce({
+      name: 'Draft Person', phone: '9222', branchId: 'b1', departmentId: 'd1', roleId: 'r1', salary: '15000',
+    })
+    const { getByText, queryByText } = render(<StaffModal isOpen={true} onClose={vi.fn()} branches={branches} departments={departments} roles={roles} />)
+    fireEvent.click(getByText('Restore'))
+    // banner disappears after restoring
+    expect(queryByText(/unsaved draft/i)).toBeNull()
+  })
+
+  it('locks branch/dept/role fields when a position is preselected', () => {
+    const requirements = [
+      { id: 'req1', branchId: 'b1', departmentId: 'd1', roleId: 'r1', requiredCount: 3, specialtyId: undefined },
+    ]
+    const { container } = render(
+      <StaffModal isOpen={true} onClose={vi.fn()} branches={branches} departments={departments} roles={roles}
+        requirements={requirements} staff={[]} preselectedPositionId="req1" />
+    )
+    // When a position is locked, branch/dept/role become hidden inputs (not selects)
+    expect(container.querySelector('input[name="positionId"]')).toBeTruthy()
+    expect((container.querySelector('input[name="branchId"]') as HTMLInputElement)?.value).toBe('b1')
+    expect((container.querySelector('input[name="roleId"]') as HTMLInputElement)?.value).toBe('r1')
+  })
+
+  it('autofills start/end time when a shift type is chosen', () => {
+    const { container } = render(<StaffModal isOpen={true} onClose={vi.fn()} branches={branches} departments={departments} roles={roles} />)
+    const shiftSelect = container.querySelector('select[name="shiftType"]') as HTMLSelectElement
+    fireEvent.change(shiftSelect, { target: { value: 'morning' } })
+    expect((container.querySelector('input[name="startTime"]') as HTMLInputElement).value).toBe('06:00')
+    expect((container.querySelector('input[name="endTime"]') as HTMLInputElement).value).toBe('14:00')
+  })
+
+  it('closes on backdrop click', () => {
+    const onClose = vi.fn()
+    const { container } = render(<StaffModal isOpen={true} onClose={onClose} branches={branches} departments={departments} roles={roles} />)
+    fireEvent.click(container.querySelector('.absolute.inset-0') as HTMLElement)
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('submits addStaff and closes on success', async () => {
+    const staffActions = await import('@/app/actions/staff')
+    const onClose = vi.fn()
+    const { container } = render(<StaffModal isOpen={true} onClose={onClose} branches={branches} departments={departments} roles={roles} />)
+    fireEvent.change(container.querySelector('input[name="name"]') as HTMLElement, { target: { value: 'New Person' } })
+    fireEvent.change(container.querySelector('input[name="phone"]') as HTMLElement, { target: { value: '9000000000' } })
+    fireEvent.submit(container.querySelector('form') as HTMLFormElement)
+    await vi.waitFor(() => expect(staffActions.addStaff).toHaveBeenCalled())
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalled())
+    expect(mockClearDraft).toHaveBeenCalledWith('add')
+  })
+
+  it('submits updateStaff when editing', async () => {
+    const staffActions = await import('@/app/actions/staff')
+    const editData = { id: 's1', name: 'Alice', phone: '9000', branchId: 'b1', departmentId: 'd1', roleId: 'r1', isActive: true }
+    const { container } = render(<StaffModal isOpen={true} onClose={vi.fn()} branches={branches} departments={departments} roles={roles} editData={editData} />)
+    fireEvent.submit(container.querySelector('form') as HTMLFormElement)
+    await vi.waitFor(() => expect(staffActions.updateStaff).toHaveBeenCalled())
+  })
+
+  it('shows the error message returned by the action', async () => {
+    const staffActions = await import('@/app/actions/staff')
+    vi.mocked(staffActions.addStaff).mockResolvedValueOnce({ error: 'Phone too short' } as any)
+    const { container, findByText } = render(<StaffModal isOpen={true} onClose={vi.fn()} branches={branches} departments={departments} roles={roles} />)
+    fireEvent.change(container.querySelector('input[name="name"]') as HTMLElement, { target: { value: 'X' } })
+    fireEvent.change(container.querySelector('input[name="phone"]') as HTMLElement, { target: { value: '1' } })
+    fireEvent.submit(container.querySelector('form') as HTMLFormElement)
+    expect(await findByText('Phone too short')).toBeTruthy()
   })
 })

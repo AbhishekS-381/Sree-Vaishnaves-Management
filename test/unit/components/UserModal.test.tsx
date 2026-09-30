@@ -54,4 +54,31 @@ describe('UserModal component', () => {
     fireEvent.click(getByText('Cancel'))
     expect(onClose).toHaveBeenCalledTimes(1)
   })
+
+  it('shows the branch selector when role is manager', () => {
+    const { container } = render(
+      <UserModal isOpen={true} onClose={vi.fn()} editData={{ id: 'u1', name: 'm', role: 'manager' }} branches={[{ id: 'b1', name: 'Main' }]} />
+    )
+    expect(container.querySelector('select[name="branchId"]')).toBeTruthy()
+  })
+
+  it('submits addUser and calls onClose on success', async () => {
+    const users = await import('@/app/actions/users')
+    const onClose = vi.fn()
+    const { container } = render(<UserModal isOpen={true} onClose={onClose} branches={[{ id: 'b1', name: 'Main' }]} />)
+    fireEvent.change(container.querySelector('input[name="name"]') as HTMLElement, { target: { value: 'newuser' } })
+    fireEvent.change(container.querySelector('input[name="password"]') as HTMLElement, { target: { value: 'Secret1!' } })
+    fireEvent.submit(container.querySelector('form') as HTMLFormElement)
+    await vi.waitFor(() => expect(users.addUser).toHaveBeenCalled())
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalled())
+  })
+
+  it('submits updateUser when editing', async () => {
+    const users = await import('@/app/actions/users')
+    const { container } = render(
+      <UserModal isOpen={true} onClose={vi.fn()} editData={{ id: 'u1', name: 'alice', role: 'owner' }} />
+    )
+    fireEvent.submit(container.querySelector('form') as HTMLFormElement)
+    await vi.waitFor(() => expect(users.updateUser).toHaveBeenCalled())
+  })
 })

@@ -17,7 +17,7 @@ export default defineConfig({
     include: ['test/unit/**/*.test.ts', 'test/unit/**/*.test.tsx'],
     environmentMatchGlobs: [
       ['test/unit/lib/jwt.test.ts', 'node'],
-      ['test/unit/middleware.test.ts', 'node'],
+      ['test/unit/proxy.test.ts', 'node'],
     ],
     coverage: {
       provider: 'v8',
@@ -26,7 +26,7 @@ export default defineConfig({
         'src/app/actions/**/*.ts',
         'src/hooks/**/*.ts',
         'src/lib/**/*.ts',
-        'src/middleware.ts',
+        'src/proxy.ts',
         'src/components/**/*.tsx',
       ],
       exclude: [
@@ -34,28 +34,29 @@ export default defineConfig({
         'src/app/**/page.tsx',
         'src/app/**/[id]/page.tsx',
         'src/**/*.d.ts',
-        // StaffModal is a 281-line complex form; its coverage worker crashes (OOM)
-        // during instrumentation. Covered by integration tests instead.
-        'src/components/StaffModal.tsx',
-        'src/components/ScheduleTimeline.tsx',
-        'src/components/AutoScheduleModal.tsx',
-        'src/lib/db.ts',
       ],
       thresholds: {
-        // Global minimum — anchored by backend (actions, lib, hooks) which are ≥90%
-        // Components lower threshold because Next.js hooks & class components
-        // require special instrumentation tooling beyond jsdom
-        lines: 85,
-        functions: 85,
-        branches: 78,
-        statements: 85,
-        // Per-path overrides for backend modules
-        'src/app/actions/**': { lines: 90, functions: 85, branches: 80, statements: 90 },
+        // Global floors — raised as coverage improved. Keep these just under the
+        // measured values so a small regression fails the build rather than
+        // silently eroding coverage.
+        lines: 93,
+        functions: 88,
+        branches: 84,
+        statements: 91,
+        // Per-path floors
+        'src/app/actions/**': { lines: 95, functions: 90, branches: 85, statements: 93 },
+        'src/hooks/**': { lines: 98, functions: 100, branches: 95, statements: 96 },
         'src/lib/audit.ts': { lines: 100, functions: 100, branches: 100, statements: 100 },
         'src/lib/jwt.ts': { lines: 100, functions: 100, branches: 100, statements: 100 },
         'src/lib/utils.ts': { lines: 100, functions: 100, branches: 100, statements: 100 },
-        'src/hooks/**': { lines: 90, functions: 90, branches: 85, statements: 90 },
-        'src/middleware.ts': { lines: 100, functions: 100, branches: 100, statements: 100 },
+        'src/lib/menuResolver.ts': { lines: 100, functions: 100, branches: 100, statements: 100 },
+        'src/lib/menuMigration.ts': { lines: 100, functions: 100, branches: 100, statements: 100 },
+        'src/lib/positionsSummary.ts': { lines: 100, functions: 100, branches: 100, statements: 100 },
+        'src/lib/rate-limit.ts': { lines: 100, functions: 100, branches: 100, statements: 100 },
+        'src/lib/db.ts': { lines: 100, functions: 100, branches: 90, statements: 100 },
+        'src/proxy.ts': { lines: 100, functions: 100, branches: 100, statements: 100 },
+        // Components are interaction-heavy; floor reflects measured coverage.
+        'src/components/**': { lines: 85, functions: 82, branches: 78, statements: 83 },
       }
     } as any
   } as any

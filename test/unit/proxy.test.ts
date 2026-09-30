@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { NextRequest, NextResponse } from 'next/server'
-import { middleware } from '@/middleware'
+import { proxy } from '@/proxy'
 
 // Mock jose jwtVerify since we run in jsdom
 vi.mock('jose', () => ({
@@ -14,7 +14,7 @@ function makeRequest(url: string, cookieValue?: string): NextRequest {
   return req
 }
 
-describe('middleware.ts', () => {
+describe('proxy.ts (route protection)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     process.env.JWT_SECRET = 'test-secret'
@@ -22,13 +22,13 @@ describe('middleware.ts', () => {
 
   it('allows public access to /', async () => {
     const req = makeRequest('http://localhost/')
-    const res = await middleware(req)
+    const res = await proxy(req)
     expect(res.status).toBe(200) // next()
   })
 
   it('allows public access to non-management routes', async () => {
     const req = makeRequest('http://localhost/some-api-route')
-    const res = await middleware(req)
+    const res = await proxy(req)
     expect(res.status).toBe(200) // next()
   })
 
@@ -36,7 +36,7 @@ describe('middleware.ts', () => {
     const { jwtVerify } = await import('jose')
     vi.mocked(jwtVerify).mockResolvedValue({ payload: { role: 'owner', isGlobalOwner: true } } as any)
     const req = makeRequest('http://localhost/management/login', 'valid-token')
-    const res = await middleware(req)
+    const res = await proxy(req)
     expect(res.status).toBe(307)
     expect(res.headers.get('location')).toContain('/management')
   })
@@ -45,7 +45,7 @@ describe('middleware.ts', () => {
     const { jwtVerify } = await import('jose')
     vi.mocked(jwtVerify).mockRejectedValue(new Error('invalid'))
     const req = makeRequest('http://localhost/management/login')
-    const res = await middleware(req)
+    const res = await proxy(req)
     expect(res.status).toBe(200) // next()
   })
 
@@ -54,7 +54,7 @@ describe('middleware.ts', () => {
     vi.mocked(jwtVerify).mockRejectedValue(new Error('Invalid token'))
     
     const req = makeRequest('http://localhost/management/dashboard')
-    const res = await middleware(req)
+    const res = await proxy(req)
     expect(res.status).toBe(307)
     expect(res.headers.get('location')).toContain('/management/login')
   })
@@ -63,7 +63,7 @@ describe('middleware.ts', () => {
     const { jwtVerify } = await import('jose')
     vi.mocked(jwtVerify).mockResolvedValue({ payload: { role: 'owner', isGlobalOwner: true } } as any)
     const req = makeRequest('http://localhost/management/dashboard', 'valid-token')
-    const res = await middleware(req)
+    const res = await proxy(req)
     expect(res.status).toBe(200) // next()
   })
 
@@ -73,7 +73,7 @@ describe('middleware.ts', () => {
     
     // Simulate Request with no session cookie
     const req = makeRequest('http://localhost/management/staff')
-    const res = await middleware(req)
+    const res = await proxy(req)
     expect(res.status).toBe(307) // redirect to /management/login
   })
 
@@ -82,7 +82,7 @@ describe('middleware.ts', () => {
     delete process.env.JWT_SECRET
 
     const req = makeRequest('http://localhost/management/dashboard', 'valid-token')
-    const res = await middleware(req)
+    const res = await proxy(req)
     expect(res.status).toBe(307)
     expect(res.headers.get('location')).toContain('/management/login')
     process.env.JWT_SECRET = originalSecret

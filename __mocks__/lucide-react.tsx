@@ -22,3 +22,16 @@ export const Calendar = MockIcon; export const Clock = MockIcon; export const Ho
 export const Building = MockIcon; export const DollarSign = MockIcon; export const TrendingUp = MockIcon
 export const TrendingDown = MockIcon; export const Bell = MockIcon; export const HelpCircle = MockIcon
 export const MoreVertical = MockIcon; export const MoreHorizontal = MockIcon; export const Globe = MockIcon
+// Icons used by ScheduleTimeline / AutoScheduleModal and other screens
+export const Wand2 = MockIcon; export const Save = MockIcon; export const Wallet = MockIcon
+export const ShoppingCart = MockIcon; export const Edit3 = MockIcon; export const Edit2 = MockIcon
+export const Calculator = MockIcon; export const CheckCircle2 = MockIcon; export const ChevronLeft = MockIcon
+export const UserCheck = MockIcon; export const UserX = MockIcon; export const UserMinus = MockIcon
+export const IndianRupee = MockIcon; export const UtensilsCrossed = MockIcon; export const ArrowUp = MockIcon
+export const ArrowDown = MockIcon; export const XCircle = MockIcon; export const AlertTriangle = MockIcon
+export const Activity = MockIcon; export const Briefcase = MockIcon; export const Layers = MockIcon
+export const ToggleRight = MockIcon; export const LayoutTemplate = MockIcon; export const Tag = MockIcon
+export const FileWarning = MockIcon; export const Copy = MockIcon
+
+// Catch-all default so `import Icon from 'lucide-react'` style access still works
+export default MockIcon

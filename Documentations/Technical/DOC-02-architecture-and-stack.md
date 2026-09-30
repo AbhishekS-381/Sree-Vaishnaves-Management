@@ -75,7 +75,7 @@ Auth is built entirely on Server Actions in `src/app/actions/auth.ts`:
 2. `logout` deletes the cookie and redirects to `/management/login`.
 3. `getSession` reads and verifies the cookie; `requireBranchAccess(branchId)` enforces branch scoping inside actions.
 
-`src/middleware.ts` verifies the `session` cookie for all `/management/*` routes and redirects unauthenticated users to the login page.
+`src/proxy.ts` verifies the `session` cookie for all `/management/*` routes and redirects unauthenticated users to the login page.
 
 ---
 
@@ -89,7 +89,7 @@ Auth is built entirely on Server Actions in `src/app/actions/auth.ts`:
     seed.ts, seed-data.ts
   netlify/database/migrations/   # SQL migrations (json_store, rate_limit, admin seed)
   src/
-    middleware.ts       # session gate for /management/*
+    proxy.ts          # session gate for /management/* (Next 16 rename of middleware.ts)
     app/
       layout.tsx        # root layout
       (website)/        # public marketing site (page.tsx, layout.tsx)
@@ -204,6 +204,28 @@ The Next config sets strict headers on all routes: `X-Frame-Options: DENY`, `X-C
 ## Coding conventions
 
 - `async/await` throughout the actions layer.
-- All persistence goes through `src/lib/db.ts` (`readJSON` / `writeJSON` / `withTransaction`).
+- All persistence goes through `src/lib/db.ts` (`readJSON` / `writeJSON` / `withTransaction`), or `readBranchMenuItems` / `withBranchMenuTransaction` for per-branch menu shards.
 - Validate inputs with Zod before mutating.
 - In unit tests, mock `@/lib/db`, and mock `getSession` / `requireBranchAccess` from `@/app/actions/auth` with `vi.mock` / `vi.spyOn`.
+
+---
+
+## Testing
+
+**Unit — Vitest (jsdom).** `test/unit/**` mirrors `src/`: `actions/`, `lib/`, `hooks/`, `components/`, `pages/`, plus `middleware.test.ts`. Current state (verified 2026-09-30):
+
+- **719 tests across 52 files, 0 failures.**
+- Coverage: **92.71% statements · 86.19% branches · 90.42% functions · 95.11% lines.**
+- By layer: `src/lib` 98.69% · `src/hooks` 98.18% (100% funcs) · `src/app/actions` 94.84% · `src/components` 85.65%.
+- Thresholds are enforced in `vitest.config.ts` and set **just under** the measured values, so a regression fails the run instead of silently eroding coverage. Several pure modules are pinned at **100%**: `menuResolver`, `menuMigration`, `positionsSummary`, `rate-limit`, `jwt`, `utils`, `audit`, `middleware`.
+- Only layouts and route `page.tsx` files are excluded from coverage. (Earlier exclusions for `StaffModal`, `ScheduleTimeline`, `AutoScheduleModal` and `db.ts` have been removed and those files are now tested.)
+
+**Mocking conventions that matter:**
+- `vi.mock('lucide-react')` picks up the shared manual mock at `__mocks__/lucide-react.tsx` — add any new icon there or the component renders `undefined` and the test fails with "Element type is invalid".
+- `vi.mock` is **hoisted**: build mock objects with `vi.hoisted(() => …)` or you get "Cannot access '…' before initialization".
+- Mock `next/link` by **forwarding all props** (`({children, href, ...rest}) => <a href={href} {...rest}>`), otherwise `className`/`onClick` are dropped and active-state/close-on-navigate assertions silently fail.
+- `src/lib/db.ts` mocks the Drizzle instance by mocking `'../../../db/index'` (the path the module under test imports, resolved from the test file).
+
+**Integration — Playwright.** `test/integration/` runs against a dev server in Chromium (`playwright.config.ts`). Coverage here is currently thin (an EOD smoke test); expanding it is tracked in `To Do.md`.
+
+**Git hooks (Husky).** `pre-commit` runs `npm run test`; `pre-push` runs `npm run test:coverage` — so a coverage regression blocks a push.

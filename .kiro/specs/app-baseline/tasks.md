@@ -11,7 +11,7 @@
 
 All modules in the baseline are implemented and covered by the documentation set. There is nothing to "build" for the baseline itself.
 
-- [x] Auth, roles, branch scoping — implemented (`auth.ts`, `jwt.ts`, `rate-limit.ts`, `middleware.ts`)
+- [x] Auth, roles, branch scoping — implemented (`auth.ts`, `jwt.ts`, `rate-limit.ts`, `proxy.ts`)
 - [x] Persistence layer — implemented (`lib/db.ts`, `db/schema.ts`, seed)
 - [x] Dashboard — implemented (`management/page.tsx`)
 - [x] Staff & Positions (+ schedules, timeline, auto-scheduler) — implemented
@@ -26,6 +26,19 @@ All modules in the baseline are implemented and covered by the documentation set
 - [x] Branches & Settings (+ module toggles) — implemented
 - [x] Public marketing website — implemented
 - [x] Unit (Vitest) + integration (Playwright) test suites — present
+
+**Verified state (2026-09-30):** 719 unit tests across 52 files, 0 failures; coverage 92.71% stmts / 86.19% branch / 90.42% funcs / 95.11% lines, with thresholds enforced in `vitest.config.ts`. `tsc --noEmit` reports 0 errors in `src/`. `npx eslint` still fails (pre-existing, codebase-wide `no-explicit-any` / `no-this-alias`), which would block `next build` by default.
+
+## Menu Management v2 (delivered 2026-09-30)
+
+- [x] Per-branch sharding of `branch_menu_items` + read-through fallback + lazy seeding
+- [x] Idempotent, non-destructive shard migration (`src/lib/menuMigration.ts`)
+- [x] `updateMenuItem` (the previously blocking gap), `restoreMenuItem`, atomic reorder for items and categories
+- [x] Optional variants/portions, optional metadata (description, image, cost price, dietary, spice, allergens, signature, prep time), opt-in day/time availability windows
+- [x] Bulk availability + bulk price change (percent/flat/set), clone-branch config
+- [x] Price history, full audit logging, `{success}|{error}` contract on all branch actions, optimistic UI with error toasts
+- [x] Archive tab with restore, price matrix showing price + availability, CSV export
+- [ ] **Ops: run `migrateBranchMenuItemsToShards()` once per environment** — see the operational section in root `To Do.md`. Idempotent, non-destructive, and safe to defer (read-through fallback keeps the app working).
 
 ## Baseline hardening backlog (tracked, optional)
 

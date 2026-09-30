@@ -88,4 +88,79 @@ describe('useEODSave', () => {
     const { result } = renderHook(() => useEODSave('b1', '2023-10-01'))
     expect(result.current.isSaving).toBe(false)
   })
+
+  it('converts empty-string floats to undefined rather than 0', async () => {
+    const { saveEODEntry } = await import('@/app/actions/eod')
+    vi.mocked(saveEODEntry).mockResolvedValue({ success: true })
+    const { result } = renderHook(() => useEODSave('b1', '2023-10-01'))
+
+    await act(async () => {
+      await result.current.handleSave(income, [], 'notes', '', '', null, null)
+    })
+
+    const entry = vi.mocked(saveEODEntry).mock.calls[0][0] as any
+    expect(entry.openingFloat).toBeUndefined()
+    expect(entry.actualClosingFloat).toBeUndefined()
+  })
+
+  it('passes numeric floats through', async () => {
+    const { saveEODEntry } = await import('@/app/actions/eod')
+    vi.mocked(saveEODEntry).mockResolvedValue({ success: true })
+    const { result } = renderHook(() => useEODSave('b1', '2023-10-01'))
+
+    await act(async () => {
+      await result.current.handleSave(income, [], 'notes', 500, 480, null, null)
+    })
+
+    const entry = vi.mocked(saveEODEntry).mock.calls[0][0] as any
+    expect(entry.openingFloat).toBe(500)
+    expect(entry.actualClosingFloat).toBe(480)
+  })
+
+  it('normalises null billing/ops to undefined', async () => {
+    const { saveEODEntry } = await import('@/app/actions/eod')
+    vi.mocked(saveEODEntry).mockResolvedValue({ success: true })
+    const { result } = renderHook(() => useEODSave('b1', '2023-10-01'))
+
+    await act(async () => {
+      await result.current.handleSave(income, [], '', 0, 0, null, null)
+    })
+
+    const entry = vi.mocked(saveEODEntry).mock.calls[0][0] as any
+    expect(entry.billing).toBeUndefined()
+    expect(entry.ops).toBeUndefined()
+  })
+
+  it('maps each expense onto the branch and date', async () => {
+    const { saveEODEntry } = await import('@/app/actions/eod')
+    vi.mocked(saveEODEntry).mockResolvedValue({ success: true })
+    const { result } = renderHook(() => useEODSave('b1', '2023-10-01'))
+
+    await act(async () => {
+      await result.current.handleSave(
+        income,
+        [{ id: 'e1', amount: 10, categoryId: 'c1', notes: 'x' },
+         { id: 'e2', amount: 20, categoryId: 'c2' }] as any,
+        '', 0, 0, null, null
+      )
+    })
+
+    const expensesOut = vi.mocked(saveEODEntry).mock.calls[0][1] as any[]
+    expect(expensesOut).toHaveLength(2)
+    expensesOut.forEach(e => {
+      expect(e.branchId).toBe('b1')
+      expect(e.date).toBe('2023-10-01')
+    })
+  })
+
+  it('resets isSaving after a failed save', async () => {
+    const { saveEODEntry } = await import('@/app/actions/eod')
+    vi.mocked(saveEODEntry).mockRejectedValue(new Error('boom'))
+    const { result } = renderHook(() => useEODSave('b1', '2023-10-01'))
+
+    await act(async () => {
+      await result.current.handleSave(income, [], '', 0, 0, null, null)
+    })
+    expect(result.current.isSaving).toBe(false)
+  })
 })

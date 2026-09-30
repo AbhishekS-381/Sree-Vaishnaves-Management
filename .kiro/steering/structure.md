@@ -17,7 +17,7 @@ inclusion: always
 │   └── seed-data.ts        # default departments, roles, categories, branches, config, owner
 ├── netlify/database/migrations/   # SQL migrations (json_store, rate_limit, admin bootstrap)
 ├── src/
-│   ├── middleware.ts       # session gate for /management/*
+│   ├── proxy.ts          # session gate for /management/* (Next 16 rename of middleware.ts)
 │   ├── app/
 │   │   ├── layout.tsx      # root layout
 │   │   ├── (website)/      # PUBLIC marketing site (page.tsx, layout.tsx) — static

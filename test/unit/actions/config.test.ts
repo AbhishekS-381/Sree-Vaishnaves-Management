@@ -62,4 +62,31 @@ describe('config.ts - toggleModule', () => {
       expect.objectContaining({ id: 'global' })
     ])
   })
+
+  it('falls back to a default config when the read fails', async () => {
+    vi.mocked(db.readJSON).mockRejectedValue(new Error('db down'))
+    const result = await toggleModule('menu', false)
+
+    expect(result).toEqual({ success: true })
+    expect(db.writeJSON).toHaveBeenCalledWith('mock.json', [
+      expect.objectContaining({ id: 'global', menu: false, attendance: true }),
+    ])
+  })
+
+  it('can re-enable a module', async () => {
+    vi.mocked(db.readJSON).mockResolvedValue([
+      { id: 'global', attendance: false, payroll: true, vendors: true, inventory: true, menu: true, reports: true }
+    ])
+    const result = await toggleModule('attendance', true)
+    expect(result).toEqual({ success: true })
+    expect(db.writeJSON).toHaveBeenCalledWith('mock.json', [
+      expect.objectContaining({ attendance: true }),
+    ])
+  })
+
+  it('rejects when there is no session at all', async () => {
+    vi.mocked(auth.getSession).mockResolvedValue(null as any)
+    const result = await toggleModule('reports', false)
+    expect(result).toEqual({ error: 'Forbidden: Only admin can toggle modules' })
+  })
 })

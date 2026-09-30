@@ -10,7 +10,7 @@ A restaurant management platform for the Sree Vaishnaves vegetarian restaurant b
 - **Server Actions, not REST.** All server logic lives in `src/app/actions/*.ts` (`'use server'`) and is called directly from React components. There is no `/api` layer.
 - **JSON-blob store.** State is persisted as JSON arrays in a single PostgreSQL table `json_store` (one row per collection), plus a `rate_limit` table. Access goes through `src/lib/db.ts` (`readJSON` / `writeJSON` / `withTransaction`, guarded by an in-process per-file mutex).
 - **Drizzle ORM** with a driver switch: Neon HTTP in dev, native Netlify DB in production (selected by the `NETLIFY` env flag).
-- **Auth:** Server-Action login → bcrypt check → 2-hour HS256 JWT (jose) in an `HttpOnly`, `SameSite=strict` cookie; `src/middleware.ts` gates `/management/*`.
+- **Auth:** Server-Action login → bcrypt check → 2-hour HS256 JWT (jose) in an `HttpOnly`, `SameSite=strict` cookie; `src/proxy.ts` gates `/management/*`.
 
 ## Roles
 

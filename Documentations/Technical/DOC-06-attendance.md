@@ -69,8 +69,12 @@ There is **no `leave` status** in the code. The status literal uses a hyphen (`h
 - Loads existing logs for the date via `getAttendanceByDate` and keys them by `staffId`.
 - "Mark all present" sets every active staff member's status to `present` client-side.
 - Individual rows can be toggled between present / absent / half-day / holiday.
+- **Shift toggles:** each row also has `Morning` / `Evening` / `Full Day` buttons that add/remove entries in that log's `shiftsWorked` array (seeded from the staff member's `shiftType`, defaulting to `Full Day`). These are persisted with the log.
 - Staff are grouped/labelled by role for scanning large teams.
 - A summary count is shown; saving calls `saveAttendance` with the full set.
+- Drafts are auto-saved to localStorage per `branch_date` and cleared on successful save.
+
+> **Note on `shiftsWorked`:** it is captured in the UI and stored in `attendance.json`, but **no downstream logic reads it**. Payroll derives days-worked solely from `status` (present = 1, half-day = 0.5); Reports and the Dashboard do not reference it. It currently serves as a record of shift coverage only.
 
 ---
 

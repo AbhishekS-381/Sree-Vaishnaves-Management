@@ -73,4 +73,14 @@ describe('StaffFilters component', () => {
     // Filter was called at least once (initial or via label click)
     expect(onFilterChange).toHaveBeenCalled()
   })
+
+  it('toggles the mobile filters panel', () => {
+    const { getByText, container } = render(
+      <StaffFilters branches={branches} departments={departments} roles={roles} onFilterChange={vi.fn()} />
+    )
+    // Mobile "Filters" button toggles an expandable panel
+    fireEvent.click(getByText('Filters'))
+    // after opening, the mobile panel adds an extra role select
+    expect(container.querySelectorAll('select').length).toBeGreaterThan(3)
+  })
 })

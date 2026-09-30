@@ -124,7 +124,7 @@ Own branch only: mark attendance, fill day-end, add expenses/vendor bills, adjus
 # Part 5 — Security Model
 
 ## 5.1 Authentication
-Server-Action login: dual-axis rate limiting (per IP 10/min, per username 20/hour, 5-min block, fails open), bcrypt password check, a 2-hour HS256 JWT stored in an `HttpOnly`, `SameSite=strict` cookie. `src/middleware.ts` gates all `/management/*` routes; page loaders add role-specific redirects.
+Server-Action login: dual-axis rate limiting (per IP 10/min, per username 20/hour, 5-min block, fails open), bcrypt password check, a 2-hour HS256 JWT stored in an `HttpOnly`, `SameSite=strict` cookie. `src/proxy.ts` gates all `/management/*` routes; page loaders add role-specific redirects.
 
 ## 5.2 Authorization (capability summary)
 ```

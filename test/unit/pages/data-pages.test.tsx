@@ -16,6 +16,9 @@ import VendorsPage from '@/app/management/vendors/page'
 
 vi.mock('@/lib/db', () => ({
   readJSON: vi.fn().mockResolvedValue([]),
+  // MenuPage reads per-branch shards instead of one combined blob
+  readBranchMenuItems: vi.fn().mockResolvedValue([]),
+  branchMenuItemsFile: (b: string) => `branch_menu_items_${b}.json`,
   DB_FILES: new Proxy({}, { get: (target, prop) => String(prop).toLowerCase() + '.json' })
 }))
 

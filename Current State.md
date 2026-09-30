@@ -31,7 +31,7 @@ Four roles with JWT capability flags:
 - **Expenses**: shared ledger (source eod/vendor); edit/delete owner/admin-only; global expense categories.
 - **Vendors**: supplier profiles and bills written to the ledger (source vendor) with paid/unpaid tracking.
 - **Inventory**: items with integer quantities and thresholds; logged increase/decrease adjustments; low-stock alerts.
-- **Menu**: global item/category catalog with per-branch price and availability overrides; categories reused as chef specialties.
+- **Menu (v2)**: global item/category catalog with **per-branch price & availability overrides stored in per-branch shards**; full item edit; optional variants/portions; optional metadata (description, image, cost price, dietary, spice level, allergens, signature, prep time); opt-in day/time availability windows (incl. overnight); item & category reordering (atomic); bulk availability and bulk price change (percent/flat/set); clone one branch's config onto another; Archive tab with restore; price-matrix view showing price **and** availability per branch; CSV export; price history on every change; optimistic toggles with error toasts; full audit logging.
 - **Reports**: browser-computed revenue splits, MoM change, expenses by category, salary-as-%-of-revenue, net profit, GST/covers; CSV export.
 - **Branches & Settings**: branch CRUD; admin-only master data (roles, departments, categories, users) and module toggles.
 - **Cross-cutting**: soft deletion for core entities, partial audit logging (`audit_logs.json`, capped 3000), strict security headers/CSP.
@@ -44,21 +44,31 @@ Four roles with JWT capability flags:
 - Migrations commit a plaintext bootstrap admin password and a hardcoded Postgres role password — rotate and remove from source.
 - No POS/order-taking; no automatic inventory deduction; no external notifications.
 
-## Verified Quality Gates (last checked 2026-09-30)
+## Verified Quality Gates (last checked 2026-09-30, after Menu v2 + coverage pass)
 
 Results from actually running the toolchain (`npm install` → test → coverage → eslint → tsc). `next build` and Playwright were **not** run (build chains `db:seed`, which needs a live DB).
 
 | Gate | Command | Result |
 |------|---------|--------|
-| Unit tests | `npm run test` | ✅ **PASS** — 420 passed / 5 skipped / 0 failed (44 files). Skipped = `lib/db.test.ts`. |
-| Coverage gate | `npm run test:coverage` | ❌ **FAIL (exit 1)** — overall 90.65% stmts / 84.92% branch / 86.47% funcs / 93.33% lines, but `src/lib/audit.ts` misses its 100% threshold (93.75% stmts / 87.5% branch / 93.33% lines). |
-| Lint | `npx eslint` | ❌ **FAIL (exit 1)** — 747 errors + 1613 warnings; **383 errors in `src/`** (mostly `@typescript-eslint/no-explicit-any` ≈604 total, `no-this-alias` ≈103 from the `Mutex`). |
-| Type-check | `npx tsc --noEmit` | ❌ **FAIL (exit 1)** — but **0 errors in `src/`**; all 24 errors are in `test/` files (missing test globals like `vi`/`beforeEach`/`afterEach`, and fixture prop mismatches e.g. EOD tests missing `attendance`). |
-| Production build | `next build` | ⚠️ **Not run.** `next.config.ts` sets neither `eslint.ignoreDuringBuilds` nor `typescript.ignoreBuildErrors`, so by default the build would fail at the lint step given the 383 src ESLint errors. |
+| Unit tests | `npm run test` | ✅ **PASS** — **719 passed / 0 failed** (52 files). |
+| Coverage gate | `npm run test:coverage` | ✅ **PASS (exit 0)** — **92.71% stmts / 86.19% branch / 90.42% funcs / 95.11% lines**; all per-path thresholds met. |
+| Type-check | `npx tsc --noEmit` | ⚠️ exits 1, but **0 errors in `src/`**; all remaining errors are in `test/` files (missing test globals, fixture prop mismatches). Production code type-checks clean. |
+| Lint | `npx eslint` | ❌ **FAIL** — many errors, dominated by `@typescript-eslint/no-explicit-any` and `no-this-alias`. **Does not block the build** (see below). |
+| Production build | `next build` | ✅ **PASS (exit 0)** — compiles, type-checks, and generates 16 routes. Next 16 does **not** run ESLint during `next build`, so the lint failures above are a code-quality issue, not a release blocker. |
+| Production server | `next start` | ✅ **PASS** — boots in ~230 ms. Verified: `/` → 200, `/management/*` → 307 → `/management/login`, `/management/login` → 200, unknown path → 404, static assets ungated, all security headers present. |
 
-**Coverage hotspots (weakest):** `src/components` overall ~71% stmts / ~69% lines — `RoleModal` 33%, `RequirementModal` 48%, `UserModal` 69%. `StaffModal`, `ScheduleTimeline`, `AutoScheduleModal`, and `lib/db.ts` are **excluded** from coverage in `vitest.config.ts`. Backend is strong: actions 90–100%, hooks ~95%, `middleware`/`jwt`/`utils`/`positionsSummary` at 100%.
+### Required environment
+`JWT_SECRET` **must** be set or login fails at runtime (`signToken` throws and the `login` action has no catch around it). It was missing from the local `.env` and has been added for development; production supplies its own via Netlify env vars. `DATABASE_URL` is also required.
 
-**Readiness verdict:** functionally/runtime ready (production TS compiles clean; full unit suite green), but **NOT release-clean** — coverage, lint, and strict type-check gates currently fail.
+> Note: a transient Neon `ConnectTimeoutError` was observed during one build while collecting page data. `readJSON` catches it and returns `[]`, so the build still succeeded — but be aware this design means a DB outage renders **empty** pages rather than an error state.
+
+**Coverage by layer:** `src/lib` **98.69%** stmts · `src/hooks` **98.18%** stmts / 100% funcs · `src/app/actions` **94.84%** stmts / 97.7% lines · `src/components` **85.65%** stmts / 85% funcs.
+
+**At 100% on all four metrics:** `menuResolver`, `menuMigration`, `positionsSummary`, `rate-limit`, `jwt`, `utils`, `audit`, `middleware`, `Toast`, `Navigation`, `PositionsSummaryCards`, `useMenuResolver`, `useEODSave`, and `db.ts` (except one branch).
+
+**Nothing is excluded from coverage** except layouts and route `page.tsx` files. Thresholds in `vitest.config.ts` are set just under the measured values so a regression fails the build rather than silently eroding coverage.
+
+**Readiness verdict:** **build and production server verified working.** Tests and coverage green with strong coverage. The remaining item is the codebase-wide **ESLint** failure — a code-quality debt, not a build or release blocker.
 
 ## Page-by-Page Maturity
 
@@ -70,7 +80,7 @@ Legend: 🟢 fully built (complete for its scope) · 🟡 pilot/MVP (works but a
 | Branches (+ `[id]`) | 🟢 Full | — |
 | Settings | 🟢 Full | — |
 | Staff & Positions | 🟢 Full | `ScheduleTimeline`/`AutoScheduleModal` have no unit tests |
-| Attendance | 🟢 Full | `shiftsWorked` in model but unused by UI |
+| Attendance | 🟢 Full | `shiftsWorked` is captured (Morning/Evening/Full Day toggles) and stored, but never read downstream — payroll/reports use only `status` |
 | EOD Entry | 🟢 Full | — |
 | Dashboard | 🔵 Full (read-only) | notification bell is decorative (dot only) |
 | Reports | 🔵 Full (read-only) | CSV only; no Excel/PDF; no dedicated consolidated view |
@@ -78,7 +88,7 @@ Legend: 🟢 fully built (complete for its scope) · 🟡 pilot/MVP (works but a
 | **Payroll** | 🟡 Pilot | no PDF salary slip; fixed /30 divisor; advances are a bare number (no ledger); no approval-lock; save overwrites the month |
 | **Expenses** | 🟡 Pilot | no "add expense" on the page (only via EOD/vendor); hard delete, no recovery |
 | **Vendors** | 🟡 Pilot | no `updateVendor`/`deleteVendor` — a created vendor is permanent; bill correction only via Expenses |
-| **Menu** | 🟡 Pilot | no edit for a global menu item (name/category/basePrice) — delete + re-add only |
+| **Menu** | 🟢 Full | item edit, variants, bulk ops, clone, archive/restore, windows, cost/margin all shipped in v2 |
 | **Inventory** | 🟡 Pilot | integer-only quantities (no decimals like 2.5 kg); no menu/vendor linkage; manual-only |
 
-**Summary:** ~9 of 14 pages are functionally complete for their intended scope; **5 are pilot/MVP** (Payroll, Expenses, Vendors, Menu, Inventory), each missing one CRUD leg or a business-expected output. "Pilot" reflects functional completeness, not code quality — the lint/coverage gate failures above apply across all pages.
+**Summary:** ~10 of 14 pages are functionally complete for their intended scope; **4 are pilot/MVP** (Payroll, Expenses, Vendors, Inventory), each missing one CRUD leg or a business-expected output. Menu graduated to full in v2. "Pilot" reflects functional completeness, not code quality — the lint gate failure above applies across all pages.

@@ -130,4 +130,38 @@ describe('Categories Actions', () => {
     const res = await deleteCategory('1')
     expect(res).toEqual({ success: true })
   })
+
+  it('deleteCategory still succeeds when the follow-up reads fail', async () => {
+    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
+      await cb([{ id: '1', name: 'test' }])
+      return true
+    })
+    // exercises the `.catch(() => [])` fallbacks after the delete
+    vi.mocked(db.readJSON).mockRejectedValue(new Error('db down'))
+    const res = await deleteCategory('1')
+    expect(res).toEqual({ success: true })
+  })
+
+  it('deleteCategory removes only the targeted category', async () => {
+    let saved: any[] = []
+    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
+      saved = await cb([{ id: '1', name: 'Keep' }, { id: '2', name: 'Drop' }])
+      return true
+    })
+    vi.mocked(db.readJSON).mockResolvedValue([])
+    const res = await deleteCategory('2')
+    expect(res).toEqual({ success: true })
+    expect(saved.map(c => c.id)).toEqual(['1'])
+  })
+
+  it('addCategory applies the default colour when none is supplied', async () => {
+    let saved: any[] = []
+    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
+      saved = await cb([])
+      return true
+    })
+    const res = await addCategory({}, { get: (k: string) => (k === 'name' ? 'Gas' : null) } as any)
+    expect(res).toEqual({ success: true })
+    expect(saved[0].color).toBe('#64748b')
+  })
 })

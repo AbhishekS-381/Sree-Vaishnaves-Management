@@ -39,4 +39,36 @@ describe('RequirementModal', () => {
     const roleSelect = container.querySelector('select[name="roleId"]') as HTMLSelectElement
     expect(roleSelect.options.length).toBeGreaterThan(1)
   })
+
+  it('shows the specialty select when a chef role is chosen', () => {
+    const menuCategories = [{ id: 'mc1', name: 'Tandoor' }]
+    const { container } = render(<RequirementModal isOpen={true} onClose={vi.fn()} branches={branches} departments={departments} roles={roles} menuCategories={menuCategories} />)
+    fireEvent.change(container.querySelector('select[name="departmentId"]') as HTMLElement, { target: { value: 'd1' } })
+    fireEvent.change(container.querySelector('select[name="roleId"]') as HTMLElement, { target: { value: 'r1' } }) // r1 isChef
+    expect(container.querySelector('select[name="specialtyId"]')).toBeTruthy()
+  })
+
+  it('submits saveRequirement and closes on success', async () => {
+    const actions = await import('@/app/actions/staff_requirements')
+    const onClose = vi.fn()
+    const { container } = render(<RequirementModal isOpen={true} onClose={onClose} branches={branches} departments={departments} roles={roles} />)
+    fireEvent.change(container.querySelector('select[name="branchId"]') as HTMLElement, { target: { value: 'b1' } })
+    fireEvent.change(container.querySelector('select[name="departmentId"]') as HTMLElement, { target: { value: 'd1' } })
+    fireEvent.change(container.querySelector('select[name="roleId"]') as HTMLElement, { target: { value: 'r2' } })
+    fireEvent.change(container.querySelector('input[name="requiredCount"]') as HTMLElement, { target: { value: '2' } })
+    fireEvent.submit(container.querySelector('form') as HTMLFormElement)
+    await vi.waitFor(() => expect(actions.saveRequirement).toHaveBeenCalled())
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalled())
+  })
+
+  it('displays an error returned by the action', async () => {
+    const actions = await import('@/app/actions/staff_requirements')
+    vi.mocked(actions.saveRequirement).mockResolvedValueOnce({ error: 'A position with this Role, Department, and Branch already exists.' } as any)
+    const { container, findByText } = render(<RequirementModal isOpen={true} onClose={vi.fn()} branches={branches} departments={departments} roles={roles} />)
+    fireEvent.change(container.querySelector('select[name="branchId"]') as HTMLElement, { target: { value: 'b1' } })
+    fireEvent.change(container.querySelector('select[name="departmentId"]') as HTMLElement, { target: { value: 'd1' } })
+    fireEvent.change(container.querySelector('select[name="roleId"]') as HTMLElement, { target: { value: 'r2' } })
+    fireEvent.submit(container.querySelector('form') as HTMLFormElement)
+    expect(await findByText(/already exists/i)).toBeTruthy()
+  })
 })

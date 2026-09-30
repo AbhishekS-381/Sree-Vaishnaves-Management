@@ -49,3 +49,6 @@ next-env.d.ts
 
 # Local Netlify folder
 .netlify
+
+# Local DB backups (may contain live data) — never commit
+backup-json_store-*.json

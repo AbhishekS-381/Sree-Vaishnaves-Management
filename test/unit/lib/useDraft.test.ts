@@ -73,4 +73,41 @@ describe('useDraft hook', () => {
     expect(() => act(() => { result.current.clearDraft('add') })).not.toThrow()
     window.localStorage.removeItem = originalRemoveItem
   })
+
+  it('loadDraft discards a draft older than the 48h TTL', () => {
+    const stale = Date.now() - (49 * 60 * 60 * 1000)   // 49 hours ago
+    window.localStorage.setItem(
+      'rms_draft_test_old',
+      JSON.stringify({ data: { name: 'Stale' }, savedAt: stale })
+    )
+    const { result } = renderHook(() => useDraft('test'))
+    let loaded: any
+    act(() => { loaded = result.current.loadDraft('old') })
+
+    expect(loaded).toBeNull()
+    // the expired entry must also be evicted
+    expect(window.localStorage.getItem('rms_draft_test_old')).toBeNull()
+  })
+
+  it('loadDraft keeps a draft just inside the TTL', () => {
+    const fresh = Date.now() - (47 * 60 * 60 * 1000)   // 47 hours ago
+    window.localStorage.setItem(
+      'rms_draft_test_fresh',
+      JSON.stringify({ data: { name: 'Fresh' }, savedAt: fresh })
+    )
+    const { result } = renderHook(() => useDraft('test'))
+    let loaded: any
+    act(() => { loaded = result.current.loadDraft('fresh') })
+    expect(loaded).toEqual({ name: 'Fresh' })
+  })
+
+  it('namespaces keys by prefix so two forms do not collide', () => {
+    const a = renderHook(() => useDraft('staff'))
+    const b = renderHook(() => useDraft('menu'))
+    act(() => { a.result.current.saveDraft('add', { v: 'staff' }) })
+    act(() => { b.result.current.saveDraft('add', { v: 'menu' }) })
+
+    expect(JSON.parse(window.localStorage.getItem('rms_draft_staff_add')!).data).toEqual({ v: 'staff' })
+    expect(JSON.parse(window.localStorage.getItem('rms_draft_menu_add')!).data).toEqual({ v: 'menu' })
+  })
 })

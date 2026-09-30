@@ -36,7 +36,7 @@ One Next.js 16 application serves a **static public marketing site** (`/`) and a
 
 ### 2.2 Request/protection flow
 
-- `src/middleware.ts` verifies the `session` cookie for `/management/*` (redirects logged-out → login, logged-in → dashboard on the login route). `/` and static assets pass through.
+- `src/proxy.ts` verifies the `session` cookie for `/management/*` (redirects logged-out → login, logged-in → dashboard on the login route). `/` and static assets pass through.
 - Each protected `page.tsx` runs `getSession()`, fetches collections via `readJSON`, filters by `session.branchId` for non-global users, and may redirect (Settings → non-admins; EOD → readonly).
 - Each Server Action independently re-checks authorization and re-scopes — the UI is never trusted.
 

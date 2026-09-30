@@ -75,7 +75,7 @@ Rules:
 ## Auth specifics
 
 - Login (`auth.ts`): dual rate limit (IP 10/min + username 20/hr, 5-min block, **fails open**) → bcrypt compare → sign **2-hour HS256 JWT** → `HttpOnly`, `SameSite=strict` cookie `session`.
-- `src/middleware.ts` gates all `/management/*`; `/` is always public.
+- `src/proxy.ts` gates all `/management/*`; `/` is always public.
 - `JWT_SECRET` is required (app throws without it).
 
 ## Conventions

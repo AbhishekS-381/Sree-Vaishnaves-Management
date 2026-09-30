@@ -7,7 +7,7 @@
 
 ## Overview
 
-Authentication is built entirely on **Next.js Server Actions** (`src/app/actions/auth.ts`). There is no client-side token handling and no REST auth endpoint. A stateless JWT is stored in an `HttpOnly` cookie named `session`. Route protection is enforced by `src/middleware.ts`.
+Authentication is built entirely on **Next.js Server Actions** (`src/app/actions/auth.ts`). There is no client-side token handling and no REST auth endpoint. A stateless JWT is stored in an `HttpOnly` cookie named `session`. Route protection is enforced by `src/proxy.ts`.
 
 ---
 
@@ -110,7 +110,7 @@ interface CustomJWTPayload {
 
 ---
 
-## Route protection (`src/middleware.ts`)
+## Route protection (`src/proxy.ts`)
 
 - `/` (public website) always passes through.
 - Anything not under `/management` passes through.

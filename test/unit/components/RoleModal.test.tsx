@@ -56,4 +56,32 @@ describe('RoleModal component', () => {
     fireEvent.click(backdrop)
     expect(onClose).toHaveBeenCalledTimes(1)
   })
+
+  it('shows validation error when no department is selected on submit', async () => {
+    const { container, findByText } = render(<RoleModal isOpen={true} onClose={vi.fn()} departments={departments} />)
+    fireEvent.change(container.querySelector('input[name="name"]') as HTMLElement, { target: { value: 'Cook' } })
+    fireEvent.submit(container.querySelector('form') as HTMLFormElement)
+    expect(await findByText(/select at least 1 department/i)).toBeTruthy()
+  })
+
+  it('submits (addRole) and closes on success', async () => {
+    const settings = await import('@/app/actions/settings')
+    const onClose = vi.fn()
+    const { container } = render(<RoleModal isOpen={true} onClose={onClose} departments={departments} />)
+    fireEvent.change(container.querySelector('input[name="name"]') as HTMLElement, { target: { value: 'Cook' } })
+    fireEvent.click(container.querySelector('input[name="departmentIds"]') as HTMLElement)
+    fireEvent.submit(container.querySelector('form') as HTMLFormElement)
+    await vi.waitFor(() => expect(settings.addRole).toHaveBeenCalled())
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalled())
+  })
+
+  it('submits (updateRole) when editing', async () => {
+    const settings = await import('@/app/actions/settings')
+    const { container } = render(
+      <RoleModal isOpen={true} onClose={vi.fn()} departments={departments}
+        editData={{ id: 'r1', name: 'Manager', departmentIds: ['d1'] } as any} />
+    )
+    fireEvent.submit(container.querySelector('form') as HTMLFormElement)
+    await vi.waitFor(() => expect(settings.updateRole).toHaveBeenCalled())
+  })
 })

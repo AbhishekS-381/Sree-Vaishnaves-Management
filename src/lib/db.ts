@@ -57,8 +57,57 @@ export const DB_FILES = {
   MENU_CATEGORIES: 'menu_categories.json',
   BRANCH_MENU_ITEMS: 'branch_menu_items.json',
   BRANCH_CATEGORIES: 'branch_categories.json',
+  MENU_ITEM_VARIANTS: 'menu_item_variants.json',
+  MENU_PRICE_HISTORY: 'menu_price_history.json',
   AUDIT_LOGS: 'audit_logs.json'
 };
+
+/**
+ * Per-branch shard filename for branch menu overrides.
+ *
+ * `branch_menu_items.json` used to hold the entire item × branch cross-product,
+ * so flipping one availability flag rewrote every branch's rows. Sharding by
+ * branch cuts write amplification proportionally to the branch count and gives
+ * each branch its own mutex, so two managers can never clobber each other.
+ */
+export function branchMenuItemsFile(branchId: string): string {
+  return `branch_menu_items_${branchId}.json`;
+}
+
+/**
+ * Read a branch's menu overrides, falling back to the legacy combined blob for
+ * branches that have not been migrated yet. Read-only — never writes.
+ */
+export async function readBranchMenuItems<T extends { branchId: string }>(branchId: string): Promise<T[]> {
+  const shard = await readJSON<T>(branchMenuItemsFile(branchId));
+  if (shard.length > 0) return shard;
+
+  const legacy = await readJSON<T>(DB_FILES.BRANCH_MENU_ITEMS);
+  return legacy.filter(row => row.branchId === branchId);
+}
+
+/**
+ * Transaction against a single branch's shard.
+ * On first write for a branch, seeds the shard from the legacy blob so the
+ * migration is lazy and no data is lost if the one-shot migration never ran.
+ */
+export async function withBranchMenuTransaction<T extends { branchId: string }>(
+  branchId: string,
+  callback: (data: T[]) => T[] | Promise<T[]>
+): Promise<boolean> {
+  const file = branchMenuItemsFile(branchId);
+
+  const existing = await readJSON<T>(file);
+  if (existing.length === 0) {
+    const legacy = await readJSON<T>(DB_FILES.BRANCH_MENU_ITEMS);
+    const seed = legacy.filter(row => row.branchId === branchId);
+    if (seed.length > 0) {
+      await writeJSON<T>(file, seed);
+    }
+  }
+
+  return withTransaction<T>(file, callback);
+}
 
 export async function readJSON<T>(filename: string): Promise<T[]> {
   try {
