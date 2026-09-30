@@ -156,7 +156,7 @@ export async function updateBranch(prevState: any, formData: FormData) {
   if (!success) return { error: 'Transaction failed' }
 
   revalidatePath('/management/branches')
-  revalidatePath(`/branches/${id}`)
+  revalidatePath(`/management/branches/${id}`)
   return { success: true }
 }
 

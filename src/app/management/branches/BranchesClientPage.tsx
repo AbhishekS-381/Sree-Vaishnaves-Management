@@ -54,7 +54,7 @@ export default function BranchesClientPage({ branches, isReadOnly = false }: { b
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {branches.map((branch) => (
-          <Link href={`/branches/${branch.id}`} key={branch.id} className="block group">
+          <Link href={`/management/branches/${branch.id}`} key={branch.id} className="block group">
             <div className="bg-card p-6 rounded-2xl border border-card shadow-lg hover:shadow-primary/10 hover:border-primary/30 transition-all cursor-pointer h-full relative flex flex-col">
 
               <div className="flex justify-between items-start mb-2">

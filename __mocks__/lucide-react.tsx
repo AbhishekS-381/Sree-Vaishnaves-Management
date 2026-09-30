@@ -32,6 +32,8 @@ export const ArrowDown = MockIcon; export const XCircle = MockIcon; export const
 export const Activity = MockIcon; export const Briefcase = MockIcon; export const Layers = MockIcon
 export const ToggleRight = MockIcon; export const LayoutTemplate = MockIcon; export const Tag = MockIcon
 export const FileWarning = MockIcon; export const Copy = MockIcon
+export const MapPin = MockIcon; export const Phone = MockIcon
+export const ReceiptText = MockIcon; export const Scale = MockIcon; export const PieChart = MockIcon
 
 // Catch-all default so `import Icon from 'lucide-react'` style access still works
 export default MockIcon
