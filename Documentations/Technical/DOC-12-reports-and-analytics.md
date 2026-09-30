@@ -1,160 +1,71 @@
 # DOC-12 · Reports & Analytics
-**Version:** v1.0  
-**Last updated:** 2026-03-15  
-**Phase:** 3 (12–18 months)  
-**Depends on:** DOC-01, DOC-02, DOC-03, DOC-07, DOC-08, DOC-05
+**Version:** v2.0
+**Last updated:** 2026-09-30
+**Status:** Implemented
+**Depends on:** DOC-01, DOC-02, DOC-03, DOC-04, DOC-05, DOC-07, DOC-08
 
 ---
 
 ## Overview
 
-Reports and analytics are built on top of the data accumulated in Phases 1 and 2. This module is read-only — no data is created here. It provides P&L summaries, income/expense trends, salary analytics, and exportable reports.
+Reports at `/management/reports` (`ReportsClientPage.tsx`). This is a **read-only, client-side analytics screen** — the page loader (`page.tsx`) reads all relevant collections server-side (branch-scoped for managers) and passes them to the client, which computes every metric in-browser for a selected branch + month + year. There are no report Server Actions and no server-side aggregation endpoints.
+
+Data passed to the client: `branches`, `eodData`, `expensesData`, `payrollData`, `attendanceData`, `staffData`, `categories`.
 
 ---
 
-## API routes
+## Selection & scoping
 
-### Financial reports
-| Method | Route | Role | Description |
-|--------|-------|------|-------------|
-| GET | `/api/v1/branches/:branchId/reports/daily` | owner, branch_manager | Daily P&L for a date range |
-| GET | `/api/v1/branches/:branchId/reports/monthly` | owner, branch_manager | Monthly P&L summary |
-| GET | `/api/v1/branches/:branchId/reports/monthly/compare` | owner, branch_manager | This month vs last month |
-| GET | `/api/v1/reports/consolidated` | owner only | Cross-branch monthly summary |
-
-### Salary analytics
-| Method | Route | Role | Description |
-|--------|-------|------|-------------|
-| GET | `/api/v1/branches/:branchId/reports/payroll` | owner, branch_manager | Monthly salary cost trend |
-| GET | `/api/v1/branches/:branchId/reports/payroll/breakdown` | owner, branch_manager | Cost by role |
-| GET | `/api/v1/branches/:branchId/reports/staff/:staffId/attendance` | owner, branch_manager | Staff attendance analytics |
-
-### Export
-| Method | Route | Role | Description |
-|--------|-------|------|-------------|
-| GET | `/api/v1/branches/:branchId/export/csv/:module` | owner only | CSV export per module |
-| GET | `/api/v1/branches/:branchId/export/excel/:month` | owner only | Full monthly Excel dump |
-| GET | `/api/v1/branches/:branchId/reports/monthly/:month/pdf` | owner only | Monthly summary PDF |
+- Controls: branch selector (defaults to first available; managers pinned), month, and year.
+- For non-global users, the loader pre-filters every collection to the user's `branchId`. `readonly` and global admins see all branches.
+- Metrics are computed over EOD/expense/payroll rows matching the selected branch and month/year.
 
 ---
 
-## Monthly P&L response
+## Computed metrics (in `ReportsClientPage.tsx`)
 
-```json
-{
-  "month": "2026-03",
-  "branchId": "uuid",
-  "income": {
-    "dineinCash": 180000,
-    "dineinUpi": 240000,
-    "takeawayCash": 60000,
-    "takeawayUpi": 90000,
-    "totalDinein": 420000,
-    "totalTakeaway": 150000,
-    "total": 570000
-  },
-  "expenses": {
-    "byCategory": [
-      { "category": "Raw materials", "amount": 180000 },
-      { "category": "Gas / fuel", "amount": 12000 },
-      { "category": "Electricity", "amount": 8000 },
-      { "category": "Rent", "amount": 50000 },
-      { "category": "Miscellaneous", "amount": 5000 }
-    ],
-    "total": 255000
-  },
-  "payroll": {
-    "total": 310000,
-    "asPercentOfRevenue": 54.4
-  },
-  "netProfit": 5000,
-  "workingDays": 26,
-  "holidayDays": 2,
-  "averageDailyIncome": 21923
-}
-```
+**Revenue**
+- `totalIncome` = Σ over filtered EOD of `dineInCash + dineInUpi + takeawayCash + takeawayUpi`.
+- `prevTotalIncome` = same for the previous month; `momChangeValue` and `momChangePercent` give month-on-month change (100% if previous was 0 and current > 0).
+- Dine-in vs takeaway split and cash vs UPI split with percentages.
+
+**Expenses**
+- `totalExpenses` = Σ of filtered expense `amount` (both sources).
+- Breakdown by category (resolved via `categories`).
+
+**Payroll**
+- `totalSalaryPayable` = Σ of filtered payroll `payableAmount`.
+- `salaryPercentOfRevenue` = `totalSalaryPayable / totalIncome * 100` (guarded for zero revenue).
+
+**Net profit**
+- `netProfit = totalIncome − totalExpenses − totalSalaryPayable`.
+
+**Billing/ops-derived (from EOD `billing`)**
+- `totalGSTCollected` = Σ `billing.gstCollected`.
+- `totalCovers` = Σ `billing.dineInCovers`; `totalTakeawayOrders` = Σ `billing.takeawayOrders`.
+- `avgCoverValue` = `round(totalIncome / totalCovers)` when covers > 0.
+- `totalDiscounts` = Σ `billing.discounts`; `totalVoids` = Σ `billing.voids`.
 
 ---
 
-## Month-on-month comparison response
+## Export
 
-```json
-{
-  "currentMonth": "2026-03",
-  "previousMonth": "2026-02",
-  "income": {
-    "current": 570000,
-    "previous": 510000,
-    "delta": 60000,
-    "deltaPercent": 11.8
-  },
-  "expenses": {
-    "current": 255000,
-    "previous": 240000,
-    "delta": 15000,
-    "deltaPercent": 6.3
-  },
-  "netProfit": {
-    "current": 5000,
-    "previous": -20000,
-    "delta": 25000
-  }
-}
-```
+- **CSV export** is built client-side and downloaded. It includes the summary lines (Total Revenue, Total Ledger Expenses, salary, Net Profit) and the relevant breakdowns for the selected period.
+- There is **no** Excel (`.xlsx`) export and **no** PDF report generation in the codebase.
+- There is no separate "consolidated cross-branch" report action; consolidation is achieved by an admin/owner selecting branches in the UI over the data they can already see.
 
 ---
 
-## Salary analytics response
+## Access
 
-```json
-{
-  "branchId": "uuid",
-  "months": ["2026-01", "2026-02", "2026-03"],
-  "monthlyCost": [285000, 295000, 310000],
-  "asPercentOfRevenue": [52.1, 57.8, 54.4],
-  "byRole": [
-    { "role": "head_cook", "monthlyCost": 18000, "headcount": 1 },
-    { "role": "waiter", "monthlyCost": 88000, "headcount": 8 },
-    { "role": "assistant_cook", "monthlyCost": 42000, "headcount": 3 }
-  ],
-  "advanceFrequency": [
-    { "staffId": "uuid", "name": "Ravi S", "advancesLast3Months": 3, "totalAmount": 6000 }
-  ]
-}
-```
+- Visible to admin, owner, readonly, and managers (own branch).
+- Gated in navigation by the `reports` module toggle in `config.json`.
 
 ---
 
-## Data export
-
-### CSV export — per module
-Modules available: `staff`, `attendance`, `expenses`, `income`, `payroll`
-
-Each produces a single CSV file. Column headers use human-readable labels. Dates in DD-MM-YYYY format (Indian convention). Amounts in plain integers with ₹ prefix in header.
-
-### Excel monthly dump
-One `.xlsx` file per month. Sheets:
-1. Summary (P&L overview)
-2. Daily income log
-3. Expense ledger
-4. Attendance summary
-5. Payroll records
-
-### Monthly PDF report
-Single-page PDF for accountant / physical filing. Contains:
-- Restaurant name, branch, month
-- Total income (with cash/UPI breakdown)
-- Expense breakdown by category
-- Payroll cost and net payable total
-- Net profit / loss
-- Signed "Approved by" section (owner name + approval date)
-
----
-
-## Business rules
-
-1. Reports only show locked EOD entries — draft or in-progress entries are excluded from P&L
-2. Deleted expenses (`deletedAt IS NOT NULL`) are excluded from all totals
-3. Cross-branch consolidated report is owner-only
-4. All exports are owner-only — branch manager has read-only access to report screens but cannot export
-5. Absenteeism rate = (days absent + days leave) / (working_days - days_holiday) × 100 per staff over a rolling period
+## Business rules summary
+1. Reports are computed in the browser from server-loaded collections; nothing is written.
+2. Managers only ever receive their own branch's data from the loader.
+3. Net profit = revenue − ledger expenses − payroll payable for the selected period.
+4. Billing-derived metrics only reflect EOD entries where the optional `billing` block was filled.
+5. Export is CSV only.

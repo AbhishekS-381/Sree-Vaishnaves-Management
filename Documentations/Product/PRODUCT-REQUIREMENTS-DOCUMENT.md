@@ -1,66 +1,28 @@
-# Restaurant Management System — Product Requirements Document
-**Document type:** Product Requirements Document (PRD)  
-**Version:** v1.0  
-**Date:** March 2026  
-**Author:** Product Owner  
-**Status:** Approved for development
+# Sree Vaishnaves Management — Product Requirements Document
+**Document type:** Product Requirements Document (PRD)
+**Version:** v2.0
+**Date:** 2026-09-30
+**Status:** Reflects the delivered product
 
 ---
 
 # Part 1 — The Problem
 
-## 1.1 What is happening today
+## 1.1 What was happening
 
-A restaurant with 35 employees and two service types (dine-in and takeaway) is being run almost entirely on manual processes. Every critical business function — from knowing how much money was made today, to calculating whether a cook's salary was correctly paid, to understanding if the business is profitable — depends on handwritten records, mental arithmetic, and a business owner who holds everything in his head.
+Hotel Sree Vaishnaves — a vegetarian restaurant business in Kannur with ~35 staff per branch and multiple branches — ran on manual processes: handwritten attendance, mental salary arithmetic, a cash-book for expenses, and business knowledge held in one person's head. That is fragile against three transitions the business faces: appointing branch managers, opening additional branches, and eventually handing over ownership.
 
-This works. Until it doesn't.
+## 1.2 The core problems
 
-The owner is preparing to hand over management to a new branch manager, open a second branch, and eventually pass the business to a family member with a software engineering background. None of these transitions can happen smoothly if the entire business knowledge lives in one person's memory and a few notebooks.
-
----
-
-## 1.2 The real problems being solved
-
-### Problem 1 — There is no reliable record of daily income
-Every evening, the owner roughly tallies the day's earnings. There is no split between dine-in and takeaway. There is no record of how much came in as cash versus UPI transfer. If someone asks "how did last Tuesday compare to the Tuesday before?", there is no answer. If the owner is unwell and absent, nobody knows whether it was a good day or a bad day.
-
-**What this causes:** No ability to spot trends. No way to identify a bad week early. No data to make pricing decisions. No record for the accountant.
-
----
-
-### Problem 2 — Salary calculation is error-prone and trust-eroding
-The owner calculates 35 salaries by hand every month. He tracks attendance in a register, adds up working days, mentally subtracts any advances given, and arrives at a number. Staff sometimes dispute the calculation. The owner sometimes miscounts. Advances given mid-month are easy to forget. There is no paper trail showing how a salary figure was arrived at.
-
-**What this causes:** Staff distrust. Owner stress. Errors that cost money and relationships. No ability to delegate payroll to a manager.
-
----
-
-### Problem 3 — Expenses are invisible until it's too late
-Daily purchases — vegetables from the market, gas cylinder refills, maintenance costs — are either remembered or forgotten. At the end of the month, the owner has a rough sense of what was spent but no category-wise breakdown. He cannot tell if the raw material cost this month was higher than last month, or whether the electricity bill has been creeping up.
-
-**What this causes:** Inability to identify cost leakage. No data to negotiate better prices with suppliers. No understanding of which expense category is squeezing margins.
-
----
-
-### Problem 4 — Scaling to a second branch is currently impossible
-The owner is one person managing one location with 35 staff. When a second branch opens, he will need to trust a branch manager to run operations day-to-day. But there is currently no system that allows him to oversee both branches simultaneously, compare their performance, or verify what is happening at Branch 2 when he is at Branch 1.
-
-**What this causes:** The owner either micromanages both locations (unsustainable) or operates blind (risky). A second branch without a management system is a liability, not a growth move.
-
----
-
-### Problem 5 — The business cannot be handed over
-When the owner's family member takes over in 2 years, there are no systems to inherit — only habits and muscle memory. A business that runs on one person's knowledge is fragile. The new operator would need to rebuild understanding from scratch.
-
-**What this causes:** High risk during the transition. No baseline data for the new owner to make decisions from. Dependence on the previous owner staying involved longer than needed.
-
----
+1. **No reliable daily income record** — no dine-in/takeaway or cash/UPI split; no way to compare days.
+2. **Error-prone salary calculation** — 35 salaries by hand, advances forgotten, no paper trail, disputes hard to resolve.
+3. **Invisible expenses** — purchases remembered or lost; no category breakdown; no cost trends.
+4. **Hard to run more than one branch** — no way to oversee and compare branches.
+5. **The business cannot be handed over** — no system to inherit, only habits.
 
 ## 1.3 What success looks like
 
-Two years from now, the owner opens the app on his phone each morning and sees — without asking anyone — exactly how both branches performed yesterday, whether all staff came in, whether payroll is on track, and whether the business made more or less money than last month.
-
-When his family member takes over, every piece of business data from the past two years is available, searchable, and exportable. The transition is a handover of a login, not a transfer of knowledge.
+The operator opens the app and sees, without asking anyone, how each branch performed, whether staff were marked, whether payroll is due, and how the month compares. When ownership transfers, the data and processes transfer with it.
 
 ---
 
@@ -68,342 +30,121 @@ When his family member takes over, every piece of business data from the past tw
 
 ## 2.1 What this application is
 
-**Restaurant Management System (RMS)** is a private web application for the owner and branch manager of a restaurant business. It is the single place where daily operations are recorded, salaries are calculated, and business performance is tracked.
+**Sree Vaishnaves Management** is one Next.js application that serves:
+- a **public marketing website** at `/` (static), and
+- a **private management portal** at `/management/*` used by the business.
 
-It is not a customer-facing app. It is not a food ordering system. It is not accounting software. It is a management tool — designed specifically for how this restaurant business actually works, not how a generic restaurant "should" work.
+It is not a customer ordering app, delivery platform, POS, or accounting package. It is a focused management tool built for how this business actually operates. **All portal modules are implemented.**
 
----
+## 2.2 Who uses it — four roles
 
-## 2.2 Who uses it
+| Role | What they can do |
+|------|------------------|
+| **Admin** | Root/system account. Only role that can open Settings (branches' master data, roles, departments, categories, users, module toggles). Full cross-branch access. |
+| **Owner** | Full cross-branch operations: mark payroll paid, edit/delete ledger expenses, override day-end locks, delete staff, manage branches. No Settings. |
+| **Manager** | One assigned branch only: staff, attendance, day-end, expenses (add), vendors, inventory, menu availability. |
+| **Read-only** | View dashboards and reports across branches; cannot change anything; cannot open the day-end screen. |
 
-There are two types of users:
-
-**The Owner**
-Accesses the app on his phone, primarily in the morning and late evening. He wants to see the big picture fast — how both branches are doing, whether anything needs his attention today, whether this month is trending better or worse than last month. He approves salaries. He is the only person who can unlock or delete anything.
-
-**The Branch Manager**
-Accesses the app to handle daily operations — marking who came to work, filling in the day's income and expenses, managing the menu, tracking stock. They see only their branch. They cannot approve salaries or access the other branch's data.
-
-Nobody else uses the app. Staff do not have logins. Customers have no access. The accountant gets a PDF export once a month.
-
----
+Staff and customers do not log in.
 
 ## 2.3 How the app is structured
 
-The app is organised into modules. Each module solves one specific management problem. They are built in phases — the most urgent problems first, the more complex ones later as the owner and his team get comfortable with the system.
+The portal is a set of modules, each solving one management problem. Admins can toggle several modules on/off globally, so the business can start minimal and expand.
 
-The modules are:
-
-| Module | Problem it solves | Phase |
-|--------|------------------|-------|
-| Staff & Payroll | Salary errors, missing advance records, no payslips | 1 |
-| Daily EOD Entry | No daily income record, no cash/UPI split | 1 |
-| Expense Ledger | Invisible daily expenses, no category tracking | 1 |
-| Attendance | Manual register, no audit trail | 1 |
-| Menu Management | No single source of truth for items and prices | 1 |
-| Dashboard | Owner has no at-a-glance view of the business | 1 |
-| Inventory & Stock | No visibility into raw material levels | 2 |
-| Vendor Management | Supplier bills not tracked, no PO history | 2 |
-| Reports & Analytics | No trend data, no monthly P&L | 3 |
-| POS & Billing | Real-time order and receipt management | 4 |
-
----
-
-# Part 3 — Module Descriptions
-
-## Module 1 — Staff & Payroll
-
-### The problem it solves
-Every month, 35 salaries are calculated by hand. There is no record of how a number was arrived at. Advances given during the month are tracked mentally or in a notebook and sometimes forgotten. Staff receive no payslip — just a cash or transfer with a number. When a staff member questions their salary, there is no paper trail to refer to.
-
-### What the module does
-This module is the complete record of every person who works at the restaurant. It knows their name, their role, their monthly salary, and which branch they work at. Every day their attendance is marked in this system. Every advance given to them mid-month is recorded here. At the end of the month, the system calculates each person's salary automatically — counting how many days they worked, applying half-day weightage, subtracting all advances — and presents the owner with a table of all 35 salaries for review.
-
-The owner reviews the table, can override any individual amount if needed, and approves the entire month's payroll with one action. After approval, the records are locked. Each staff member's salary slip can be printed or saved as a PDF.
-
-### What changes for the owner
-Before: mental arithmetic, notebook, trust issues, re-explaining calculations.
-After: tap approve, print slip, done. Any dispute is resolved by showing the slip.
-
-### What changes for the manager
-Before: could not calculate or verify salaries — had to ask the owner.
-After: can see attendance records and salary drafts, flag anything that looks wrong before the owner approves.
+| Module | Problem it solves | Toggleable? |
+|--------|-------------------|-------------|
+| Dashboard | No at-a-glance business view | core |
+| Staff & Positions | Salary/roster records, position budgeting, schedules | core |
+| Day-End (EOD) Entry | No daily income/expense record | core |
+| Expense Ledger | Untracked, uncategorized spending | core |
+| Attendance | Manual register | yes |
+| Payroll | Manual salary calculation | yes |
+| Vendors | Untracked supplier bills | yes |
+| Inventory | No stock visibility/early warning | yes |
+| Menu | No single source of truth for items/prices | yes |
+| Reports | No trends, no P&L | yes |
+| Branches / Settings | Master data & configuration | admin |
 
 ---
 
-## Module 2 — Attendance
+# Part 3 — Module Requirements (as delivered)
 
-### The problem it solves
-Attendance is currently marked in a physical register. At the end of the month, the owner counts entries manually to calculate working days per staff member. There is no record of who marked attendance, when, or whether it was edited. With 35 staff members across multiple departments, the register is cluttered and error-prone.
+## Module 1 — Staff & Positions
+Maintains staff profiles (branch, department, role, salary, phone, shift, join/exit dates, optional label and chef specialty). Adds a **positions** layer: budgeted headcount slots (`staff_requirements`) per branch/department/role, with per-position **shift schedules** (max 3 segments, ≥1h break, ≤10h total, within 05:00–23:00) and an auto-scheduler. Staff can be mapped to open slots (locking their branch/role to the slot). Only global admins delete staff.
 
-### What the module does
-Each morning, the manager or owner opens the attendance screen. Instead of tapping 35 individual entries, they tap "Mark all present" — the system marks every active staff member as present in one action. Then they tap only the exceptions: who is absent, who came for half a day, who is on leave.
+## Module 2 — Attendance *(toggleable)*
+One-tap "mark all present" plus per-person exceptions. Statuses: **present, absent, half-day, holiday** (default **unmarked**). Managers edit up to 7 days back; global admins beyond that; future dates blocked. One record per staff per day.
 
-If the restaurant is closed for a festival, the owner marks the day as a holiday. Every staff member is automatically marked as holiday — this day is not counted against them in salary calculation.
+## Module 3 — Payroll *(toggleable)*
+Per month/year, days-worked pre-fill from attendance (present = 1, half-day = 0.5) and are editable. Payable = **max(0, round(monthlySalary ÷ 30 × daysWorked) − advances)**. Records save as PENDING; owners/admins mark them PAID. No PDF slips, no separate advances ledger, no attendance-freezing approval, no configurable working-days divisor. Re-saving a month overwrites it.
 
-At the end of the month, the attendance data feeds directly into payroll. No manual counting. No re-entry.
+## Module 4 — Day-End (EOD) Entry *(core)*
+One entry per branch per day: income (dine-in/takeaway × cash/UPI), optional cash-float reconciliation, optional detailed billing (bill count, covers, GST, discounts, voids…), optional ops (staff on duty, power-cut hours, notes, zero-revenue confirmation). Live net computation. Locks after 24 hours (owners/admins can still edit). Zero-revenue days must be confirmed. Its expenses flow into the shared ledger and are replaced on each save.
 
-### What changes for the owner
-Before: physical register, manual counting at month end, disputes with no trail.
-After: 2-minute daily task, automatic payroll feed, full history per staff member.
+## Module 5 — Expense Ledger *(core)*
+One shared ledger with `source` = `eod` | `vendor`. Categories are global. Editing/deleting rows is owner/admin-only; the day-end screen only inserts/replaces its own day's rows.
 
----
+## Module 6 — Menu Management *(toggleable)*
+A **global** catalog of items and categories with **per-branch** price and availability overrides. Global admins manage the catalog; managers flip their branch's availability/price. Categories double as chef specialties.
 
-## Module 3 — Daily EOD Entry
+## Module 7 — Inventory & Stock *(toggleable)*
+Per-branch items with integer quantity and a low-stock threshold. Quantity changes only via logged adjustments (increase/decrease with reason); decreases can't go below zero. Items at/below threshold raise a dashboard alert. No automatic deduction.
 
-### The problem it solves
-Today's income is unknown unless the owner physically tallies the cash drawer and checks the UPI statement. There is no daily record. There is no split between what came from dine-in versus takeaway. There is no tracking of whether today's expenses were high or low. By the time the month ends, the owner's sense of profitability is based on feeling, not data.
+## Module 8 — Vendor & Supplier Management *(toggleable)*
+Supplier profiles plus vendor bills, written into the shared ledger (`source: vendor`) with vendor/invoice embedded in notes and a paid/unpaid flag.
 
-### What the module does
-Every evening after closing, the owner or manager fills in the day's entry. It takes less than 2 minutes. They enter four numbers: dine-in cash, dine-in UPI, takeaway cash, takeaway UPI. The system adds it up. They then tap the expense categories for the day — raw materials, gas, electricity, whatever applied — and enter the amounts. The system shows the net for the day: total income minus total expenses.
+## Module 9 — Reports & Analytics *(toggleable)*
+Read-only, computed in the browser for a selected branch + month/year: revenue with splits and month-on-month change, expenses by category, payroll payable, salary-as-%-of-revenue, net profit, and billing-derived metrics (GST, covers, average cover value). **CSV export only** (no Excel/PDF, no separate server-side consolidated report).
 
-There is also an optional petty cash section for owners who maintain a daily cash float, to verify the physical drawer matches the recorded amount.
-
-The entry is saved. The day is recorded. A month of these entries becomes the foundation for every report in Phase 3.
-
-### What changes for the owner
-Before: end of month surprise when the accountant totals everything.
-After: knows by 10pm every night whether today was profitable, and by how much.
-
----
-
-## Module 4 — Expense Ledger
-
-### The problem it solves
-Expenses happen throughout the day — vegetable purchase in the morning, gas refill in the afternoon, small maintenance in the evening. Some are entered in the EOD screen at night. Some are entered when a vendor bill arrives. Currently, there is no single place where all expenses live. Some are forgotten. None are categorised.
-
-### What the module does
-Every expense — regardless of where or when it was entered — lives in one shared ledger. The EOD screen is the quick lane: the owner taps a category and enters an amount at the end of the day. The vendor management screen (Phase 2) is the full lane: supplier name, invoice reference, exact date, and full editing capability.
-
-If a vendor bill was already entered earlier in the day from the vendor screen, it automatically appears in the EOD expense list tonight. The owner doesn't enter it twice. The system shows it, clearly labelled as "already recorded."
-
-Over time, this ledger becomes the complete expense history of the restaurant — searchable, filterable by category, and ready for monthly reporting.
-
-### What changes for the owner
-Before: scattered notes, forgotten expenses, no category breakdown.
-After: one place, always complete, ready to answer "how much did we spend on raw materials this month?"
-
----
-
-## Module 5 — Menu Management
-
-### The problem it solves
-There is no single document that lists all menu items, their categories, and their current prices. When prices change, different people may know different prices. When an item is temporarily unavailable, the information is passed verbally. When a second branch opens with a slightly different menu, there is no clean way to manage the differences.
-
-### What the module does
-Each branch has its own menu. The owner or manager can add items, set prices, organise them by category (breakfast, lunch, dinner, beverages, specials), and toggle any item as unavailable when it runs out. The menu is the reference point for the POS system in Phase 4 — so getting it set up now means Phase 4 has clean data to work from.
-
-### What changes for the owner
-Before: verbal communication of prices, no record of availability.
-After: single source of truth, per branch, always current.
-
----
-
-## Module 6 — Dashboard
-
-### The problem it solves
-The owner has no at-a-glance view of his business. To understand how things are going, he has to physically call the branch, check the cash drawer, or ask the manager. There is no morning briefing. There is no way to compare both branches simultaneously.
-
-### What the module does
-The dashboard is the first screen the owner sees when he opens the app. It shows — for each branch — today's income so far, today's attendance headcount, and any actions that need his attention (payroll due, EOD not filled, attendance not marked).
-
-The owner sees both branches side by side. Below the branch cards is a combined total — total income across both branches today, total net profit this month, and how this month compares to last month.
-
-The branch manager sees only their branch, in more detail — a full breakdown of income, a list of today's attendance exceptions, and any pending tasks.
-
-The dashboard does not require any action to stay useful — it is updated automatically as data comes in throughout the day.
-
-### What changes for the owner
-Before: calls the branch to find out what's happening.
-After: opens the app and knows in 10 seconds.
-
----
-
-## Module 7 — Inventory & Stock *(Phase 2)*
-
-### The problem it solves
-Raw material shortages cause menu unavailability. Currently, the owner or kitchen head notices a shortage only when an ingredient is physically running out. There is no early warning system. There is no record of consumption patterns that would help predict when to reorder.
-
-### What the module does
-Each branch maintains a list of stock items — rice, oil, vegetables, gas cylinders, packaging — with current quantity and a low-stock threshold. When stock is received (after a purchase), the manager updates the quantity. When daily usage is logged, the quantity reduces. When any item drops below its threshold, an alert appears on the dashboard.
-
-This is entirely manual in Phase 2 — there is no automatic deduction. The value is awareness and early warning, not automation.
-
-### What changes for the owner
-Before: shortage discovered when the kitchen runs out mid-service.
-After: alert appears the day before, purchase can be arranged in time.
-
----
-
-## Module 8 — Vendor & Supplier Management *(Phase 2)*
-
-### The problem it solves
-The restaurant buys from multiple suppliers — vegetable vendors, dairy suppliers, gas distributors, packaging vendors. Bills are received physically, noted down somewhere, and sometimes paid late because there is no tracking. There is no history of what was purchased from whom and when.
-
-### What the module does
-Each supplier has a profile — name, contact, what they supply. Every purchase bill is recorded against a supplier — amount, date, optional invoice reference. Outstanding (unpaid) bills are tracked with due dates and appear as alerts.
-
-Critically, every vendor-entered expense feeds into the same shared expense ledger that the EOD screen reads from. The owner does not enter the same bill twice — it is one system.
-
-### What changes for the owner
-Before: loose bills, forgotten payments, no supplier history.
-After: every purchase is on record. Outstanding bills are visible. No supplier disputes without a paper trail.
-
----
-
-## Module 9 — Reports & Analytics *(Phase 3)*
-
-### The problem it solves
-After 12+ months of daily EOD entries, attendance records, and expense logging, the business is sitting on a goldmine of data — but nobody can see it. There are no charts. No trend lines. No answer to "is this month better than last month?" No understanding of which expense category is growing. No way to know whether salary costs are eating too much of revenue.
-
-### What the module does
-The reports module turns the accumulated data into answers. The owner can view:
-
-**Financial reports** — daily, weekly, and monthly profit and loss. Income split by dine-in and takeaway, by cash and UPI. Expenses split by category. Net profit trend over time.
-
-**Month-on-month comparison** — this month versus last month for income, expenses, and net profit. Simple percentage change. Answers the most common owner question.
-
-**Salary analytics** — total payroll cost as a percentage of monthly revenue (the single most important health metric for a restaurant). Cost broken down by staff role — how much is the kitchen costing versus the floor versus delivery. Staff members who take advances frequently — a signal worth watching.
-
-**Exportable reports** — a monthly PDF summary the owner can hand to his accountant. CSV exports of any module for further analysis. A full monthly Excel dump with every piece of data.
-
-**Cross-branch comparison** — owner-only view showing both branches side by side. Which branch has better margins? Which one has higher raw material costs? This is the view that makes owning two branches manageable.
-
-### What changes for the owner
-Before: gut feeling about profitability, no data for decisions.
-After: every business decision is backed by 12+ months of actual data.
-
----
-
-## Module 10 — POS & Billing *(Phase 4)*
-
-### The problem it solves
-Currently, bills are written by hand or calculated mentally. There is no itemised receipt for the customer. The cash drawer total at end of day has to be manually tallied and entered into the EOD screen. There is no record of individual orders.
-
-### What the module does
-The POS module replaces manual billing entirely. For dine-in, orders are taken against a table number. For takeaway, orders are created without a table. Items are selected from the menu (already set up in Phase 1). The system generates an itemised bill. Payment type — cash or UPI — is recorded. At end of day, the system automatically populates the EOD income entry with the day's total — the manual income entry step becomes unnecessary.
-
-This is the highest-stakes module and is deliberately deferred to Phase 4. By then, the owner will have 18 months of experience with the system, full trust in the data, and a clear picture of exactly how billing should work for their specific operation.
-
-### What changes for the owner
-Before: handwritten bills, manual tally, EOD entry done from memory.
-After: every order is recorded, bills are printed or sent digitally, EOD income is auto-filled.
+## Module 10 — Dashboard *(core)*
+KPI cards (branches, active staff, today's collection, net balance), computed pending-action alerts (attendance/EOD not done, payroll due, low stock — each gated by its module toggle), and a branch-status panel. Read-only.
 
 ---
 
 # Part 4 — How the Modules Connect
 
-The modules are not independent — they feed each other. This is the most important thing to understand about the system design.
-
 ```
-Attendance  ──────────────────────────────►  Payroll
-(who came, how many days)                   (calculates salary)
-
-EOD Entry   ──────────────────────────────►  Reports
-(daily income and expenses)                 (monthly P&L, trends)
-
-Expense Ledger  ──────────────────────────►  Reports
-(all expenses in one place)                 (category breakdown)
-
-Menu  ────────────────────────────────────►  POS (Phase 4)
-(items and prices)                          (order taking)
-
-Inventory  ───────────────────────────────►  Dashboard alerts
-(stock levels)                              (low stock warnings)
-
-Vendor bills  ────────────────────────────►  Expense Ledger
-(supplier purchases)                        (shared ledger)
-
-All Phase 1 data  ────────────────────────►  Reports (Phase 3)
-(12+ months of records)                     (analytics engine)
+Attendance ───────────────► Payroll (days-worked prefill)
+Day-End income ───────────► Reports & Dashboard
+Day-End + Vendor bills ───► Shared Expense Ledger ───► Reports
+Menu (global) + overrides ─► per-branch price/availability
+Inventory thresholds ─────► Dashboard low-stock alerts
+Everything ───────────────► Dashboard snapshot & Reports
 ```
-
-The sequence matters. Phase 1 builds the data foundation. Phase 2 adds supply chain visibility. Phase 3 turns the foundation into insight. Phase 4 completes the loop by feeding real-time order data back into income tracking.
-
-Each phase is independently useful. The owner does not need to wait for Phase 4 to get value. Phase 1 alone solves the three most painful problems: salary errors, invisible daily income, and untracked expenses.
+Menu categories also feed chef specialties in Staff. Module visibility follows the global config toggles.
 
 ---
 
-# Part 5 — The Rollout Strategy
+# Part 5 — Non-Negotiable Principles
 
-## Why phased rollout matters
-
-This system is being introduced to a business that has never used software for management. The owner and the future branch manager need to build habits gradually. If 10 modules are launched at once, none of them will be used properly. Worse, a bad first experience with one module poisons trust in the whole system.
-
-The phased approach deliberately limits what is introduced at each stage to what the business is ready to absorb.
-
-## Phase 1 — Building the daily habit (Months 0–6)
-
-The goal of Phase 1 is not features — it is habit formation. Specifically, two daily habits:
-1. Mark attendance every morning
-2. Fill the EOD entry every evening
-
-If these two habits are established, Phase 1 has succeeded. Everything else — payroll, reports, analytics — is downstream of consistent daily data entry.
-
-Phase 1 also sets up staff profiles and menu items — one-time setup tasks that create the foundation everything else rests on.
-
-**Success metric for Phase 1:** EOD entry filled at least 25 out of every 30 days. Attendance marked for every working day.
-
-## Phase 2 — Adding supply chain (Months 6–12)
-
-By month 6, the owner has 6 months of income and expense data. He now has a sense of whether the app is reliable and useful. Phase 2 introduces stock tracking and vendor management — both of which require discipline to maintain but pay off in cost visibility.
-
-**Success metric for Phase 2:** Every major purchase bill recorded against a vendor. Low-stock alerts caught before a shortage reaches the kitchen.
-
-## Phase 3 — Unlocking insight (Months 12–18)
-
-By month 12, there is enough data to make reports meaningful. A monthly P&L with 12 months of history is genuinely useful. Payroll analytics over a year reveal patterns (which roles cost the most, which staff take the most advances) that would be invisible without the data.
-
-**Success metric for Phase 3:** Owner makes at least one business decision (pricing change, staffing adjustment, supplier negotiation) based on report data.
-
-## Phase 4 — Completing the system (Months 18–24)
-
-POS and billing is the highest-risk module — it sits directly in the path of money flowing into the business. By Phase 4, the owner has 18 months of experience with the app, deep trust in the system, and clarity on exactly how billing should work. The risk of a bad implementation is lowest at this stage.
-
-**Success metric for Phase 4:** Manual EOD income entry is retired. All income flows through POS automatically.
+1. **Management-only.** No staff or customer logins to the portal.
+2. **Mobile-first.** The primary user is on a phone.
+3. **Branch scoping.** Managers never see or touch another branch's data; enforced in actions and loaders.
+4. **The operator stays in control.** Days can be re-saved; global admins can edit locked/aged records.
+5. **Preserve history where it matters.** Core entities are soft-deleted; a partial audit log records sensitive changes.
+6. **Simple over clever.** Routine screens are quick to complete on a phone.
 
 ---
 
-# Part 6 — Non-Negotiable Principles
+# Part 6 — What This App Is Not
 
-These are the product decisions that must never be reversed, regardless of what features are added later.
-
-### 1. Management-only, always
-No staff portal. No customer interface. No public-facing pages. This is a private management tool.
-
-### 2. Mobile-first
-The owner uses a phone. Every screen must work perfectly on a phone screen. Desktop is secondary.
-
-### 3. Nothing is ever permanently deleted
-Every deleted record is archived, not erased. Staff who leave, expenses that are removed, menu items that are discontinued — all of it stays in the database, just hidden from normal views. This protects the business from accidental data loss and preserves the audit history.
-
-### 4. The owner is always in control
-Only the owner can approve payroll, export data, delete records, or unlock a locked entry. The branch manager operates within clear boundaries. As the business grows and trust builds, these boundaries can be relaxed — but they start conservative.
-
-### 5. Multi-branch from the start
-Even though only one branch is active today, every piece of data is tagged to a branch. The second branch is activated by adding a row in a database table — not by rewriting code.
-
-### 6. Simple beats clever
-Every screen should be completable in under 2 minutes on a phone with average internet. No complex workflows. No multi-step processes where one step will do. The owner and manager are busy people running a physical business. The app earns its place by staying out of their way.
+- Not a POS / order-taking or KOT system (day-end billing is entered manually).
+- Not a customer ordering, reservation, loyalty, or delivery-aggregator app.
+- Not a full accounting package (CSV export serves the accountant).
+- Not an HR self-service system (no staff portal, no leave workflow).
+- No SMS/WhatsApp/email; no PDF/Excel export; no payment gateway.
 
 ---
 
-# Part 7 — What This App Is Not
+# Part 7 — Known Gaps & Follow-ups
 
-To be clear about scope — this application will never be:
-
-- A food ordering or delivery platform
-- A table reservation system
-- A customer loyalty or CRM system
-- A full accounting package (not a replacement for the accountant or Tally)
-- A multi-restaurant franchise management platform
-- An HR system with leave approval, payslip portal, or employee self-service
-- An integration with Swiggy, Zomato, or any third-party aggregator
-- A real-time KOT (Kitchen Order Ticket) system (unless explicitly added to Phase 4 scope)
-
-Staying out of these areas keeps the system focused, fast to build, and easier to trust.
+- No PDF salary slips; no Excel/"data dump" export (CSV only, from Reports).
+- Payroll advances are a plain number on the record (no advances ledger); no approval-lock.
+- Audit logging is partial and has no UI.
+- JSON-blob writes are last-write-wins across serverless instances (single-instance mutex only).
+- Migrations commit a plaintext bootstrap admin password and a hardcoded Postgres role password — rotate and remove from source before wider rollout.
 
 ---
 
-*End of Product Requirements Document*  
-*Next document: Technical Architecture Overview (HLD-01)*
+*End of Product Requirements Document.*
+*Related: HIGH-LEVEL-DESIGN.md, ../Technical/DOC-01 … DOC-14.*

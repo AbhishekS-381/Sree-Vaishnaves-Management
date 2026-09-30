@@ -1,8 +1,8 @@
-# Restaurant Management System — High Level Design
-**Document type:** High Level Design (HLD)  
-**Version:** v1.0  
-**Date:** March 2026  
-**Status:** Approved
+# Sree Vaishnaves Management — High Level Design
+**Document type:** High Level Design (HLD)
+**Version:** v2.0
+**Date:** 2026-09-30
+**Status:** Reflects the implemented system
 
 ---
 
@@ -10,335 +10,165 @@
 
 ## 1.1 What this document covers
 
-This document describes the system architecture of the Restaurant Management System at a high level — how the application is structured, how the major components talk to each other, what data flows where, and what the key design decisions are and why they were made. It does not go into code-level detail (that is in the LLD docs). It is meant to be readable by both a product owner and a senior engineer.
-
----
+This HLD describes the architecture of the implemented Sree Vaishnaves Management System — how it is structured, how components communicate, where data flows, and the key design decisions. Module-level detail is in `Documentations/Technical/DOC-01..DOC-14`.
 
 ## 1.2 System context
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    EXTERNAL WORLD                        │
-│                                                          │
-│   Owner's phone      Manager's laptop/phone             │
-│        │                      │                         │
-│        └──────────┬───────────┘                         │
-│                   │ HTTPS                               │
-└───────────────────┼─────────────────────────────────────┘
-                    │
-┌───────────────────▼─────────────────────────────────────┐
-│              RESTAURANT MANAGEMENT SYSTEM                │
-│                                                          │
-│   ┌─────────────┐        ┌──────────────────────────┐   │
-│   │  Web App    │◄──────►│   Server Actions         │   │
-│   │  (Next.js)  │  RPC   │   (Next.js App Router)   │   │
-│   └─────────────┘        └────────────┬─────────────┘   │
-│                                       │                  │
-│                          ┌────────────▼─────────────┐   │
-│                          │      Database            │   │
-│                          │  (Local JSON Store)      │   │
-│                          └──────────────────────────┘   │
-└─────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────┐
+│                     EXTERNAL WORLD                         │
+│   Owner's phone      Manager's laptop/phone   Customers    │
+│        │                    │                     │        │
+│        └──────── /management ┘                    │ /      │
+│                     │ HTTPS                        │ HTTPS  │
+└─────────────────────┼──────────────────────────────┼───────┘
+                      │                              │
+┌─────────────────────▼──────────────────────────────▼───────┐
+│                 NEXT.JS APPLICATION                         │
+│                                                            │
+│  Public website (/)          Management portal (/management)│
+│  static RSC page             React components               │
+│         │                          │ direct call            │
+│         │                          ▼                        │
+│         │                 Server Actions ('use server')     │
+│         │                 auth, staff, eod, expenses, …      │
+│         │                          │                        │
+│         │              ┌───────────▼───────────┐            │
+│         │              │  JSON store (Postgres) │            │
+│         │              │  json_store + rate_limit│           │
+│         │              └────────────────────────┘            │
+└────────────────────────────────────────────────────────────┘
 ```
 
-The system is entirely self-contained. There are no third-party integrations in Phase 1. No external APIs are called. No data leaves the system except via manual export.
+There are no third-party service integrations. No external APIs are called for business logic. Data leaves the system only via manual CSV export from Reports. Image assets and fonts are loaded from allow-listed CDNs per the CSP.
+
+## 1.3 The architecture in three layers
+
+**Layer 1 — UI (React / Next.js App Router).** Server components load data; client components (`*ClientPage.tsx`, modals) handle interaction. The UI calls Server Actions directly — there is no REST client and no `/api` layer.
+
+**Layer 2 — Server Actions (`src/app/actions/*.ts`).** All business rules, authorization, validation (Zod), and persistence orchestration live here. This is where salary is computed, day-end locks are enforced, and branch scoping is applied.
+
+**Layer 3 — Persistence (`src/lib/db.ts` over Postgres).** A JSON-blob store: one `json_store` table holding one row per collection (stringified JSON array), plus a `rate_limit` table for login throttling. Access is via `readJSON` / `writeJSON` / `withTransaction` (an in-process per-file mutex). The DB driver is Neon HTTP in dev and native Netlify DB in production.
 
 ---
 
-## 1.3 The three-layer architecture
+# Part 2 — Data Model (high level)
 
-The system is built in three layers. Each layer has one job and talks only to the layer next to it.
+## 2.1 Organisation
 
-**Layer 1 — The Web App (what the user sees)**
-A React application running in the browser. It handles all user interaction — forms, buttons, navigation, charts. It never talks directly to the database. All data comes from the API.
-
-**Layer 2 — The API Server (the brain)**
-Next.js Server Actions that receive RPC calls from the web app components, apply all business rules and permissions, and talk to the data store. This layer is where all decisions are made — who is allowed to see what, how salary is calculated, when an entry should be locked.
-
-**Layer 3 — The Database (the memory)**
-A Local JSON Store (Phase 1) that stores everything permanently via the file system. It enforces data integrity natively in the app layer — making sure, for example, that you cannot have two attendance records for the same person on the same day via strict validation.
-
----
-
-# Part 2 — The Data Model (High Level)
-
-## 2.1 How data is organised
-
-Everything in the system belongs to a branch. This is the most important structural decision — every record, from a staff member to a daily expense, is tagged to a specific branch. This is what makes multi-branch management possible.
+Most records carry a `branchId`, making multi-branch scoping the backbone of the model.
 
 ```
 BUSINESS
-    │
-    ├── Branch 1 (Main)
-    │       ├── Staff (35 people)
-    │       │       ├── Attendance records
-    │       │       ├── Salary advances
-    │       │       └── Monthly payroll
-    │       ├── Daily EOD entries
-    │       │       └── Expenses
-    │       ├── Menu items
-    │       └── Stock items (Phase 2)
-    │
-    └── Branch 2 (Coming soon)
-            ├── Staff (own team)
-            ├── Daily EOD entries
-            ├── Menu items (can differ from Branch 1)
-            └── Stock items
+ ├── Branch (operational | maintenance | closed)
+ │     ├── Staff → Attendance → Payroll
+ │     │     └── mapped to Position slots (staff_requirements + schedules)
+ │     ├── Day-End (EOD) entries → Expenses (source: eod)
+ │     ├── Vendors → Vendor bills (Expenses source: vendor)
+ │     ├── Inventory items → Stock adjustments
+ │     └── Per-branch menu overrides (price/availability)
+ ├── Global menu items & categories
+ ├── Global expense categories
+ ├── Users (admin/owner/manager/readonly)
+ └── Config (module toggles) · Audit logs
 ```
+
+Relationships are logical (id matching in code), not SQL foreign keys. IDs are prefixed UUIDs; payroll and config use deterministic ids.
 
 ## 2.2 The shared expense ledger
 
-One design decision worth calling out at a high level: there is one expense table shared between the EOD entry screen and the vendor management screen. Both screens write to the same place.
+One `expenses` collection is written by two flows and tagged with `source` (`eod` | `vendor`). The day-end screen inserts/replaces its own day's rows; vendor bills insert `vendor` rows; owners/admins edit or delete any row via the Expenses screen. Reports read the whole ledger.
 
-```
-EOD Screen          Vendor Screen
-(quick add)         (full edit)
-     │                   │
-     └─────────┬─────────┘
-               │ writes to
-               ▼
-       EXPENSE LEDGER
-       (one shared table)
-               │
-               ▼
-      Reports & Analytics
-```
+## 2.3 Attendance → payroll
 
-This means the owner never enters the same expense twice. If a vegetable bill was entered from the vendor screen in the morning, it shows up automatically in the EOD expense list that evening — already recorded, just displayed.
-
-## 2.3 How attendance feeds payroll
-
-Attendance and payroll are tightly linked. The payroll module does not ask the owner to enter days worked — it reads directly from the attendance records.
-
-```
-Daily attendance marking
-(35 people × 30 days = up to 900 records/month)
-               │
-               ▼
-Monthly payroll calculation
-(reads attendance, applies formula, deducts advances)
-               │
-               ▼
-Owner reviews and approves
-               │
-               ▼
-Payroll locked, salary slips generated
-```
-
-Once the owner approves payroll, the attendance records for that month are frozen — they cannot be edited without unlocking payroll. This is an intentional safeguard.
+Payroll does not store its own day counts as truth; the payroll screen **pre-fills days-worked from attendance** (present = 1, half-day = 0.5) and the operator may override before saving. The payable is `max(0, round(monthlySalary/30 × daysWorked) − advances)`. Saving a month replaces that month's records; there is no lock that freezes attendance.
 
 ---
 
-# Part 3 — User Experience Flow
+# Part 3 — Key Design Decisions
 
-## 3.1 The owner's typical day
+## 3.1 Server Actions instead of a REST API
+All server logic is invoked as Next.js Server Actions directly from components. This removes an HTTP/controller layer and keeps validation, authorization, and persistence colocated per operation. The trade-off is that there is no externally consumable API surface.
 
+## 3.2 JSON-blob store instead of relational tables
+State is stored as JSON arrays in a single table. This is simple to reason about and cheap to evolve (no migrations per field), and fits a small single-business dataset. The trade-offs, made explicit: writes are whole-array read-modify-write guarded by an **in-process** mutex, so concurrent writes across multiple serverless instances are effectively last-write-wins; and there is no relational integrity — consistency is enforced in code.
+
+## 3.3 Multi-branch from the ground up
+Branch scoping is enforced twice — in the action (`requireBranchAccess`) and in each page loader — so a manager can never read or write another branch's data. Adding a branch is a data operation.
+
+## 3.4 Soft deletion (mostly)
+Core entities (staff, branches, departments, roles, inventory, menu items, users) are soft-deleted (`isActive:false` + `deletedAt`) and filtered from active views. A few collections (expenses, expense categories, staff requirements) are hard-removed. This is a deliberate, documented inconsistency rather than a universal rule.
+
+## 3.5 Module toggles
+An admin can switch modules on/off globally via `config.json`. Disabled modules disappear from navigation and stop raising dashboard alerts, letting the business grow into complexity.
+
+---
+
+# Part 4 — User Experience Flow
+
+## 4.1 Owner's typical day
 ```
-MORNING
-  Opens app → Dashboard
-  Sees: yesterday's income, both branches
-  Sees: today's attendance (not yet marked — alert shown)
-  Taps: "Go to attendance" quick action
-
-  Opens attendance → taps "Mark all present"
-  Taps 2 exceptions (1 absent, 1 half-day)
-  Returns to dashboard — attendance alert gone
-
-DURING THE DAY
-  App stays in background
-  No required action during service
-
-EVENING (after closing)
-  Opens app → Dashboard shows "EOD not filled" alert
-  Taps: "Fill EOD entry"
-
-  EOD screen: enters dine-in cash, dine-in UPI, takeaway cash, takeaway UPI
-  Taps expense categories: Raw materials, Gas
-  Enters amounts
-  Optional: notes field for anything unusual
-  Taps Save
-
-  Dashboard updates: today's net is now visible
-  Entry auto-locks after 24 hours
-
-END OF MONTH
-  Payroll due alert appears on dashboard
-  Owner taps "Review payroll"
-  Sees table of all 35 staff with calculated salaries
-  Reviews, adjusts 2 entries manually
-  Taps "Approve all"
-  Payroll locked, salary slips available for download
+MORNING   Dashboard → note any alert (attendance/EOD/payroll/low-stock)
+          → open Attendance for a branch, mark all present, tap exceptions
+DAY       app idle
+EVENING   Day-End Entry: income + expenses + optional float/billing/ops → Save
+MONTH END Payroll: review days (from attendance), enter advances, Save, Mark Paid
+          Reports: revenue, expenses, salary %, net profit → CSV export
 ```
 
-## 3.2 The branch manager's typical day
-
-```
-MORNING
-  Opens app → Branch dashboard (their branch only)
-  Marks attendance: all present → tap 3 exceptions
-
-DURING THE DAY
-  Can update menu availability if items run out
-  Can record any advances given to staff
-  Can check stock levels (Phase 2)
-
-EVENING
-  Fills EOD entry for the branch
-  Records any vendor bills received today (Phase 2)
-
-END OF MONTH
-  Can view payroll draft (read only)
-  Cannot approve — owner must do this
-```
-
----
-
-# Part 4 — Key Design Decisions
-
-## 4.1 Why multi-branch is built from day one
-
-The second branch is not open yet. It would be faster to build a single-branch system now and add multi-branch support later.
-
-We chose not to do this because adding multi-branch support to an existing system with real data is one of the most disruptive structural changes possible. Every table needs a new column. Every query needs a new filter. Every permission check needs to be rewritten. Done with 2 years of live data, this is a dangerous migration.
-
-Done from day one, it costs an extra 2 weeks of development and saves a future rewrite.
-
----
-
-## 4.2 Why POS is Phase 4
-
-POS and billing sits directly in the path of money flowing into the business. A bug in POS means incorrect bills, lost revenue, or customer complaints during service.
-
-The earlier phases — EOD entry, attendance, payroll — are management tools used after the fact. A mistake in EOD entry affects a report. A mistake in POS affects a customer in real time.
-
-By Phase 4 (month 18–24), the owner will have tested and trusted the system for 18 months. He will understand how it works. The team will have caught and fixed bugs in lower-stakes modules. The risk of deploying POS is far lower at that point than it is at month 1.
-
----
-
-## 4.3 Why EOD is manual (not automatic from POS)
-
-The decision to use manual EOD income entry in Phase 1 is deliberate, not a limitation.
-
-Manual entry requires the owner or manager to consciously engage with the day's numbers every evening. This daily engagement is what builds the habit of using the system. If income were automatically populated, there would be no daily touchpoint, and the system would be used only when something goes wrong.
-
-By the time POS auto-fills the EOD entry in Phase 4, the habit is already established. The transition is seamless.
-
----
-
-## 4.4 Why there is no staff-facing portal
-
-A staff portal would allow employees to check their own attendance, apply for leave, and view their salary slips. This sounds useful.
-
-The reality is that it adds significant complexity — staff logins, notification systems, a mobile-optimised staff UI, a leave approval workflow — for marginal benefit in a context where the owner is physically present and relationships are personal, not corporate.
-
-The system is designed for the owner's problems, not for a general HR solution. Staff queries are handled face-to-face, as they are today. Salary slips are printed or sent via WhatsApp by the manager. This is not a limitation — it is a deliberate scope decision that keeps the system focused and fast to build.
-
----
-
-## 4.5 Why data is never permanently deleted
-
-In a business context, hard-deleted records are a liability. If a staff member who was deleted six months ago comes back and disputes a past salary, there is no record. If an expense that was deleted by mistake affects a monthly P&L, there is no recovery.
-
-Every deletion in this system is a soft delete — the record is hidden from normal views but preserved in the database. The owner can always recover data or investigate history.
-
-This also enables a complete audit trail. At any point, the owner can see: who added this record, who changed it, and when.
+## 4.2 Manager's typical day
+Own branch only: mark attendance, fill day-end, add expenses/vendor bills, adjust inventory, flip menu availability. Can view payroll drafts and reports for their branch but cannot mark paid or edit the ledger.
 
 ---
 
 # Part 5 — Security Model
 
-## 5.1 Who can see what
+## 5.1 Authentication
+Server-Action login: dual-axis rate limiting (per IP 10/min, per username 20/hour, 5-min block, fails open), bcrypt password check, a 2-hour HS256 JWT stored in an `HttpOnly`, `SameSite=strict` cookie. `src/middleware.ts` gates all `/management/*` routes; page loaders add role-specific redirects.
 
-The security model is based on three principles:
-1. You can only see your branch's data (unless you are the owner)
-2. You can only do what your role permits
-3. Everything you do is logged
-
+## 5.2 Authorization (capability summary)
 ```
-ACTION                          OWNER    BRANCH MGR
-─────────────────────────────────────────────────────
-View own branch data             ✓           ✓
-View other branch data           ✓           ✗
-View consolidated (all branches) ✓           ✗
-Mark attendance                  ✓           ✓
-Fill EOD entry                   ✓           ✓
-Add expenses                     ✓           ✓
-Edit / delete expenses           ✓           ✓
-Approve payroll                  ✓           ✗
-Unlock locked EOD entries        ✓           ✗
-Export data                      ✓           ✗
-Delete any record (soft)         ✓           ✗
-Manage staff profiles            ✓           ✓
-Manage menu                      ✓           ✓
+CAPABILITY                         admin  owner  manager  readonly
+View all branches                   ✓      ✓      own       ✓
+Open Settings                       ✓      ✗       ✗        ✗
+Manage branches/users/categories    ✓      ✓       ✗        ✗
+Manage staff / attendance / EOD     ✓      ✓      own       ✗
+Edit/delete ledger expenses         ✓      ✓       ✗        ✗
+Mark payroll paid                   ✓      ✓       ✗        ✗
+Edit locked / >24h EOD              ✓      ✓       ✗        ✗
+View reports                        ✓      ✓      own       ✓
 ```
+`isGlobalAdmin` = admin or owner; `isRootAdmin` = admin (Settings); `isGlobalOwner` = owner.
 
-## 5.2 The audit trail
+## 5.3 Audit trail
+`logAction()` appends `{ id, timestamp, userId, userName, action, entityType, entityId?, details }` to `audit_logs.json`, capped at 3000 entries. Coverage is **partial** (staff create/delete, attendance save, day-end save, expense edit/delete). There is no audit-log UI and the log is not tamper-evident.
 
-Every action that changes data is recorded in a permanent audit log:
-- Who did it (user name and ID)
-- What they changed (which record, which table)
-- What it was before and after the change
-- When it happened
+## 5.4 Transport & headers
+`next.config.ts` sets HSTS, `X-Frame-Options: DENY`, `nosniff`, a strict `Content-Security-Policy`, and `Cache-Control: no-store` globally.
 
-This log cannot be edited or deleted by anyone, including the owner. It exists purely as an evidence trail.
-
-In Phase 1, there is no UI for the audit log — it runs silently in the background. If there is ever a dispute about who changed a salary figure or deleted an expense, the answer is in the audit log.
+## 5.5 Known security gaps (documented)
+- No password-complexity enforcement (login only requires non-empty fields).
+- Rate limiter fails open on DB errors.
+- SQL migrations commit a plaintext bootstrap admin password and a hardcoded Postgres role password — these must be rotated and removed from source.
 
 ---
 
-# Part 6 — The Rollout Architecture
+# Part 6 — Deployment & Environments
 
-## 6.1 How the system is introduced to the business
-
-The system is introduced in four phases over 24 months. Each phase has a clear before/after for the business, not just a list of features shipped.
-
-### Phase 1 — The foundation (Months 0–6)
-**What gets replaced:** The attendance register, the salary notebook, the mental tally of daily income, and the scattered expense notes.
-**What the business gains:** A daily record of income, a monthly payroll with paper trail, and attendance history for all staff.
-**Adoption risk:** Medium. The owner and (future) manager need to form two daily habits — morning attendance and evening EOD entry. This is the hardest phase behaviourally.
-
-### Phase 2 — Supply chain (Months 6–12)
-**What gets replaced:** Mental stock awareness and loose vendor bills.
-**What the business gains:** Early warning on stock shortages, complete purchase history per supplier.
-**Adoption risk:** Low. Built on top of established Phase 1 habits. Vendor bill entry is a natural extension of expense tracking.
-
-### Phase 3 — Insight (Months 12–18)
-**What gets replaced:** End-of-year accountant surprises and gut-feel decision making.
-**What the business gains:** 12 months of trend data, monthly P&L, cross-branch comparison, salary analytics.
-**Adoption risk:** Very low. No new data entry required — this phase reads the data that Phase 1 and 2 collected. The owner just gains new visibility.
-
-### Phase 4 — Operations (Months 18–24)
-**What gets replaced:** Handwritten bills and manual end-of-day cash tallying.
-**What the business gains:** Real-time order management, itemised receipts, automatic income entry.
-**Adoption risk:** High. POS changes how every customer-facing transaction happens. Requires staff training (for the cashier role) even though staff don't use the app for management. This risk is why it is Phase 4 and not Phase 1.
+- **Target:** Netlify (native Netlify DB in production; Neon HTTP driver in dev, selected by the `NETLIFY` env flag).
+- **Migrations:** SQL under `netlify/database/migrations/` create `json_store` and `rate_limit` (and the bootstrap admin).
+- **Seeding:** `npm run db:seed` (also run at the end of `npm run build`) upserts default departments, roles, categories, branches, config, and the seeded owner user.
+- **Required env:** `JWT_SECRET` (app throws without it), `DATABASE_URL` (dev). Optional: `SECURE_COOKIE`, `NETLIFY`, `NODE_ENV`.
 
 ---
 
-# Part 7 — How the Two AI Tools Collaborate
+# Part 7 — Testing
 
-This system is being built using two AI tools working in different roles:
-
-**Claude (this tool) — product thinking and architecture**
-Used for planning, requirements, design decisions, schema review, and keeping the product vision consistent. When something needs to be thought through — "what happens to advances if payroll is regenerated?", "how should the branch scope work for consolidated reports?" — Claude is the right tool.
-
-**Gemini (Google AI Studio / Cursor) — code generation**
-Used for writing actual code — API routes, React components, database queries, migrations. Works best when given precise, bounded tasks with a complete context document. Does not make architecture decisions.
-
-**The documentation system is the bridge between them.**
-Every decision made with Claude lives in a numbered markdown doc. Every session with Gemini starts with the relevant docs as context. When Gemini changes something, the affected doc is updated and brought back to Claude. Both tools always work from the same source of truth.
-
-```
-BRAINSTORM / PLAN          BUILD                    REVIEW
-─────────────────          ──────────────────       ────────────────
-Claude                     Gemini                   Claude
-  │                           │                        │
-  ├─ Requirements              ├─ Scaffold project      ├─ Review output
-  ├─ Schema design             ├─ Write API routes      ├─ Catch errors
-  ├─ Module planning           ├─ Build components      ├─ Update docs
-  └─ Write docs ──────────────►└─ Use docs as context   └─ Sync docs
-```
+- **Unit:** Vitest (jsdom) covers actions, lib, hooks, middleware, and most components, with coverage thresholds configured in `vitest.config.ts` (backend ≥90%, several lib files at 100%). Tests mock `@/lib/db` and the auth session.
+- **Integration:** Playwright (`test/integration`) drives the app in Chromium.
+- **Git hooks:** Husky runs the test suite on pre-commit and coverage on pre-push.
 
 ---
 
-*End of High Level Design Document*  
-*Related documents: PRODUCT-REQUIREMENTS-DOCUMENT.md, ../Technical/DOC-01 through DOC-14 (LLD)*
+*End of High Level Design.*
+*Related: PRODUCT-REQUIREMENTS-DOCUMENT.md, ../Technical/DOC-01 … DOC-14.*

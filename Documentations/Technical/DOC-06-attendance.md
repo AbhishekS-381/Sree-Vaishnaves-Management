@@ -1,231 +1,87 @@
 # DOC-06 · Attendance
-**Version:** v1.0  
-**Last updated:** 2026-03-15  
-**Phase:** 1  
-**Depends on:** DOC-01, DOC-02, DOC-03, DOC-05
+**Version:** v2.0
+**Last updated:** 2026-09-30
+**Depends on:** DOC-01, DOC-02, DOC-03, DOC-04, DOC-05
 
 ---
 
 ## Overview
 
-Daily attendance is marked by the owner or branch manager. Designed for 35+ staff — the default is "mark all present" and only exceptions are tapped. Attendance directly feeds the payroll calculation.
+Daily attendance is marked by admin, owner, or manager under `/management/attendance` (`AttendanceClientPage.tsx`), backed by `src/app/actions/attendance.ts`. Records feed the payroll day-count prefill (DOC-05). `readonly` users cannot mark attendance. There are no REST routes.
 
 ---
 
-## API routes
+## Actions (`src/app/actions/attendance.ts`)
 
-| Method | Route | Role | Description |
-|--------|-------|------|-------------|
-| GET | `/api/v1/branches/:branchId/attendance` | owner, branch_manager | Get attendance for a date or month |
-| POST | `/api/v1/branches/:branchId/attendance/bulk` | owner, branch_manager | Mark attendance for multiple staff at once |
-| PATCH | `/api/v1/branches/:branchId/attendance/:staffId` | owner, branch_manager | Update a single staff member's status |
-| POST | `/api/v1/branches/:branchId/attendance/mark-all-present` | owner, branch_manager | Bulk mark all active staff as present for a date |
-| POST | `/api/v1/branches/:branchId/holiday` | owner | Flag a day as holiday for the entire branch |
-| DELETE | `/api/v1/branches/:branchId/holiday/:date` | owner | Remove holiday flag for a date |
+| Action | Signature | Notes |
+|--------|-----------|-------|
+| `getAttendanceByDate` | `(date, branchId?)` | returns logs for a date, optionally filtered by branch |
+| `saveAttendance` | `(newLogs: Partial<AttendanceLog>[])` | bulk upsert of attendance rows; the primary write |
 
-### Query params for GET attendance
-- `?date=2026-03-15` — get attendance for a specific date
-- `?month=2026-03` — get full month attendance summary
-- `?staffId=uuid` — get attendance history for one staff member
+There is no separate "mark all present" or "holiday flag" endpoint — the client builds the desired set of `{ date, staffId, branchId, status }` rows and sends them to `saveAttendance` in one call. "Mark all present" is a client-side convenience that pre-sets every staff row to `present` before saving.
 
 ---
 
-## Bulk mark all present
+## Status values
 
-The primary daily action. Called when the user opens the attendance screen for today.
-
-### Request
-```json
-POST /api/v1/branches/:branchId/attendance/mark-all-present
-{
-  "date": "2026-03-15"
-}
+```ts
+type AttendanceStatus = 'present' | 'absent' | 'half-day' | 'holiday' | 'unmarked'
 ```
 
-### Logic
-1. Fetch all active staff for the branch
-2. For each staff member, INSERT into `attendance_logs` with `status = 'present'`
-3. Use `ON CONFLICT (staff_id, date) DO NOTHING` — skip staff already marked
-4. Return count of records created vs skipped
+| Status | Meaning | Payroll effect (via prefill) |
+|--------|---------|------------------------------|
+| `present` | Full day worked | counts as 1 day |
+| `half-day` | Half day worked | counts as 0.5 day |
+| `absent` | Did not attend | 0 |
+| `holiday` | Branch closed / holiday | 0 (not counted) |
+| `unmarked` | Not yet marked | 0 |
 
-### Response
-```json
-{
-  "success": true,
-  "data": {
-    "marked": 32,
-    "skipped": 3,
-    "date": "2026-03-15"
-  }
-}
-```
+There is **no `leave` status** in the code. The status literal uses a hyphen (`half-day`).
 
 ---
 
-## Bulk update (exceptions)
+## `saveAttendance` logic
 
-After marking all present, the user taps individual exceptions.
+1. **Branch enforcement.** The first log's `branchId` is passed through `requireBranchAccess`; the enforced branch is stamped onto all logs. A manager cannot write attendance for another branch (`Forbidden`).
+2. **Per-row upsert** under a `withTransaction` lock on `attendance.json`. For each incoming log with a `date` and `staffId`:
+   - **Future-date guard:** if `date > todayIST` the whole save aborts with `Cannot mark attendance for future dates`.
+   - **7-day time-lock:** if the log's date is more than 7 days old and the user is **not** a global admin, the save aborts with `Cannot save attendance older than 7 days without Owner privileges.`
+   - Existing `(date, staffId)` row → merged/updated; otherwise a new row is pushed with a generated id.
+   - `updatedAt` is set to now on every write.
+3. **Audit + revalidate.** Logs an `UPDATE_ATTENDANCE` entry summarizing the affected staff count and dates, then revalidates `/management/attendance` and `/`.
 
-### Request
-```json
-POST /api/v1/branches/:branchId/attendance/bulk
-{
-  "date": "2026-03-15",
-  "entries": [
-    { "staffId": "uuid-1", "status": "absent" },
-    { "staffId": "uuid-2", "status": "half_day" },
-    { "staffId": "uuid-3", "status": "leave" }
-  ]
-}
-```
-
-### Logic
-Uses `INSERT ... ON CONFLICT (staff_id, date) DO UPDATE SET status = EXCLUDED.status, marked_by = EXCLUDED.marked_by, updated_at = NOW()`
+"Today" is computed in IST: `new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })`.
 
 ---
 
-## Holiday flag
+## Edit rules (as enforced)
 
-When a branch is marked as holiday for a date:
-
-1. Insert into `holiday_flags`
-2. Bulk update all `attendance_logs` for that branch + date to `status = 'holiday'`
-   - If no attendance has been marked yet, insert records with `status = 'holiday'` for all active staff
-3. `holiday` days are excluded from both the present count and absent count in payroll — they do not penalise staff
-
-### Removing a holiday flag
-1. Delete from `holiday_flags`
-2. Delete all `attendance_logs` where `status = 'holiday'` for that branch + date
-   - This returns the day to "not yet marked" state — the user must re-mark attendance
+- **Any date up to today, within 7 days:** admin, owner, and manager (own branch) can write.
+- **Older than 7 days:** only global admins (`admin`/`owner`). Managers are blocked.
+- **Future dates:** blocked for everyone.
+- There is no payroll-approval lock on attendance (payroll does not freeze attendance in this codebase).
 
 ---
 
-## Attendance status values
+## Frontend behaviour (`AttendanceClientPage.tsx`)
 
-| Status | Payroll weight | Description |
-|--------|---------------|-------------|
-| `present` | 1.0 | Full day worked |
-| `half_day` | 0.5 | Half day worked |
-| `absent` | 0.0 | Did not come in |
-| `leave` | 0.0 | Approved leave (no penalty, but no pay) |
-| `holiday` | excluded | Branch closed — excluded from working day denominator |
-
----
-
-## Edit rules
-
-- **Same day:** Both owner and branch_manager can edit
-- **Up to 7 days back:** Owner only can edit
-- **Beyond 7 days:** No edits permitted through UI (root user only via DB)
-- **After payroll approved:** No edits to attendance for that month — return error `PAYROLL_ALREADY_APPROVED`
+- Date picker (defaults to today) and branch selector (managers are pinned to their branch).
+- Loads existing logs for the date via `getAttendanceByDate` and keys them by `staffId`.
+- "Mark all present" sets every active staff member's status to `present` client-side.
+- Individual rows can be toggled between present / absent / half-day / holiday.
+- Staff are grouped/labelled by role for scanning large teams.
+- A summary count is shown; saving calls `saveAttendance` with the full set.
 
 ---
 
-## Attendance summary response (for a date)
-
-```json
-{
-  "date": "2026-03-15",
-  "branchId": "uuid",
-  "isHoliday": false,
-  "summary": {
-    "total": 35,
-    "present": 31,
-    "halfDay": 2,
-    "absent": 1,
-    "leave": 1,
-    "notMarked": 0
-  },
-  "records": [
-    {
-      "staffId": "uuid",
-      "name": "Murugan K",
-      "role": "head_cook",
-      "shift": "full",
-      "status": "present"
-    }
-  ]
-}
-```
-
-Records are grouped by role in the response for easier scanning on large teams.
+## Data shape
+See DOC-03 → `attendance.json` / `AttendanceLog`.
 
 ---
 
-## Monthly attendance summary (for payroll)
-
-```json
-{
-  "month": "2026-03",
-  "branchId": "uuid",
-  "workingDays": 26,
-  "staff": [
-    {
-      "staffId": "uuid",
-      "name": "Murugan K",
-      "daysPresent": 24,
-      "halfDays": 1,
-      "daysAbsent": 1,
-      "daysLeave": 0,
-      "daysHoliday": 2,
-      "daysNotMarked": 0
-    }
-  ]
-}
-```
-
----
-
-## Frontend UX rules
-
-1. **Default to "mark all present" pattern:**
-   - When the user opens today's attendance, if no records exist, show a "Mark all present" button prominently
-   - After marking all present, show the full list where user taps only exceptions
-   - This is the most common daily flow for 35 staff
-
-2. **Group staff by role** in the attendance list for easier scanning
-
-3. **Colour coding for statuses:**
-   - Present → green
-   - Half day → yellow/amber
-   - Absent → red
-   - Leave → blue
-   - Holiday → grey
-
-4. **Show count summary** at top: "31 present · 2 half day · 1 absent · 1 leave"
-
-5. **Date navigation:** User can go back to previous days to edit (within 7-day rule for owner)
-
-6. **Holiday banner:** If the day is marked as holiday, show a prominent banner and disable all status buttons
-
----
-
-## Validation schemas (Zod)
-
-```js
-const attendanceStatusEnum = z.enum(['present', 'absent', 'half_day', 'leave'])
-
-const bulkAttendanceSchema = z.object({
-  date: z.string().date(),
-  entries: z.array(z.object({
-    staffId: z.string().uuid(),
-    status: attendanceStatusEnum
-  })).min(1)
-})
-
-const holidaySchema = z.object({
-  date: z.string().date(),
-  reason: z.string().max(255).optional()
-})
-```
-
----
-
-## Error codes specific to attendance
-
-| Code | Meaning |
-|------|---------|
-| `ATTENDANCE_ALREADY_MARKED` | Unique constraint hit on single insert |
-| `PAYROLL_ALREADY_APPROVED` | Trying to edit attendance for an approved payroll month |
-| `EDIT_WINDOW_EXPIRED` | Trying to edit attendance older than 7 days (non-owner) |
-| `BRANCH_IS_HOLIDAY` | Trying to mark individual attendance on a holiday |
+## Business rules summary
+1. One record per staff per day (upsert on `(date, staffId)`).
+2. No future-dated attendance.
+3. 7-day edit window for managers; global admins can edit older records.
+4. Branch scoping is enforced server-side.
+5. Attendance is a soft input to payroll (prefill only) — it does not hard-lock or auto-generate payroll.

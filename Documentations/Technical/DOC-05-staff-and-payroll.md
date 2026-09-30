@@ -1,229 +1,133 @@
 # DOC-05 · Staff & Payroll
-**Version:** v1.0  
-**Last updated:** 2026-03-15  
-**Phase:** 1  
-**Depends on:** DOC-01, DOC-02, DOC-03
+**Version:** v2.0
+**Last updated:** 2026-09-30
+**Depends on:** DOC-01, DOC-02, DOC-03, DOC-04, DOC-06
 
 ---
 
 ## Overview
 
-Staff management covers employee profiles scoped per branch. Payroll covers monthly salary calculation based on attendance, advance deductions, and owner approval. All staff data is soft-deleted only.
+This module covers three related areas, all implemented as Server Actions and rendered under `/management/staff` and `/management/payroll`:
+
+1. **Staff profiles** — `staff.ts` + `StaffModal.tsx`
+2. **Position requirements & schedules** ("Open Positions" / timeline) — `staff_requirements.ts` + `StaffRequirements.tsx`, `ScheduleTimeline.tsx`, `AutoScheduleModal.tsx`
+3. **Payroll** — `salary.ts` + `PayrollClientPage.tsx`
+
+There are no REST routes. All operations are Server Actions invoked from client components.
 
 ---
 
-## Staff API routes
+## Staff management (`src/app/actions/staff.ts`)
 
-| Method | Route | Role | Description |
-|--------|-------|------|-------------|
-| GET | `/api/v1/branches/:branchId/staff` | owner, branch_manager | List all active staff for a branch |
-| GET | `/api/v1/branches/:branchId/staff/:id` | owner, branch_manager | Get single staff profile with history |
-| POST | `/api/v1/branches/:branchId/staff` | owner, branch_manager | Add new staff member |
-| PUT | `/api/v1/branches/:branchId/staff/:id` | owner, branch_manager | Update staff profile |
-| DELETE | `/api/v1/branches/:branchId/staff/:id` | owner | Soft delete (set isActive=false, deletedAt) |
+### Actions
+| Action | Signature | Auth | Notes |
+|--------|-----------|------|-------|
+| `addStaff` | `(prevState, formData)` | any session; branch enforced | Zod-validated, dedupe by name+phone+branch |
+| `updateStaff` | `(prevState, formData)` | branch enforced | blocks editing staff from another branch |
+| `toggleStaffStatus` | `(id, currentlyActive)` | session; branch-checked for managers | deactivating unlinks the position |
+| `deleteStaff` | `(id)` | `isGlobalAdmin` only | soft delete + unlink position; audit-logged |
 
-### Staff list query params
-- `?role=waiter` — filter by role
-- `?shift=morning` — filter by shift
-- `?search=kumar` — search by name (case-insensitive)
-- `?includeInactive=true` — include soft-deleted staff (owner only)
-
-### Staff profile response
-```json
+### `addStaffSchema` (Zod)
+```ts
 {
-  "id": "uuid",
-  "branchId": "uuid",
-  "name": "Murugan K",
-  "phone": "9876543210",
-  "roleId": "uuid",
-  "departmentId": "uuid",
-  "monthlySalary": 18000,
-  "joinedAt": "2025-01-15",
-  "notes": null,
-  "isActive": true,
-  "createdAt": "2025-01-15T10:30:00Z"
+  name: string (1..100, trimmed),
+  phone: string (7..15, /^[0-9+\-\s()]+$/),
+  departmentId: string (min 1),
+  roleId: string (min 1),
+  branchId: string (min 1),
+  salary: int >= 0,
+  label?: string (<=50),
+  shiftType?: 'morning' | 'evening' | 'full',
+  startTime?/endTime?: "HH:MM" or ''
 }
 ```
+(The StaffModal additionally captures `joinedAt`, `exitDate`, `specialtyId`, `positionId`, and `status` for edits.)
 
-### Allowed role values
-Values are now stored in `roles.json` as UUIDs.
+### Position mapping & `positionIndex`
+- Staff may be mapped to a `staff_requirements` slot via `positionId`.
+- On assignment the action computes the lowest free `positionIndex` among active staff already in that position (so slots fill 0,1,2…).
+- On deactivate/delete, `positionId` and `positionIndex` are cleared to free the slot.
+- The `StaffModal` only shows positions that still have open capacity (filled < requiredCount), except the staff member's current position when editing. Selecting a position **locks** branch/department/role/specialty to the requirement's definition.
 
-### Allowed department values
-Values are now stored in `departments.json` as UUIDs.
+### Duplicate rule
+A staff member is considered a duplicate if an active, non-deleted record shares the same lowercased `name`, `phone`, and `branchId`.
 
 ---
 
-## Salary advance API routes
+## Position requirements (`src/app/actions/staff_requirements.ts`)
 
-| Method | Route | Role | Description |
-|--------|-------|------|-------------|
-| GET | `/api/v1/branches/:branchId/advances` | owner, branch_manager | List advances, filter by month or staff |
-| POST | `/api/v1/branches/:branchId/advances` | owner, branch_manager | Record a new advance |
+Requirements define budgeted headcount per branch/department/role (optionally a chef specialty).
 
-### Advance request body
-```json
-{
-  "staffId": "uuid",
-  "amount": 2000,
-  "advanceDate": "2026-03-10",
-  "note": "Medical emergency"
-}
+| Action | Signature | Notes |
+|--------|-----------|-------|
+| `saveRequirement` | `(id, branchId, departmentId, roleId, requiredCount, specialtyId?, defaultSalary?, startTime?, endTime?, responsibility?)` | create or update; branch enforced |
+| `deleteRequirement` | `(id)` | cascades: clears `positionId`/`positionIndex` on all assigned staff, then removes the requirement |
+| `updateRequirementSchedules` | `(id, schedules)` | validates and stores per-position shift schedules |
+
+Business rules enforced:
+- **Duplicate guard:** a requirement with the same branch + department + role + specialty may not be created twice.
+- **Locked edits:** if any active staff are assigned, you cannot change the requirement's role or department.
+- **Headcount warning:** reducing `requiredCount` below the currently filled count returns a `{ success, warning }` telling the user to reassign the excess.
+- `responsibility` is capped at 500 characters.
+
+### Schedule validation (`updateRequirementSchedules`)
+For each position schedule:
+- Max **3 shifts**.
+- Each shift must start no earlier than **05:00** and end no later than **23:00**.
+- Minimum **1-hour break** between consecutive shifts.
+- Total worked time across shifts must not exceed **10 hours**.
+
+### Auto-schedule (`src/lib/scheduleGenerator.ts`)
+`generateSchedules({ positionCount, branchStartTime, branchEndTime, maxHours, minSegmentHours, maxBreaks })` produces baseline `PositionSchedule[]`, staggering start times across positions and splitting each into up to 3 segments with 1-hour breaks. The `AutoScheduleModal` collects the parameters and calls `updateRequirementSchedules` with the result.
+
+### Timeline & coverage view (`ScheduleTimeline.tsx`)
+A drag-to-draw timeline (pointer events, 15-minute snapping) lets admins/owners edit each position's shifts directly. Clicking an hour marker opens a "who is working at this hour" panel that overlaps each staff member's shifts (from position schedules, or falling back to the staff record's `startTime`/`endTime`, or the `shiftType` default window) against the selected hour and compares required vs. actual coverage per role.
+
+### Positions summary (`src/lib/positionsSummary.ts`)
+`computePositionsSummary(requirements, staff)` returns `{ totalPositions, filledPositions, vacantPositions, totalSalary }` where `totalSalary = Σ(defaultSalary × requiredCount)`. Rendered by `PositionsSummaryCards`.
+
+---
+
+## Payroll (`src/app/actions/salary.ts`)
+
+Payroll is generated per month/year from the current staff list and manually entered days-worked/advances.
+
+### Actions
+| Action | Signature | Auth | Notes |
+|--------|-----------|------|-------|
+| `savePayroll` | `(prevState, formData)` | any session; managers scoped to their branch | replaces all rows for the month/year |
+| `markAsPaid` | `(id)` | `isGlobalAdmin` only | sets `status = 'PAID'`, `paidAt` |
+
+### The salary formula (exact)
 ```
-
-### Advance rules
-- One staff member can have multiple advances in a month
-- Advances are deducted cumulatively at payroll time
-- `is_deducted` flips to `true` when payroll for that month is approved — prevents double deduction if payroll is regenerated
-
----
-
-## Payroll API routes
-
-| Method | Route | Role | Description |
-|--------|-------|------|-------------|
-| GET | `/api/v1/branches/:branchId/payroll/:month` | owner, branch_manager | Get all payroll records for a month |
-| POST | `/api/v1/branches/:branchId/payroll/:month/generate` | owner | Generate/recalculate payroll for a month |
-| PATCH | `/api/v1/branches/:branchId/payroll/:month/:staffId` | owner | Override a single staff member's net payable |
-| POST | `/api/v1/branches/:branchId/payroll/:month/approve` | owner | Approve and lock entire month's payroll |
-| GET | `/api/v1/branches/:branchId/payroll/:month/:staffId/slip` | owner, branch_manager | Download PDF salary slip |
-
-### Month format
-`YYYY-MM` — e.g. `2026-03`
-
----
-
-## Payroll generation logic
-
-When `POST /payroll/:month/generate` is called:
-
-1. Fetch all active staff for the branch
-2. For each staff member:
-   a. Count `attendance_logs` for the month:
-      - `days_present` = count of `status = 'present'`
-      - `half_days` = count of `status = 'half_day'`
-      - `days_holiday` = count of `status = 'holiday'`
-   b. Get `working_days` from branch config for that month (default 26)
-   c. Get `monthly_salary` from current staff record (snapshot it)
-   d. Calculate:
-      ```
-      gross_salary = ROUND((days_present + 0.5 * half_days) / working_days * monthly_salary)
-      ```
-   e. Sum all `salary_advances` for this staff for this month where `is_deducted = false`
-      → `total_advances`
-   f. Calculate:
-      ```
-      net_payable = MAX(0, gross_salary - total_advances)
-      ```
-3. Upsert into `payroll_records` with `status = 'draft'`
-   - If a draft already exists, recalculate and overwrite
-   - If `status = 'approved'`, do NOT regenerate — return error `PAYROLL_ALREADY_APPROVED`
-
-### Payroll approval logic
-
-When `POST /payroll/:month/approve` is called:
-
-1. Verify all staff have payroll records generated (no missing entries)
-2. Set all records to `status = 'approved'`, `approved_by`, `approved_at`
-3. Set `is_deducted = true` on all `salary_advances` that were included in this payroll
-4. Write to `audit_logs`
-5. Lock — no further regeneration allowed for this month
-
----
-
-## Payroll bulk view response
-
-```json
-{
-  "month": "2026-03",
-  "branchId": "uuid",
-  "workingDays": 26,
-  "status": "draft",
-  "records": [
-    {
-      "staffId": "uuid",
-      "name": "Murugan K",
-      "role": "head_cook",
-      "baseSalary": 18000,
-      "daysPresent": 24,
-      "halfDays": 1,
-      "daysHoliday": 0,
-      "grossSalary": 17308,
-      "totalAdvances": 2000,
-      "netPayable": 15308,
-      "overrideAmount": null,
-      "finalPayable": 15308
-    }
-  ],
-  "totals": {
-    "grossSalary": 320000,
-    "totalAdvances": 15000,
-    "totalNetPayable": 305000
-  }
-}
+payableAmount = MAX(0, ROUND((monthlySalary / 30) * daysWorked) - advances)
 ```
+- `monthlySalary` is snapshotted from the current staff record.
+- `daysWorked` and `advances` are entered per staff in the payroll form (fields `staff_{id}_days`, `staff_{id}_advances`, `staff_{id}_notes`).
+- Records are keyed `pay_{month}_{year}_{staffId}`; saving a month deletes existing rows for that month/year and inserts the new set, all with `status = 'PENDING'`.
+- `month` must be 1–12, `year` 2020–2100.
 
-`finalPayable` = `overrideAmount` if set, otherwise `netPayable`.
+### Prefill from attendance (`PayrollClientPage.tsx`)
+The client pre-populates `daysWorked` for each staff member by counting that month's attendance from `attendanceLogs` (present = 1, half-day = 0.5), capped at 31, but the owner/manager can override any value before saving. Advances and notes are entered manually.
 
----
-
-## Salary slip PDF content
-
-Each salary slip must contain:
-- Restaurant name and branch name
-- Staff name, role, and employee ID
-- Month and year
-- Working days, days present, half days
-- Base salary
-- Gross salary (calculated)
-- Advances deducted (itemised with dates and amounts)
-- Net payable
-- "Approved by" name and date
-- Footer: "This is a computer-generated salary slip."
+### What is NOT implemented
+- No salary advances collection/workflow (`advances.json` is unused; advances are a plain number on the payroll record).
+- No PDF salary slips.
+- No per-record override-with-reason field (the payable is recomputed from days/advances).
+- No approval-lock that freezes attendance — a month can be re-saved, which overwrites its records.
+- No "working days" branch config — the divisor is a fixed 30.
 
 ---
 
-## Branch payroll config
-
-Each branch has a configurable `working_days` per month. This is stored as a simple config — not a separate table in Phase 1. Store as a JSON field on the branch record or as a separate `branch_config` table.
-
-Default: `26`
-
-The owner can override this per month before generating payroll (e.g. if the restaurant was closed for a festival week: set working days to 22 for that month).
-
----
-
-## Validation schemas (Zod)
-
-```js
-const createStaffSchema = z.object({
-  name: z.string().min(2).max(100),
-  phone: z.string().length(10).optional(),
-  roleId: z.string().uuid(),
-  departmentId: z.string().uuid(),
-  monthlySalary: z.number().int().positive(),
-  joinedAt: z.string().date().optional()
-})
-
-const recordAdvanceSchema = z.object({
-  staffId: z.string().uuid(),
-  amount: z.number().int().positive(),
-  advanceDate: z.string().date(),
-  note: z.string().max(255).optional()
-})
-
-const overridePayrollSchema = z.object({
-  overrideAmount: z.number().int().min(0),
-  overrideNote: z.string().min(5).max(500)
-})
-```
+## Data shapes
+See DOC-03 for `Staff`, `StaffRequirement`/`PositionSchedule`/`Shift`, and `SalaryRecord`.
 
 ---
 
 ## Business rules summary
-
-1. Staff with `isActive = false` are excluded from attendance marking and payroll generation
-2. Base salary changes take effect from the next month's payroll — they do not retroactively affect past records
-3. Advances from previous months that were not yet deducted carry forward — they appear in the next generated payroll
-4. Net payable is floored at 0 — it can never be negative
-5. Once payroll is approved, it cannot be regenerated. Owner must contact root user to unlock (handled manually, no UI)
-6. Payroll generation is idempotent for draft status — calling generate multiple times produces the same result
+1. Managers can only add/edit staff, requirements, and payroll for their own branch.
+2. Only global admins (admin/owner) can delete staff.
+3. Only global admins can mark payroll as paid.
+4. Deactivating or deleting staff frees their assigned position slot.
+5. Payable is floored at 0.
+6. Payroll save is destructive per month/year (overwrites), so re-saving recalculates that month.

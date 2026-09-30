@@ -1,159 +1,209 @@
 # DOC-02 · Architecture & Tech Stack
-
-## Stack
-- Next.js (App Router)
-- Drizzle ORM (connected to Netlify DB)
-- Tailwind CSS
-- Vitest / Playwright
-
-## Data Storage
-The application utilizes a JSON-blob backend via Drizzle ORM. The `json_store` PostgreSQL table holds a `filename` and a `data` text column. The system parses this stringified JSON on read and stringifies it on write.
-A custom `withTransaction` in `src/lib/db.ts` acts as an in-memory Mutex to prevent race conditions when reading and writing these blobs.
-
-### DB Files
-- `users.json`, `staff.json`, `branches.json`
-- Postgres `rate_limit` table (Handles in-house sliding-window rate limiting)
-- `audit_logs.json` (Logs all destructive actions or modifications)
-
-## Authentication
-Authentication is fully stateless and built strictly on Next.js Server Actions:
-1. `auth.ts` intercepts `/login` actions.
-2. Checks IP rate limits via the Postgres `rate_limit` table.
-3. Verifies bcrypt hashed passwords.
-4. Drops an HttpOnly `session` cookie.
-
-*No refresh tokens, localStorage, or Zustand are used for authentication.*
+**Version:** v2.0
+**Last updated:** 2026-09-30
+**Depends on:** DOC-01
 
 ---
 
-## Folder structure
+## Stack (from `package.json`)
 
-### Project (`/src`)
-```
-/src
-  /app
-    /actions           # Next.js Server Actions (staff.ts, eod.ts, auth.ts)
-    /api               # Next.js API Routes (if any)
-    /dashboard         # App Router pages
-    /staff
-    /login
-    layout.tsx
-    page.tsx
-  /components
-    /ui                # Reusable primitives: Button, Input, Badge, Card, Modal
-    /layout            # AppShell, Sidebar, TopBar, BranchSelector
-  /lib
-    db.ts              # Local JSON database wrapper with locks
-    auth.ts            # JWT verification and utilities
-    audit.ts           # Audit log wrapper
-  /hooks               # Custom React hooks
-```
+- **Next.js 16** (App Router, React Server Components, Server Actions) with **React 19**
+- **TypeScript 5** (strict), path alias `@/* → ./src/*`
+- **Tailwind CSS v4** (via `@tailwindcss/postcss`)
+- **Drizzle ORM** (beta) targeting PostgreSQL
+- **Database drivers:** `@neondatabase/serverless` (Neon HTTP) for local/dev, `@netlify/database` (`drizzle-orm/netlify-db`) in Netlify production
+- **jose** for JWT sign/verify, **bcryptjs** for password hashing, **zod** for validation
+- **lucide-react** icons, `clsx` + `tailwind-merge` (`cn()` helper)
+- **Testing:** Vitest (jsdom) for unit tests, Playwright for integration; Husky git hooks
+- **Deployment target:** Netlify (native Netlify DB + migrations under `netlify/database/migrations`)
+
+There is **no REST/HTTP API layer**. There are no controllers, no `/api/v1` routes, and no Bearer-token auth. All server logic runs as Server Actions invoked directly by components.
 
 ---
 
-## API conventions
+## Data storage — the JSON-blob store
 
-### Base URL
-```
-/api/v1
+The application persists state as JSON blobs inside a single PostgreSQL table.
+
+### The two real tables (`db/schema.ts`)
+```ts
+// json_store — one row per logical collection
+export const jsonStore = pgTable("json_store", {
+  filename: varchar("filename", { length: 255 }).primaryKey(), // e.g. "staff.json"
+  data:     text("data").notNull(),                            // stringified JSON array
+});
+
+// rate_limit — login throttling (see DOC-04)
+export const rateLimitTable = pgTable("rate_limit", {
+  key:          varchar("key", { length: 255 }).primaryKey(),
+  attempts:     integer("attempts").notNull().default(0),
+  windowStart:  bigint("window_start",  { mode: "number" }).notNull(),
+  blockedUntil: bigint("blocked_until", { mode: "number" }).notNull().default(0),
+});
 ```
 
-### Authentication
-All routes except `/api/v1/auth/login` require a valid JWT in the Authorization header:
-```
-Authorization: Bearer <access_token>
+Every "collection" (staff, branches, eod, expenses, …) is one row in `json_store` keyed by a filename such as `staff.json`. The `data` column holds a JSON-stringified array of records. All relationships are **logical** (resolved in code by matching ids), never foreign keys.
+
+### The access layer (`src/lib/db.ts`)
+```ts
+readJSON<T>(filename): Promise<T[]>            // SELECT + JSON.parse; [] on miss/error
+writeJSON<T>(filename, data): Promise<boolean> // INSERT ... ON CONFLICT DO UPDATE (upsert)
+withTransaction<T>(filename, cb): Promise<boolean> // read → mutate → write, guarded by a per-file mutex
 ```
 
-### Request / response format
-- All request bodies: `application/json`
-- All responses: `application/json`
-- Dates in request bodies: ISO 8601 string (`"2026-03-15"`)
-- Monetary values: integer rupees (`1500`, not `"1500"` or `1500.00`)
+- `withTransaction` acquires an **in-process `Mutex` keyed by filename** so concurrent writes within a single server instance are serialized (read-modify-write on the whole blob). This does **not** protect against concurrent writes from multiple serverless instances — the model is effectively last-write-wins across instances.
+- `DB_FILES` enumerates every collection filename (branches, departments, roles, staff, daily_tally, payroll, attendance, eod, expenses, menu, inventory, vendors, stock_adjustments, advances, config, categories, users, staff_requirements, menu_categories, branch_menu_items, branch_categories, audit_logs).
 
-### Standard success response
-```json
-{
-  "success": true,
-  "data": { ... },
-  "meta": {
-    "page": 1,
-    "total": 35
-  }
+### Driver selection (`db/index.ts`)
+```ts
+if (process.env.NETLIFY !== "true" && DATABASE_URL) {
+  db = drizzleNeon(DATABASE_URL, { schema });   // local/dev via Neon HTTP
+} else {
+  db = drizzleNetlify({ schema });              // Netlify production native DB
 }
 ```
 
-### Standard error response
-```json
-{
-  "success": false,
-  "error": {
-    "code": "ATTENDANCE_ALREADY_MARKED",
-    "message": "Attendance for this staff member on this date already exists."
-  }
+### Seeding (`db/seed.ts`, `db/seed-data.ts`)
+`npm run db:seed` (also run automatically at the end of `npm run build`) upserts default rows into `json_store` using `onConflictDoNothing`. Seed data includes default departments, roles, expense categories, the two demo branches, a global `config` row, and a single seeded owner user "Abhishek" (bcrypt-hashed, role `owner`).
+
+---
+
+## Authentication (summary — full detail in DOC-04)
+
+Auth is built entirely on Server Actions in `src/app/actions/auth.ts`:
+1. `login` checks IP + username rate limits against the `rate_limit` table, validates input with Zod (name + password each `min(1)`), compares the password with the bcrypt hash from `users.json`, then signs a **2-hour** JWT and stores it in an `HttpOnly`, `SameSite=strict` cookie named `session`.
+2. `logout` deletes the cookie and redirects to `/management/login`.
+3. `getSession` reads and verifies the cookie; `requireBranchAccess(branchId)` enforces branch scoping inside actions.
+
+`src/middleware.ts` verifies the `session` cookie for all `/management/*` routes and redirects unauthenticated users to the login page.
+
+---
+
+## Folder structure (actual)
+
+```
+/ (repo root)
+  db/
+    index.ts            # driver selection (Neon vs Netlify)
+    schema.ts           # json_store + rate_limit tables
+    seed.ts, seed-data.ts
+  netlify/database/migrations/   # SQL migrations (json_store, rate_limit, admin seed)
+  src/
+    middleware.ts       # session gate for /management/*
+    app/
+      layout.tsx        # root layout
+      (website)/        # public marketing site (page.tsx, layout.tsx)
+      management/
+        layout.tsx      # authenticated shell (Navigation + config)
+        page.tsx        # dashboard
+        login/
+        staff/ attendance/ payroll/ eod/ expenses/
+        vendors/ inventory/ menu/ reports/ branches/ settings/
+        # each module has page.tsx (server loader) + XxxClientPage.tsx (client UI)
+      actions/          # ALL server logic — 'use server'
+        auth.ts users.ts branches.ts staff.ts staff_requirements.ts
+        attendance.ts salary.ts eod.ts expenses.ts vendors.ts
+        menu.ts menu_categories.ts inventory.ts categories.ts
+        settings.ts config.ts
+    components/          # Navigation, StaffModal, ScheduleTimeline, modals, cards, …
+    hooks/              # useEODSave, useStaffFilters, useMenuFilters
+    lib/
+      db.ts             # JSON store + mutex
+      jwt.ts            # sign/verify JWT (jose)
+      rate-limit.ts     # SQL sliding-window limiter
+      audit.ts          # logAction → audit_logs.json
+      scheduleGenerator.ts positionsSummary.ts useDraft.ts utils.ts
+  test/                 # unit/ (vitest) + integration/ (playwright)
+  public/               # static website assets (bootstrap, swiper, images)
+```
+
+---
+
+## Server Action conventions
+
+The actions layer follows a consistent shape. A typical mutation:
+```ts
+'use server'
+export async function updateThing(prevState: any, formData: FormData) {
+  const session = await getSession()
+  if (!session?.isGlobalAdmin) return { error: 'Forbidden' }        // 1. authorize
+
+  const parsed = schema.safeParse({ ... })                          // 2. Zod validate
+  if (!parsed.success) return { error: parsed.error.issues[0].message }
+
+  const branchId = await requireBranchAccess(formData.get('branchId')) // 3. scope (if branch-bound)
+
+  const ok = await withTransaction<Thing>(DB_FILES.THINGS, list => { // 4. mutate under lock
+    /* find / push / splice */
+    return list
+  })
+  if (!ok) return { error: 'Transaction failed' }
+
+  await logAction('UPDATE_THING', 'THING', details, id)             // 5. audit (subset of actions)
+  revalidatePath('/management/things')                              // 6. revalidate
+  return { success: true }
 }
 ```
 
-### Error codes (use these exact strings)
-| Code | HTTP Status | Meaning |
-|------|------------|---------|
-| `UNAUTHORIZED` | 401 | No token or invalid token |
-| `FORBIDDEN` | 403 | Valid token but insufficient role or wrong branch |
-| `NOT_FOUND` | 404 | Resource does not exist |
-| `VALIDATION_ERROR` | 422 | Request body failed Zod validation |
-| `CONFLICT` | 409 | Unique constraint violation |
-| `INTERNAL_ERROR` | 500 | Unhandled server error |
+Key points:
+- Errors are **returned as `{ error }` objects**, not thrown (except `requireBranchAccess`, which throws and is caught).
+- Success is `{ success: true }`, sometimes with `{ warning }` or `{ message }`.
+- Form-bound actions use the `(prevState, formData)` signature for React `useActionState`; others take plain arguments.
+- Validation uses **Zod**. Note that validation strictness varies by action (e.g. login only requires non-empty fields; staff/eod/inventory have richer schemas).
+- Client feedback (alerts, banners, closing modals) is handled in the client components — actions never call `alert()`.
 
 ---
 
-## Authorization via Server Actions
+## Authorization
 
-Instead of middleware, all restricted Server Actions enforce access via `requireBranchAccess(branchId)`.
-```typescript
-const enforcedBranchId = await requireBranchAccess(branchId);
+There is no request middleware for authorization beyond the session gate. Each Server Action enforces its own rules:
+- `session.isGlobalAdmin` (admin or owner) gates cross-branch and privileged operations.
+- `session.isRootAdmin` (admin only) gates Settings operations (`settings.ts`, `config.ts`).
+- `requireBranchAccess(targetBranchId)` returns the enforced branch for managers and throws `Forbidden` if a manager targets another branch.
+- Page loaders additionally re-filter data by `session.branchId` for non-global users.
+
+---
+
+## Audit logging (`src/lib/audit.ts`)
+
+`logAction(action, entityType, details, entityId?)` appends an entry to `audit_logs.json`:
+```ts
+{ id, timestamp, userId, userName, action, entityType, entityId?, details }
 ```
+- Trimmed to the most recent **3000** entries.
+- Wrapped so an audit failure never breaks the calling operation.
+- Coverage is **partial** — currently called from staff create/delete, attendance save, EOD save, and expense update/delete. Most other mutations do not log.
 
 ---
 
-## Audit logging
-
-Every mutating request (POST, PUT, PATCH, DELETE) must write to `audit_logs`. Use the `auditLog` middleware or call the audit service directly from controllers.
-
-Audit entry must include:
-- `user_id` — who made the change
-- `branch_id` — which branch was affected
-- `table_name` — which table was modified
-- `record_id` — which row was modified
-- `action` — `INSERT`, `UPDATE`, or `DELETE`
-- `old_value` — JSON snapshot before change (null for INSERT)
-- `new_value` — JSON snapshot after change (null for DELETE)
-- `created_at` — UTC timestamp
-
----
-
-## Environment variables
+## Environment variables (actual)
 
 ```env
-# Database
-DATABASE_URL=file:./data/db.json
+# Database (Neon/Postgres connection string used in dev; Netlify injects its own in prod)
+DATABASE_URL=postgres://...
 
-# Auth
+# Auth (required — the app throws if missing)
 JWT_SECRET=<long-random-string>
-JWT_EXPIRES_IN=15m
 
-# App
-NODE_ENV=development
-PORT=4000
-CLIENT_URL=http://localhost:5173
-
-# Timezone (informational — always store UTC in DB)
-TZ=UTC
+# Optional
+SECURE_COOKIE=false   # set to 'false' to allow non-secure cookie outside production
+NETLIFY=true          # injected by Netlify to select the native DB driver
+NODE_ENV=production|development
 ```
+
+JWT lifetime is fixed at **2 hours** in code (`jwt.ts` uses `setExpirationTime('2h')`); there is no `JWT_EXPIRES_IN` variable.
+
+---
+
+## HTTP security headers (`next.config.ts`)
+
+The Next config sets strict headers on all routes: `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy`, HSTS, `Cache-Control: no-store`, and a detailed **Content-Security-Policy** (allows self plus YouTube/Google Maps/Firebase image hosts and Neon websocket connections).
 
 ---
 
 ## Coding conventions
 
-- Use `async/await` in Server Actions
-- DB queries use `src/lib/db.ts`
-- Validate all inputs with Zod schemas before processing
-- Use `vi.spyOn` to mock `requireBranchAccess` and `getSession` during unit testing
+- `async/await` throughout the actions layer.
+- All persistence goes through `src/lib/db.ts` (`readJSON` / `writeJSON` / `withTransaction`).
+- Validate inputs with Zod before mutating.
+- In unit tests, mock `@/lib/db`, and mock `getSession` / `requireBranchAccess` from `@/app/actions/auth` with `vi.mock` / `vi.spyOn`.

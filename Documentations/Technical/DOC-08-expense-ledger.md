@@ -1,163 +1,104 @@
 # DOC-08 · Expense Ledger
-**Version:** v1.0  
-**Last updated:** 2026-03-15  
-**Phase:** 1  
-**Depends on:** DOC-01, DOC-02, DOC-03
+**Version:** v2.0
+**Last updated:** 2026-09-30
+**Depends on:** DOC-01, DOC-02, DOC-03, DOC-04, DOC-07, DOC-11
 
 ---
 
 ## Overview
 
-A single shared `expenses` table is the source of truth for all expenses. Expenses can be entered from two places:
+A single shared collection `expenses.json` is the source of truth for all expenses. Rows are created from two places and distinguished by a `source` field:
 
-- **EOD entry screen** — quick daily logging, insert only, source = `'eod'`
-- **Vendor management screen** (Phase 2) — full CRUD, source = `'vendor'`
+- **EOD entry** (`source: 'eod'`) — written by `saveEODEntry` (DOC-07). Insert/replace only from the EOD screen.
+- **Vendor bills** (`source: 'vendor'`) — written by `addVendorBill` (DOC-11).
 
-Both screens read from and write to the same table. No syncing needed — it's one table.
-
----
-
-## API routes
-
-| Method | Route | Role | Description |
-|--------|-------|------|-------------|
-| GET | `/api/v1/branches/:branchId/expenses` | owner, branch_manager | List expenses with filters |
-| GET | `/api/v1/branches/:branchId/expenses/:id` | owner, branch_manager | Get single expense |
-| POST | `/api/v1/branches/:branchId/expenses` | owner, branch_manager | Add expense (EOD or vendor) |
-| PUT | `/api/v1/branches/:branchId/expenses/:id` | owner, branch_manager | Update expense |
-| DELETE | `/api/v1/branches/:branchId/expenses/:id` | owner | Soft delete |
-| GET | `/api/v1/expense-categories` | owner, branch_manager | List all active categories |
-| POST | `/api/v1/expense-categories` | owner | Add custom category |
-
-### Expense list query params
-- `?date=2026-03-15` — expenses for a specific date
-- `?month=2026-03` — expenses for a month
-- `?categoryId=uuid` — filter by category
-- `?source=eod` or `?source=vendor` — filter by origin
+Direct ledger management (edit/delete) lives in `src/app/actions/expenses.ts` and is surfaced on `/management/expenses` (`ExpensesClientPage.tsx`).
 
 ---
 
-## Create expense request body
+## Actions
 
-```json
-{
-  "date": "2026-03-15",
-  "dailyEntryId": "uuid-or-null",
-  "categoryId": "uuid",
-  "amount": 4500,
-  "vendorName": null,
-  "invoiceRef": null,
-  "source": "eod",
-  "notes": null
+| Source file | Action | Signature | Auth |
+|-------------|--------|-----------|------|
+| `eod.ts` | `saveEODEntry` | `(entryData, expensesOut)` | session; branch enforced |
+| `vendors.ts` | `addVendorBill` | `(prevState, formData)` | session; branch enforced |
+| `vendors.ts` | `markVendorBillAsPaid` | `(id)` | session; branch-checked |
+| `expenses.ts` | `updateExpense` | `(id, updates)` | **`isGlobalAdmin` only** |
+| `expenses.ts` | `deleteExpense` | `(id)` | **`isGlobalAdmin` only** |
+
+There is no dedicated `addExpense` action on the expenses screen — expenses are created only via EOD or vendor flows. The expenses screen is for viewing, editing, and deleting (admins/owners only).
+
+---
+
+## Expense shape (see DOC-03)
+```ts
+type Expense = {
+  id: string;            // exp_<uuid> (eod) | venexp_<uuid> (vendor)
+  branchId: string;
+  amount: number;        // integer
+  categoryId: string;    // -> categories.json (ExpenseCategory)
+  source: 'eod' | 'vendor';
+  date: string;          // YYYY-MM-DD
+  notes?: string;        // vendor bills embed "Vendor: <name> | Invoice: <ref>"
+  createdAt: string;
+  isPaid?: boolean;      // vendor bills only
 }
 ```
-
-- `dailyEntryId` — link to the day's EOD entry. Should be provided when creating from EOD screen. Can be null for vendor-side entries that don't yet have an EOD entry.
-- `source` — must be `'eod'` when called from EOD screen, `'vendor'` when called from vendor screen. The API does not restrict operations by source — it is metadata only.
-- `vendorName` and `invoiceRef` are null for EOD quick entries, populated in vendor management
+Expenses reference a **category id**, not an embedded category object. There is no `dailyEntryId`, no `vendorName`/`invoiceRef` column, and no soft-delete flag — deletes are hard array removals.
 
 ---
 
-## Expense response
+## `updateExpense` (admins/owners only)
 
-```json
-{
-  "id": "uuid",
-  "branchId": "uuid",
-  "dailyEntryId": "uuid",
-  "date": "2026-03-15",
-  "category": {
-    "id": "uuid",
-    "name": "Raw materials",
-    "color": "#2D7A4F"
-  },
-  "amount": 4500,
-  "vendorName": null,
-  "invoiceRef": null,
-  "source": "eod",
-  "notes": null,
-  "createdBy": "Owner Name",
-  "createdAt": "2026-03-15T17:30:00Z",
-  "updatedAt": "2026-03-15T17:30:00Z",
-  "deletedAt": null
-}
-```
+- Rejects non-global-admins with `Only admin and owner can edit ledger expenses.`
+- Validates the patch with Zod: `amount` (int ≥ 0), `notes` (≤500), `date` (`YYYY-MM-DD`), `category` (≤100) — all optional.
+- Preserves `id` and `branchId` (branch cannot be reassigned).
+- Audit-logs `UPDATE_EXPENSE` with before/after amounts and revalidates `/management/expenses` and `/management/reports`.
+
+## `deleteExpense` (admins/owners only)
+
+- Splices the expense out of the array (hard delete).
+- Audit-logs `DELETE_EXPENSE` and revalidates expenses + reports.
 
 ---
 
 ## Permissions matrix
 
-| Action | EOD screen | Vendor screen | Owner | Branch manager |
-|--------|-----------|---------------|-------|---------------|
-| Insert | Yes | Yes | Yes | Yes |
-| Update | No | Yes | Yes | Yes |
-| Soft delete | No | Yes | Yes | No |
+| Action | admin | owner | manager | readonly |
+|--------|:---:|:---:|:---:|:---:|
+| Create via EOD | ✓ | ✓ | ✓ (own branch) | ✗ |
+| Create via vendor bill | ✓ | ✓ | ✓ (own branch) | ✗ |
+| Mark vendor bill paid | ✓ | ✓ | ✓ (own branch) | ✗ |
+| Edit ledger expense | ✓ | ✓ | ✗ | ✗ |
+| Delete ledger expense | ✓ | ✓ | ✗ | ✗ |
+| View ledger | ✓ | ✓ | ✓ (own branch) | ✓ |
 
-The frontend enforces "insert only" on the EOD screen by not rendering edit/delete controls. The API does not restrict by source — it trusts the frontend separation. If needed in future, add source-based middleware.
-
----
-
-## EOD screen shows vendor expenses too
-
-When the EOD screen loads for a date, it fetches **all expenses for that date** (regardless of source) and displays them. This prevents double entry — if a vendor bill was already recorded, it appears in the EOD expense list.
-
-The EOD screen clearly labels the source:
-- `source = 'eod'` → no label (normal)
-- `source = 'vendor'` → badge "From vendor"
-
-Expenses from vendor source shown in EOD are read-only on the EOD screen. User is shown "Edit in vendor management" if they try to change it.
+The EOD screen never edits or deletes expenses — it rewrites its own day's `source:'eod'` rows on save (DOC-07). Corrections to individual expenses happen on the Expenses screen (global admins) or, for vendor bills, via the Vendors screen.
 
 ---
 
-## Expense categories
+## Expense categories (`categories.json`, `src/app/actions/categories.ts`)
 
-Default categories are seeded on first deployment. Owner can add custom categories.
+Categories are **global** (not branch-scoped). Managed by global admins (`addCategory`, `updateCategory`, `deleteCategory` all check `isGlobalAdmin`).
 
-Categories are **global** — not branch-scoped. All branches share the same category list.
-
-### Default categories
-| Name | Color | is_default |
-|------|-------|-----------|
-| Raw materials | #2D7A4F | true |
-| Gas / fuel | #C85C1A | true |
-| Electricity | #1A6BC8 | true |
-| Rent | #7A2D6A | true |
-| Salary advance | #C8991A | true |
-| Maintenance | #4A7A2D | true |
-| Miscellaneous | #5F5E5A | true |
-
-`is_default = true` means the category appears as a quick-tap tag on the EOD screen.
-
----
-
-## Validation schema (Zod)
-
-```js
-const createExpenseSchema = z.object({
-  date: z.string().date(),
-  dailyEntryId: z.string().uuid().optional().nullable(),
-  categoryId: z.string().uuid(),
-  amount: z.number().int().positive(),
-  vendorName: z.string().max(100).optional().nullable(),
-  invoiceRef: z.string().max(100).optional().nullable(),
-  source: z.enum(['eod', 'vendor']),
-  notes: z.string().max(500).optional().nullable()
-})
-
-const createCategorySchema = z.object({
-  name: z.string().min(2).max(100),
-  color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
-  isDefault: z.boolean().default(false),
-  sortOrder: z.number().int().min(0).default(99)
-})
+```ts
+type ExpenseCategory = { id: string; name: string; color?: string }  // cat_<uuid>, default color #64748b
 ```
 
+Seeded defaults: **Maintenance, Raw materials, Packaging, Gas / fuel, Rent, Electricity** (each with a color). Categories are hard-deleted; because expenses store only `categoryId`, deleting a category leaves historical expense rows pointing at a missing id (the UI shows the id/"Unknown" if unresolved).
+
 ---
 
-## Error codes specific to expenses
+## Client behaviour (`ExpensesClientPage.tsx`)
+- Branch filter (managers pinned), date filter, and a running `totalFiltered` sum.
+- Category names/colors resolved from `categories`.
+- Edit/delete controls render only for global admins (`isGlobalAdmin`).
 
-| Code | Meaning |
-|------|---------|
-| `EXPENSE_NOT_FOUND` | Expense ID not found or already deleted |
-| `CATEGORY_NOT_FOUND` | Category ID not found or inactive |
-| `ENTRY_LOCKED` | Trying to add/edit expense linked to a locked EOD entry |
+---
+
+## Business rules summary
+1. One shared ledger, two sources (`eod`, `vendor`).
+2. EOD expenses for a day are replaced wholesale on EOD save; vendor expenses are independent.
+3. Only global admins edit/delete ledger rows; deletes are permanent.
+4. Categories are global and referenced by id.
+5. All amounts are integers.

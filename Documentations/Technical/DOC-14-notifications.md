@@ -1,124 +1,53 @@
 # DOC-14 · Notifications & Reminders
-**Version:** v1.0  
-**Last updated:** 2026-03-15  
-**Phase:** 1  
-**Depends on:** DOC-01, DOC-02, DOC-03
+**Version:** v2.0
+**Last updated:** 2026-09-30
+**Depends on:** DOC-01, DOC-02, DOC-03, DOC-13
 
 ---
 
 ## Overview
 
-In-app alerts and reminders only — no push notifications, no email, no WhatsApp in Phase 1. Reminders are shown as banners on the dashboard and as a badge on the notification icon. They are condition-based — computed on each dashboard load, not stored in a separate notifications table.
+"Notifications" in this system are **in-app pending-action alerts computed on the dashboard**. There is no notifications table, no notification collection, no badge count service, and no push/email/SMS/WhatsApp. Alerts are derived fresh on each dashboard render from the current data (see DOC-13). This document describes exactly what is implemented.
 
 ---
 
-## Alert types
+## Where alerts come from
 
-| Type | Trigger condition | Severity | Roles |
-|------|------------------|----------|-------|
-| `ATTENDANCE_NOT_MARKED` | Today's attendance has 0 records for the branch | warning | owner, branch_manager |
-| `EOD_NOT_FILLED` | No EOD entry for today by 10pm IST | warning | owner, branch_manager |
-| `PAYROLL_DUE` | Last 3 days of the month AND payroll not approved for current month | info | owner only |
-| `LOW_STOCK` | Any active stock item has `current_quantity <= low_stock_threshold` (Phase 2) | warning | owner, branch_manager |
-| `EOD_EDIT_EXPIRING` | EOD entry exists but edit window closes in under 1 hour | info | owner, branch_manager |
+All alerts are produced inline in `src/app/management/page.tsx` (the dashboard server component) as a `pendingActions` array. They are rendered as colored banners in the "Pending Actions" panel, and a bell icon shows a red dot when the array is non-empty. There is no separate `/alerts` page and no per-alert dismissal persistence.
 
 ---
 
-## How alerts are computed
+## Implemented alert conditions
 
-Alerts are **not stored** — they are computed fresh on every dashboard API call. The dashboard service checks each condition and appends matching alerts to the `pendingActions` array in the response.
+| Alert | Condition | Severity (color) | Gated by module toggle |
+|-------|-----------|------------------|------------------------|
+| Attendance not marked for today | no `attendance` row with `date === today (IST)` | warning (amber) | `config.attendance` |
+| EOD entry not filled | no `eod` row with `date === today (IST)` | warning (amber) | none (always) |
+| Payroll due this month | `today.getDate() >= daysInMonth - 2` AND no `payroll` row for current month/year | info (blue) | `config.payroll` |
+| Low stock alert(s) | any `inventory` item with `currentQuantity <= threshold` (shows count) | warning (red styling) | `config.inventory` |
 
-This keeps the system simple — no background jobs, no alert state management. The trade-off is that alerts only appear when the app is open, which is acceptable for Phase 1.
-
----
-
-## Alert response shape
-
-Each alert in `pendingActions` has:
-
-```json
-{
-  "type": "EOD_NOT_FILLED",
-  "message": "Today's EOD entry has not been filled yet.",
-  "severity": "warning",
-  "branchId": "uuid",
-  "branchName": "Branch 1",
-  "actionRoute": "/branches/uuid/eod/2026-03-15",
-  "actionLabel": "Fill now"
-}
-```
-
-- `severity`: `info` (blue), `warning` (amber), `urgent` (red)
-- `actionRoute`: deep link to the relevant screen
-- `actionLabel`: CTA text on the button inside the alert
+Severity is expressed purely through Tailwind color classes on the banner. There is no `urgent` tier and no `EOD_EDIT_EXPIRING` reminder in the code.
 
 ---
 
-## Frontend behaviour
+## How alerts are scoped
 
-### Dashboard banners
-- Alerts are shown as stacked banners below the page header
-- Max 3 banners visible at once — if more exist, show "and N more" with a link to full alert list
-- Each banner has a dismiss button — dismissal is local (sessionStorage) and resets on next page load
-- Banners are not dismissible for `urgent` severity
-
-### Notification badge
-- A bell icon in the top bar shows a red badge with the count of active alerts
-- Badge updates on every dashboard load
-
-### Alert colours
-- `info` → blue background, blue text
-- `warning` → amber background, amber text
-- `urgent` → red background, red text (not used in Phase 1 but reserved)
+- The dashboard applies branch scoping before computing alerts, so a manager only sees alerts for their branch; global admins/readonly see them across the branches they can view.
+- Alerts respect the global `config.json` module toggles: if a module is disabled, its alert is suppressed (and the module is also hidden from navigation).
 
 ---
 
-## Alert conditions — detailed logic
+## Not implemented
 
-### `ATTENDANCE_NOT_MARKED`
-```sql
-SELECT COUNT(*) FROM attendance_logs 
-WHERE branch_id = :branchId AND date = CURRENT_DATE
-```
-If count = 0 → show alert. Show regardless of time of day.
-
-### `EOD_NOT_FILLED`
-```sql
-SELECT id FROM daily_entries 
-WHERE branch_id = :branchId AND date = CURRENT_DATE
-```
-If no row found AND current IST time >= 22:00 → show `warning`.
-If no row found AND current IST time >= 21:00 → show `info` (early reminder).
-
-### `PAYROLL_DUE`
-```sql
-SELECT id FROM payroll_records 
-WHERE branch_id = :branchId AND month = :currentMonth AND status = 'approved'
-LIMIT 1
-```
-If no approved record exists AND EXTRACT(DAY FROM CURRENT_DATE) >= (days_in_month - 2) → show alert.
-
-### `EOD_EDIT_EXPIRING`
-```sql
-SELECT created_at FROM daily_entries 
-WHERE branch_id = :branchId AND date = CURRENT_DATE AND is_locked = false
-```
-If found AND `NOW() > created_at + INTERVAL '23 hours'` → show `info` alert.
+- No stored notification history or read/unread state.
+- No dismissal that persists across loads.
+- No holiday-based suppression of the attendance/EOD reminders.
+- No time-of-day thresholds (e.g. "after 10pm") — the EOD/attendance checks are purely presence-of-row checks for today.
+- No external channels (push, email, WhatsApp, SMS).
 
 ---
 
-## Future upgrades (Phase 3+)
-
-- Push notifications via web push API (PWA)
-- WhatsApp message via Twilio or Meta API
-- Configurable alert thresholds (e.g. change EOD reminder from 10pm to 9pm)
-- Alert history / log screen
-
----
-
-## Business rules
-
-1. All time comparisons use IST (UTC+5:30) — convert `NOW()` to IST before checking hour-based conditions
-2. Owner sees alerts for all branches — one alert per branch if the condition is met
-3. Branch manager sees alerts for their branch only
-4. Alert suppression: if the restaurant is marked as holiday for today, suppress `EOD_NOT_FILLED` and `ATTENDANCE_NOT_MARKED` for that branch
+## Business rules summary
+1. Alerts are computed, not stored — they reflect the live data each time the dashboard loads.
+2. Toggling a module off in Settings silences its alert.
+3. Alerts are informational nudges; they never block any action.

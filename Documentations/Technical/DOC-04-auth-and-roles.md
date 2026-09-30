@@ -1,77 +1,150 @@
 # DOC-04 · Authentication & Roles
-**Version:** v2.0  
-**Phase:** 1  
+**Version:** v3.0
+**Last updated:** 2026-09-30
 **Depends on:** DOC-01, DOC-02, DOC-03
 
 ---
 
 ## Overview
 
-The application utilizes **Next.js App Router Server Actions** for authentication, completely removing client-side API fetching and token management. Authentication is handled via a single stateless JWT stored securely in an `HttpOnly` cookie.
+Authentication is built entirely on **Next.js Server Actions** (`src/app/actions/auth.ts`). There is no client-side token handling and no REST auth endpoint. A stateless JWT is stored in an `HttpOnly` cookie named `session`. Route protection is enforced by `src/middleware.ts`.
 
 ---
 
-## Authentication Flow
+## Login flow (`login` action)
 
-### Login Action (`src/app/actions/auth.ts`)
-1. **Rate Limiting**: The client's IP is extracted via `next/headers` and verified against the Postgres `rate_limit` table via a single atomic upsert. Limited to 10 attempts per 1 minute window, with a 5 minute block.
-2. **Validation**: Input is strictly validated using Zod:
-   - Password must be at least 8 characters, with 1 uppercase, 1 lowercase, 1 number, and 1 special character.
-3. **Password Verification**: Compares the provided password with the hashed password in `users.json` using `bcrypt.compare()`.
-4. **JWT Generation**: A stateless JWT containing `userId`, `name`, `role`, `branchId`, and `isGlobalOwner` is signed.
-5. **Cookie Storage**: The JWT is set in an `HttpOnly`, `Secure` (in production) cookie named `session` with a 1-week expiration. No refresh tokens are used.
+1. **Rate limiting.** The client IP is read from `x-forwarded-for` / `x-real-ip` headers and passed with the submitted username to `checkRateLimit(ip, name)`. Two independent limits are enforced (see below). If either is exceeded, the action returns `{ error }` with a retry message.
+2. **Validation (Zod).** `loginSchema` requires `name` and `password` to each be **non-empty strings** (`min(1)`). There is no password-complexity rule at login (complexity is not enforced anywhere in the current code).
+3. **Lookup.** Users are read from `users.json`; the record is matched case-insensitively on `name` and must not be soft-deleted (`isActive !== false`).
+4. **Password check.** `bcrypt.compare(password, user.password)`.
+5. **Success.** The IP/username rate-limit counters are cleared (`resetRateLimit`), stale rate-limit rows are pruned ~1% of the time, a JWT is signed, and the cookie is set. The action then `redirect('/management')`.
+6. **Failure.** Returns `{ error: 'Invalid Credentials' }`.
 
-### Logout
-The `logout` Server Action simply deletes the `session` cookie and redirects the user to `/login`.
+### Role → capability flags
+On success the action derives flags from the stored `role` (lowercased):
+```ts
+const isAdmin       = role === 'admin'
+const isOwner       = role === 'owner'
+const isGlobalAdmin = isAdmin || isOwner   // cross-branch + privileged ops
+const isGlobalOwner = isOwner              // owner-specific
+// isRootAdmin = isAdmin                    // Settings access
+```
+
+### Cookie
+```ts
+cookieStore.set('session', token, {
+  httpOnly: true,
+  secure: NODE_ENV === 'production' && SECURE_COOKIE !== 'false',
+  sameSite: 'strict',
+  maxAge: 60 * 60 * 2,   // 2 hours
+  path: '/',
+})
+```
 
 ---
 
-## JWT Payload Structure
+## JWT (`src/lib/jwt.ts`)
 
-```json
-{
-  "userId": "uuid",
-  "role": "owner | branch_manager",
-  "branchId": "uuid or null",
-  "name": "User Name",
-  "isGlobalOwner": true,
-  "iat": 1234567890,
-  "exp": 1234567890
+Signed with **HS256** using `JWT_SECRET` (the app throws at startup if the secret is missing). Expiry is **2 hours** (`setExpirationTime('2h')`). Payload:
+```ts
+interface CustomJWTPayload {
+  userId: string;
+  name: string;
+  role: string;            // 'admin' | 'owner' | 'manager' | 'readonly'
+  branchId?: string;       // managers only
+  isGlobalOwner: boolean;  // owner
+  isGlobalAdmin: boolean;  // admin or owner
+  isRootAdmin: boolean;    // admin
+  iat: number; exp: number;
 }
 ```
+`verifyToken` returns the payload or `null` on any verification error.
 
 ---
 
-## Role-Based Access Control
+## Session helpers (`auth.ts`)
 
-### Role Definitions
-
-| Role | Scope | Can approve payroll | Can delete | Can export | Can see all branches |
-|------|-------|-------------------|-----------|-----------|---------------------|
-| `owner` | All branches | Yes | Yes (soft) | Yes | Yes |
-| `owner` | All branches | Yes | Yes (soft) | Yes | Yes |
-| `branch_manager` | Assigned branch only | No | No | No | No |
-
-### Backend Authorization (`requireBranchAccess`)
-
-All Server Actions enforce data sandboxing via `requireBranchAccess(targetBranchId)` from `auth.ts`:
-- If the user is an `owner`, they can view/edit any branch.
-- If the user is a `branch_manager`, they are strictly confined to their assigned `branchId`.
-
-```ts
-// Usage in Server Actions
-const enforcedBranchId = await requireBranchAccess(branchId);
-```
-
-### Page-Level Protection
-Pages fetch the session on the server via `getSession()`. Users with invalid roles attempting to access protected pages (like `/settings` or `/branches`) are instantly redirected to `/` using `next/navigation`.
+- `getSession()` — reads and verifies the `session` cookie; returns the payload or `null`.
+- `getSessionRole()` — convenience returning `session.role`.
+- `requireBranchAccess(targetBranchId?)` — throws `Unauthorized` if no session; for non-global-admins, throws `Forbidden` if `targetBranchId` differs from their assigned branch, otherwise returns their enforced branch id; for global admins returns the requested branch (or their own/`''`).
+- `migratePasswordsToHash()` — admin-only maintenance action that bcrypt-hashes any plaintext passwords still present in `users.json`.
 
 ---
 
-## Security Rules
+## The four roles
 
-1. **No Hard Deletion**: The application strictly enforces soft-deletion using `isActive: false` and `deletedAt`. Data is never wiped from the database.
-2. **Rate Limiting**: Built-in 10-attempt / 1-minute sliding window lockout per IP to stop brute-forcing, backed by the Postgres `rate_limit` table.
-3. **Password Integrity**: Passwords are one-way hashed using `bcryptjs`.
-4. **Cookie Security**: Tokens are inaccessible to client-side JavaScript (`HttpOnly`).
-5. **Session Fallback Removed**: No hardcoded JWT secrets are permitted; `JWT_SECRET` must be sourced from the environment.
+| Role | `isRootAdmin` | `isGlobalAdmin` | `isGlobalOwner` | Scope |
+|------|:---:|:---:|:---:|-------|
+| `admin` | ✓ | ✓ | ✗ | All branches; only role with Settings access; undeletable |
+| `owner` | ✗ | ✓ | ✓ | All branches; full operations except Settings |
+| `manager` | ✗ | ✗ | ✗ | Single assigned branch only |
+| `readonly` | ✗ | ✗ | ✗ | Read-only analyst across branches |
+
+### Capability matrix (as enforced in code)
+
+| Capability | admin | owner | manager | readonly |
+|------------|:---:|:---:|:---:|:---:|
+| View all branches | ✓ | ✓ | ✗ (own only) | ✓ |
+| Open Settings (`/management/settings`) | ✓ | ✗ | ✗ | ✗ |
+| Manage departments / roles / module toggles | ✓ | ✗ | ✗ | ✗ |
+| Manage expense categories | ✓ | ✓ | ✗ | ✗ |
+| Manage system users | ✓ | ✓ | ✗ | ✗ |
+| Manage branches | ✓ | ✓ | ✗ | ✗ |
+| Manage staff / positions | ✓ | ✓ | ✓ (own branch) | ✗ |
+| Delete staff | ✓ | ✓ | ✗ | ✗ |
+| Mark attendance | ✓ | ✓ | ✓ (own branch) | ✗ |
+| Edit attendance older than 7 days | ✓ | ✓ | ✗ | ✗ |
+| Fill EOD entry | ✓ | ✓ | ✓ (own branch) | ✗ (redirected) |
+| Edit locked / >24h EOD | ✓ | ✓ | ✗ | ✗ |
+| Add expenses (via EOD / vendor) | ✓ | ✓ | ✓ (own branch) | ✗ |
+| Edit / delete ledger expenses | ✓ | ✓ | ✗ | ✗ |
+| Manage vendors / vendor bills | ✓ | ✓ | ✓ (own branch) | ✗ |
+| Manage inventory | ✓ | ✓ | ✓ (own branch) | ✗ |
+| Manage menu items/categories (global) | ✓ | ✓ | ✗ | ✗ |
+| Toggle per-branch menu availability/price | ✓ | ✓ | ✓ (own branch) | ✗ |
+| Save payroll draft | ✓ | ✓ | ✓ (own branch) | ✗ |
+| Mark payroll as paid | ✓ | ✓ | ✗ | ✗ |
+| View reports | ✓ | ✓ | ✓ (own branch) | ✓ |
+
+> The `settings.ts` and `config.ts` actions check `session.role === 'admin'` specifically. Expense categories (`categories.ts`), users (`users.ts`), and branches (`branches.ts`) check `isGlobalAdmin`, so owners can manage those even though the Settings page itself is admin-gated.
+
+---
+
+## Route protection (`src/middleware.ts`)
+
+- `/` (public website) always passes through.
+- Anything not under `/management` passes through.
+- For `/management/*`, the `session` cookie is verified via `jwtVerify`:
+  - Logged-in user hitting `/management/login` → redirected to `/management`.
+  - Not logged in on any other `/management/*` route → redirected to `/management/login`.
+  - Logged in → request proceeds with `Cache-Control: no-store` and `Pragma: no-cache` added.
+- The matcher excludes Next internals and static assets (`_next/static`, `_next/image`, `favicon.ico`, `assets`, `images`, `main.css`).
+
+Page-level loaders add a second layer: e.g. `/management/settings` redirects non-admins to `/management`, and `/management/eod` redirects `readonly` users away.
+
+---
+
+## Rate limiting (`src/lib/rate-limit.ts`)
+
+Backed by the `rate_limit` Postgres table via a single atomic upsert per attempt (sliding window). Two limits are checked on every login:
+
+- **Per IP:** key `login:ip:<ip>`, max **10** attempts per **1-minute** window.
+- **Per username:** key `login:user:<name>`, max **20** attempts per **1-hour** window (catches credential-stuffing across rotating IPs).
+
+Exceeding either applies a **5-minute** hard block (`blocked_until`). The limiter **fails open** — if the DB call errors, the login is allowed to proceed. Counters reset on successful login; stale rows are pruned opportunistically.
+
+---
+
+## Security properties (as implemented)
+
+1. **Soft deletion** for users and most entities — no hard user wipes.
+2. **Dual-axis rate limiting** (IP + username) with a hard block.
+3. **bcrypt** password hashing (`bcryptjs`).
+4. **HttpOnly, SameSite=strict** session cookie, `Secure` in production.
+5. **No hardcoded JWT secret** — `JWT_SECRET` must come from the environment.
+6. Strict security + CSP headers set globally in `next.config.ts`.
+
+### Known gaps / caveats (documented honestly)
+- **No password-complexity enforcement** anywhere in the current code (login only checks non-empty).
+- **Rate limiter fails open** on DB errors by design.
+- The SQL migrations under `netlify/database/migrations/` seed a bootstrap admin with a **plaintext password** and also create a Postgres role with a hardcoded password. These credentials are committed to the repo; they should be rotated and removed from source. (The app login expects bcrypt hashes, so the plaintext-seeded app user would not authenticate through `bcrypt.compare` as-is.)

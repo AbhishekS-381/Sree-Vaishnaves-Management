@@ -1,173 +1,69 @@
 # DOC-13 · Dashboard
-**Version:** v1.0  
-**Last updated:** 2026-03-15  
-**Phase:** 1  
-**Depends on:** DOC-01, DOC-02, DOC-03, DOC-07, DOC-06, DOC-05
+**Version:** v2.0
+**Last updated:** 2026-09-30
+**Depends on:** DOC-01, DOC-02, DOC-03, DOC-04, DOC-05, DOC-06, DOC-07
 
 ---
 
 ## Overview
 
-The home screen after login. Designed to answer the owner's first question every morning: "How are things going today?" The owner sees all branches at once; the branch manager sees only their branch. All data is today-focused with a glance at the current month.
+The dashboard is the landing page after login at `/management` (`src/app/management/page.tsx`). It is a **server component** that reads collections directly via `readJSON`, applies branch scoping, computes today's snapshot and pending actions, and renders KPI cards plus a branch-status panel. It is not a Server Action and writes nothing.
 
 ---
 
-## API routes
+## Data sources (read in `page.tsx`)
 
-| Method | Route | Role | Description |
-|--------|-------|------|-------------|
-| GET | `/api/v1/dashboard` | owner | Consolidated dashboard across all branches |
-| GET | `/api/v1/branches/:branchId/dashboard` | owner, branch_manager | Single branch dashboard |
-
-Both routes return the same structure. The consolidated route returns an array of branch summaries plus a totals row.
+`branches`, `staff`, `eod`, `expenses`, `inventory`, `attendance`, `payroll`, and `config` — all via `readJSON`. For non-global users with a `branchId`, each collection is filtered to that branch. Active-only filtering is then applied to branches (`isActive !== false`) and staff (`isActive === true`).
 
 ---
 
-## Single branch dashboard response
+## KPI cards
 
-```json
-{
-  "branchId": "uuid",
-  "branchName": "Branch 1 - Main",
-  "date": "2026-03-15",
-  "today": {
-    "income": {
-      "total": 18500,
-      "dinein": 12000,
-      "takeaway": 6500
-    },
-    "expenses": {
-      "total": 6800
-    },
-    "netSoFar": 11700,
-    "eodStatus": "draft",
-    "isHoliday": false
-  },
-  "attendance": {
-    "total": 35,
-    "present": 32,
-    "absent": 1,
-    "halfDay": 1,
-    "leave": 1,
-    "notMarked": 0,
-    "marked": true
-  },
-  "pendingActions": [
-    {
-      "type": "EOD_NOT_FILLED",
-      "message": "Today's EOD entry has not been filled yet.",
-      "severity": "warning",
-      "actionRoute": "/branches/uuid/eod/2026-03-15"
-    }
-  ],
-  "thisMonth": {
-    "totalIncome": 380000,
-    "totalExpenses": 142000,
-    "netProfit": 238000,
-    "vsLastMonth": {
-      "income": { "delta": 25000, "deltaPercent": 7.0 },
-      "net": { "delta": 18000, "deltaPercent": 8.2 }
-    },
-    "payrollDue": true,
-    "payrollMonth": "2026-03"
-  }
-}
-```
+| Card | Value |
+|------|-------|
+| Total Branches | count of active branches (scoped) |
+| Active Staff | count of active staff (scoped) |
+| Today's Collection | Σ of today's EOD income (`dineInCash+dineInUpi+takeawayCash+takeawayUpi`) across today's entries |
+| Net Balance | Today's Collection − today's total expenses |
+
+"Today" is computed in IST (`toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })`).
 
 ---
 
-## Consolidated owner dashboard response
+## Pending actions (computed inline)
 
-```json
-{
-  "date": "2026-03-15",
-  "branches": [
-    { "branchId": "uuid-1", "branchName": "Branch 1", "today": {...}, "attendance": {...}, "pendingActions": [...] },
-    { "branchId": "uuid-2", "branchName": "Branch 2", "today": {...}, "attendance": {...}, "pendingActions": [...] }
-  ],
-  "totals": {
-    "today": {
-      "income": 42000,
-      "expenses": 14500,
-      "net": 27500
-    },
-    "thisMonth": {
-      "totalIncome": 760000,
-      "totalExpenses": 284000,
-      "netProfit": 476000
-    },
-    "pendingActions": [
-      { "type": "EOD_NOT_FILLED", "branchName": "Branch 2", "severity": "warning" }
-    ]
-  }
-}
-```
+Alerts are computed on each load and gated by the `config` module toggles:
+
+| Alert | Condition | Gated by |
+|-------|-----------|----------|
+| `⚠ Attendance not marked for today` | no attendance row with `date === today` | `config.attendance` |
+| `⚠ EOD entry not filled` | no EOD entry with `date === today` | always shown |
+| `ℹ Payroll due this month` | within last ~3 days of month AND no payroll row for current month/year | `config.payroll` |
+| `⚠ N Low stock alert(s)` | any inventory item with `currentQuantity <= threshold` | `config.inventory` |
+
+A notification bell shows a red dot when any pending actions exist. If none, the panel shows "All caught up!".
+
+`isEndOfMonth` is `today.getDate() >= daysInMonth - 2`.
 
 ---
 
-## Pending actions
+## Branch status panel
 
-Pending actions are generated server-side by checking conditions. They appear as alert banners on the dashboard.
-
-| Type | Condition | Severity | Who sees it |
-|------|-----------|----------|-------------|
-| `EOD_NOT_FILLED` | No EOD entry for today by 10pm | warning | Both |
-| `ATTENDANCE_NOT_MARKED` | No attendance records for today | warning | Both |
-| `PAYROLL_DUE` | Last 3 days of month, payroll not approved | info | Owner only |
-| `LOW_STOCK` | Any item below threshold (Phase 2) | warning | Both |
-
-Severity levels: `info` (blue), `warning` (amber), `urgent` (red)
+Lists each (scoped, active) branch with a colored status pill:
+- `operational` → emerald, `maintenance` → amber, anything else (`closed`/unknown) → red.
 
 ---
 
-## Quick action buttons
+## Role behaviour
 
-The dashboard includes quick-action buttons for the most common next steps:
-
-| Button | Route | Shown when |
-|--------|-------|-----------|
-| Mark attendance | `/branches/:id/attendance` | Attendance not marked today |
-| Fill EOD entry | `/branches/:id/eod/today` | EOD not filled today |
-| Review payroll | `/branches/:id/payroll/:month` | Payroll due this month |
-| View all alerts | `/alerts` | Any pending actions exist |
+- Global admins (admin/owner) and readonly see all branches and consolidated figures.
+- Managers see only their assigned branch (the loader filters every collection by `session.branchId`).
+- The dashboard shell (`management/layout.tsx`) renders the `Navigation` sidebar with the same `config` so disabled modules disappear from the menu.
 
 ---
 
-## Frontend layout
-
-### Owner view
-```
-[Branch 1 card]          [Branch 2 card]
-Today: ₹18,500           Today: ₹23,500
-Attendance: 32/35        Attendance: 28/30
-⚠ EOD not filled         ✓ All good
-
-[Combined totals bar]
-Total today: ₹42,000 | Net: ₹27,500
-
-[This month summary]
-Revenue: ₹7,60,000 | +7% vs last month
-```
-
-### Branch manager view
-```
-[Single branch full-width]
-Today's income: ₹18,500
-  Dine-in: ₹12,000 | Takeaway: ₹6,500
-
-Attendance: 32 of 35 present
-  1 absent · 1 half-day · 1 leave
-
-[Pending actions]
-⚠ EOD entry not filled yet
-
-[This month]
-Revenue: ₹3,80,000 | Expenses: ₹1,42,000
-Net: ₹2,38,000 (+8.2% vs last month)
-```
-
----
-
-## Performance notes
-
-The dashboard API should be fast — this screen loads on every app open. Use a single optimised SQL query with JOINs rather than N+1 queries. Cache today's summary for 5 minutes (invalidate on EOD save or attendance mark).
+## Business rules summary
+1. Read-only aggregation — the dashboard never writes.
+2. Today's figures use IST dates.
+3. Pending-action alerts respect the global module toggles in `config.json`.
+4. Branch scoping mirrors the rest of the app (managers → own branch only).

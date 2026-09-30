@@ -1,128 +1,76 @@
 # DOC-09 · Menu Management
-**Version:** v1.0  
-**Last updated:** 2026-03-15  
-**Phase:** 1  
-**Depends on:** DOC-01, DOC-02, DOC-03
+**Version:** v2.0
+**Last updated:** 2026-09-30
+**Depends on:** DOC-01, DOC-02, DOC-03, DOC-04
 
 ---
 
 ## Overview
 
-Simple per-branch menu management. Items have a name, category, price, and availability toggle. No modifiers, variants, or combos in Phase 1. Menu data is primarily used as a reference and will feed into POS (Phase 4) and inventory cost tracking (Phase 2).
+Menu management uses a **global catalog with per-branch overrides**, not a per-branch menu. There are two global collections (menu items and menu categories) and two per-branch override collections (availability + price). Managed at `/management/menu` (`MenuClientPage.tsx`) via `src/app/actions/menu.ts` and `src/app/actions/menu_categories.ts`. There are no REST routes.
+
+Menu categories are also reused as **chef specialties** in the Staff module (a chef role's `specialtyId` points at a menu category).
 
 ---
 
-## API routes
+## Collections (see DOC-03)
 
-| Method | Route | Role | Description |
-|--------|-------|------|-------------|
-| GET | `/api/v1/branches/:branchId/menu` | owner, branch_manager | List all menu items |
-| GET | `/api/v1/branches/:branchId/menu/:id` | owner, branch_manager | Get single menu item |
-| POST | `/api/v1/branches/:branchId/menu` | owner, branch_manager | Add new item |
-| PUT | `/api/v1/branches/:branchId/menu/:id` | owner, branch_manager | Update item |
-| PATCH | `/api/v1/branches/:branchId/menu/:id/availability` | owner, branch_manager | Toggle availability |
-| DELETE | `/api/v1/branches/:branchId/menu/:id` | owner | Soft delete item |
+- `menu.json` — global `MenuItem` (name, `categoryId`, `basePrice`, `sortOrder`, `isActive`).
+- `menu_categories.json` — global `MenuCategory` (name, `sortOrder`, `isActive`).
+- `branch_menu_items.json` — per-branch `BranchMenuItem` (`price: number|null`, `isAvailable`).
+- `branch_categories.json` — per-branch `BranchMenuCategory` (`isAvailable`).
 
-### Query params for GET menu
-- `?category=lunch` — filter by category
-- `?available=true` — show only available items
-- `?search=dosa` — search by name
+Effective price for a branch = the branch override `price` if set, else the item's `basePrice`. Effective availability = the branch mapping's `isAvailable` if a mapping exists, else defaults to available.
 
 ---
 
-## Menu item request body
+## Menu item actions (`src/app/actions/menu.ts`)
 
-```json
-{
-  "name": "Masala Dosa",
-  "category": "breakfast",
-  "price": 60,
-  "isAvailable": true
-}
-```
+| Action | Signature | Auth | Notes |
+|--------|-----------|------|-------|
+| `addMenuItem` | `(prevState, formData)` | `isGlobalAdmin` | creates the global item, then auto-creates `branch_menu_items` mappings for every active branch |
+| `deleteMenuItem` | `(id)` | `isGlobalAdmin` | soft delete (`isActive=false`); branch mappings are **kept** to preserve history |
+| `setBranchItemAvailability` | `(branchId, menuItemId, isAvailable)` | session; managers scoped to own branch | upserts the branch mapping |
+| `updateBranchMenuItemPrice` | `(branchId, menuItemId, price\|null)` | session; managers scoped to own branch | upserts the branch mapping's price |
 
----
+`addMenuItemSchema` (Zod): `name` (1..150, trimmed), `categoryId` (min 1), `basePrice` (int ≥ 0). Duplicate guard: same lowercased name within the same category (active items).
 
-## Menu item response
-
-```json
-{
-  "id": "uuid",
-  "branchId": "uuid",
-  "name": "Masala Dosa",
-  "category": "breakfast",
-  "price": 60,
-  "isAvailable": true,
-  "createdAt": "2026-01-01T10:00:00Z",
-  "updatedAt": "2026-03-10T08:00:00Z"
-}
-```
+When an item is created, a `BranchMenuItem` is inserted for each active branch with `price: null` and `isAvailable` following the `isAvailableGlobally` flag from the form.
 
 ---
 
-## Menu categories
+## Menu category actions (`src/app/actions/menu_categories.ts`)
 
-Categories are free-text strings stored on the item — not a separate lookup table in Phase 1. Suggested values:
+| Action | Signature | Auth | Notes |
+|--------|-----------|------|-------|
+| `addMenuCategory` | `(prevState, formData)` | `isGlobalAdmin` | dedupe on active name |
+| `updateMenuCategory` | `(prevState, formData)` | `isGlobalAdmin` | rename / reorder |
+| `deleteMenuCategory` | `(id)` | `isGlobalAdmin` | soft delete |
+| `setBranchCategoryAvailability` | `(branchId, categoryId, isAvailable)` | session; managers scoped to own branch | upserts branch category mapping |
 
-`breakfast`, `lunch`, `dinner`, `beverages`, `specials`, `sides`, `desserts`
-
-The frontend provides these as suggestions but allows custom values.
-
----
-
-## Availability toggle
-
-`PATCH /menu/:id/availability` toggles `is_available` to the opposite of its current value. Fast endpoint for the common action of marking items as sold out.
-
-```json
-PATCH /api/v1/branches/:branchId/menu/:id/availability
-{}  // No body needed — just flips the current value
-```
-
-Response includes the new `isAvailable` value.
+Category mutations revalidate `/management/settings`, `/management/menu`, and `/management/staff` (because categories double as chef specialties).
 
 ---
 
-## Grouped response (for frontend display)
+## Permissions
 
-When listing menu items, the API can optionally return items grouped by category:
-
-`?grouped=true`
-
-```json
-{
-  "success": true,
-  "data": {
-    "breakfast": [
-      { "id": "uuid", "name": "Masala Dosa", "price": 60, "isAvailable": true },
-      { "id": "uuid", "name": "Idli Sambar", "price": 40, "isAvailable": true }
-    ],
-    "lunch": [
-      { "id": "uuid", "name": "Meals", "price": 120, "isAvailable": true }
-    ]
-  }
-}
-```
+- **Global catalog** (create/edit/delete items and categories): global admins only (`isGlobalAdmin`).
+- **Per-branch availability & price overrides:** any authenticated user, but managers are restricted to their own `branchId` (`Forbidden` otherwise).
+- `readonly` users can view but not mutate.
 
 ---
 
-## Validation schema (Zod)
-
-```js
-const menuItemSchema = z.object({
-  name: z.string().min(2).max(150),
-  category: z.string().min(2).max(100),
-  price: z.number().int().min(0),
-  isAvailable: z.boolean().default(true)
-})
-```
+## Client behaviour (`MenuClientPage.tsx`, `useMenuFilters`)
+- Branch selector determines which override set is applied.
+- `useMenuFilters` enriches each active menu item with its branch price/availability, groups items by category name, and supports text search over item + category names.
+- Managers receive only their branch's override mappings from the page loader; the global item/category lists remain visible.
 
 ---
 
-## Business rules
-
-1. Items are per-branch — Branch 1 and Branch 2 can have different menus and prices
-2. Soft delete only — deleted items are hidden from all views but preserved in DB
-3. Price of 0 is allowed — for complimentary items
-4. `isAvailable = false` means the item is temporarily sold out — it appears greyed out in the menu list with a clear indicator
-5. No limit on number of items per branch
+## Business rules summary
+1. Menu items and categories are **global**; price and availability are **per-branch overrides**.
+2. Creating an item seeds availability mappings for all active branches.
+3. Deleting an item is a soft delete; branch mappings are intentionally preserved.
+4. Only global admins manage the catalog; managers only flip their branch's availability/price.
+5. Menu categories are reused as chef specialties in the Staff module.
+6. `basePrice` and override prices are integers (price may be `null` to fall back to base).
