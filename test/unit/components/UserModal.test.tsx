@@ -42,10 +42,10 @@ describe('UserModal component', () => {
     expect(pw.required).toBe(true)
   })
 
-  it('role select has 3 options (owner, manager, readonly)', () => {
+  it('role select has 6 options (owner, manager, readonly, billing, kitchen, waiter)', () => {
     const { container } = render(<UserModal isOpen={true} onClose={vi.fn()} />)
     const select = container.querySelector('select[name="role"]') as HTMLSelectElement
-    expect(select.options.length).toBe(3)
+    expect(select.options.length).toBe(6)
   })
 
   it('cancel button calls onClose', () => {

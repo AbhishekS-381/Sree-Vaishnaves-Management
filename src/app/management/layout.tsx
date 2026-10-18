@@ -23,6 +23,15 @@ export default async function ManagementLayout({
     reports: true,
   }
 
+  // POS-dedicated roles (billing/kitchen/waiter) see only their page — no sidebar
+  if (session?.posRole) {
+    return (
+      <main className="h-screen w-full overflow-y-auto">
+        {children}
+      </main>
+    )
+  }
+
   return (
     <>
       {role ? (

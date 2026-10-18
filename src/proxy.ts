@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { jwtVerify } from 'jose'
+import { readJSON, DB_FILES } from '@/lib/db'
+import type { Config } from '@/app/actions/config'
 
 function getSecretKey() {
   if (!process.env.JWT_SECRET) {
@@ -47,6 +49,39 @@ export async function proxy(request: NextRequest) {
   // Not logged in → hitting any other /management/* route → redirect to login
   if (!isValidSession) {
     return NextResponse.redirect(new URL('/management/login', request.url))
+  }
+
+  // ── POS module enabled check ────────────────────────────────────
+  // Intercept direct access to /management/pos/* when POS is toggled off (Req 9.2)
+  if (pathname.startsWith('/management/pos')) {
+    try {
+      const configList = await readJSON<Config>(DB_FILES.CONFIG)
+      const isPosEnabled = configList.length > 0 && configList[0]?.pos === true
+      if (!isPosEnabled) {
+        return NextResponse.redirect(new URL('/management', request.url))
+      }
+    } catch {
+      // Default fail-open to page guard if datastore read errors
+    }
+  }
+
+  // ── POS-dedicated role redirect enforcement ─────────────────────
+  // billing/kitchen/waiter accounts can only access their designated page
+  try {
+    const { payload } = await jwtVerify(token!, getSecretKey())
+    if (payload.posRole === true && typeof payload.role === 'string') {
+      const ROLE_HOME: Record<string, string> = {
+        billing: '/management/pos/billing',
+        kitchen: '/management/pos/kitchen',
+        waiter:  '/management/pos/order',
+      }
+      const home = ROLE_HOME[payload.role]
+      if (home && !pathname.startsWith(home) && pathname !== '/management/login') {
+        return NextResponse.redirect(new URL(home, request.url))
+      }
+    }
+  } catch {
+    // Token already verified above; ignore edge-case re-verify failures
   }
 
   // Logged in → add no-cache headers to prevent browser caching management pages

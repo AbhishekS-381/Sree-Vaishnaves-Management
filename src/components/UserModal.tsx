@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState, useState, useEffect } from 'react'
-import { Plus, X, Loader2, User } from 'lucide-react'
+import { Loader2, User } from 'lucide-react'
 import { addUser, updateUser } from '@/app/actions/users'
 
 const initialState: any = { message: '', error: '' }
@@ -68,12 +68,15 @@ export function UserModal({ isOpen, onClose, editData, branches = [] }: { isOpen
                    {editData?.role === 'admin' && <option value="admin">System Admin</option>}
                    <option value="owner">Owner (Full Settings Access)</option>
                    <option value="manager">Manager (App Operation Access)</option>
+                   <option value="billing">Billing Clerk (POS Cashier)</option>
+                   <option value="kitchen">Kitchen Display (KOT)</option>
+                   <option value="waiter">Waiter (Order Taking)</option>
                    <option value="readonly">Read-Only Analyst</option>
                </select>
                {editData?.role === 'admin' && <input type="hidden" name="role" value="admin" />}
             </div>
 
-            {selectedRole === 'manager' && (
+            {['manager', 'billing', 'kitchen', 'waiter'].includes(selectedRole) && (
               <div className="animate-in fade-in slide-in-from-top-2 duration-300">
                  <label className="block text-sm font-medium text-slate-400 mb-1">Assigned Branch</label>
                  <select required name="branchId" defaultValue={editData?.branchId || ''} className="w-full bg-[#131018] border border-[#3b3054] rounded-xl px-4 py-2.5 text-white focus:border-[#c084fc] focus:outline-none">

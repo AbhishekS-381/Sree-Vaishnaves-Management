@@ -119,11 +119,11 @@ describe('Staff Actions', () => {
   })
 
   it('updateStaff handles positionId change and generates index', async () => {
-    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
-      const list = await cb([
+    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb: any) => {
+      const list = (await cb([
         { id: 'test_value', name: 'Old', isActive: true, branchId: 'b1', positionId: 'old_pos' },
         { id: 'other', name: 'Other', isActive: true, positionId: 'new_pos', positionIndex: 0 }
-      ])
+      ])) as any[]
       expect(list[0].positionIndex).toBe(1)
       return true
     })
@@ -132,10 +132,10 @@ describe('Staff Actions', () => {
   })
 
   it('updateStaff removes positionIndex when positionId is cleared', async () => {
-    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
-      const list = await cb([
+    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb: any) => {
+      const list = (await cb([
         { id: 'test_value', name: 'Old', isActive: true, branchId: 'b1', positionId: 'old_pos', positionIndex: 1 }
-      ])
+      ])) as any[]
       expect(list[0].positionIndex).toBeUndefined()
       expect(list[0].positionId).toBeUndefined()
       return true

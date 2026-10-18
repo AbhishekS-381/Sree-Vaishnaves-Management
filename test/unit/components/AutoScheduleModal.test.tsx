@@ -8,7 +8,7 @@ const generateSchedulesMock = vi.fn(() => [
   { positionIndex: 0, shifts: [{ id: 's1', start: '06:00', end: '14:00' }] },
 ])
 vi.mock('@/lib/scheduleGenerator', () => ({
-  generateSchedules: (...args: any[]) => generateSchedulesMock(...args),
+  generateSchedules: (...args: any[]) => (generateSchedulesMock as any)(...args),
 }))
 
 const baseProps = {

@@ -15,6 +15,7 @@ export interface CustomJWTPayload extends JWTPayload {
   isGlobalOwner: boolean;
   isGlobalAdmin: boolean;
   isRootAdmin: boolean;
+  posRole?: boolean; // true for billing/kitchen/waiter POS-dedicated accounts
 }
 
 export async function signToken(payload: CustomJWTPayload): Promise<string> {

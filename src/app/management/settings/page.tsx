@@ -28,13 +28,15 @@ export default async function SettingsPage() {
     .filter((u: any) => u.isActive !== false)
     .map(({ password, ...u }: any) => u)
   
-  let config = configList[0] || {
+  const config = configList[0] || {
     attendance: true,
     payroll: true,
     vendors: true,
     inventory: true,
     menu: true,
-    reports: true
+    reports: true,
+    pos: false,
+    posDefaultGstPercent: 5
   }
 
 

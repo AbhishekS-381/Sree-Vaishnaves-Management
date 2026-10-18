@@ -7,7 +7,7 @@ import { GenericEntityModal } from '@/components/GenericEntityModal'
 import { addDepartment, updateDepartment, deleteDepartment, deleteRole } from '@/app/actions/settings'
 import { addCategory, updateCategory, deleteCategory } from '@/app/actions/categories'
 import { RoleModal } from '@/components/RoleModal'
-import { toggleModule } from '@/app/actions/config'
+import { toggleModule, updatePosGstRate } from '@/app/actions/config'
 import { UserModal } from '@/components/UserModal'
 import { deleteUser } from '@/app/actions/users'
 import { FileWarning, Trash2 } from 'lucide-react'
@@ -29,6 +29,7 @@ export default function SettingsClientPage({ roles, departments, categories, con
   const [userModal, setUserModal] = useState<{ open: boolean, data: any }>({ open: false, data: null })
   const [confirmAction, setConfirmAction] = useState<{ label: string, fn: () => Promise<void> } | null>(null)
   const [confirming, setConfirming] = useState(false)
+  const [posGst, setPosGst] = useState<number>(config?.posDefaultGstPercent ?? 5)
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
@@ -53,6 +54,7 @@ export default function SettingsClientPage({ roles, departments, categories, con
     { id: 'inventory', name: 'Inventory & Stock', description: 'Track raw materials and low-stock alerts.', type: 'Layer' },
     { id: 'reports', name: 'Reports & Analytics', description: 'Generate monthly P&L and trend charts.', type: 'Layer' },
     { id: 'menu', name: 'Menu Management', description: 'Digital catalog for items and prices.', type: 'Optional' },
+    { id: 'pos', name: 'POS / Billing', description: 'Real-time order taking, KOT, and billing.', type: 'Optional' },
   ]
 
   return (
@@ -240,26 +242,54 @@ export default function SettingsClientPage({ roles, departments, categories, con
             <div className="text-sm text-slate-400 italic">Toggle Layer & Optional modules</div>
          </div>
 
-         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {modulesApp.map(mod => {
-               const isActive = config[mod.id] !== false
+               const isActive = mod.id === 'pos' ? config?.pos === true : config[mod.id] !== false
                return (
-                  <div key={mod.id} className={`p-4 rounded-2xl border transition-all flex items-center justify-between ${isActive ? 'bg-[#252033] border-primary/30' : 'bg-[#131018] border-white/5 opacity-70'}`}>
-                     <div>
-                        <div className="flex items-center gap-2">
-                           <h3 className="font-bold text-white">{mod.name}</h3>
-                           <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${mod.type === 'Layer' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30' : 'bg-blue-500/10 text-blue-400 border border-blue-500/30'}`}>
-                             {mod.type}
-                           </span>
+                  <div key={mod.id} className={`p-4 rounded-2xl border transition-all flex flex-col justify-between ${isActive ? 'bg-[#252033] border-primary/30' : 'bg-[#131018] border-white/5 opacity-70'}`}>
+                     <div className="flex items-center justify-between">
+                        <div>
+                           <div className="flex items-center gap-2">
+                              <h3 className="font-bold text-white">{mod.name}</h3>
+                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${mod.type === 'Layer' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30' : 'bg-blue-500/10 text-blue-400 border border-blue-500/30'}`}>
+                                {mod.type}
+                              </span>
+                           </div>
+                           <p className="text-xs text-slate-400 mt-1">{mod.description}</p>
                         </div>
-                        <p className="text-xs text-slate-400 mt-1">{mod.description}</p>
+                        <button 
+                           onClick={() => handleToggle(mod.id, isActive)}
+                           className={`p-2 rounded-full transition-colors ${isActive ? 'text-primary hover:bg-primary/20 bg-primary/10' : 'text-slate-600 hover:text-slate-400'}`}
+                        >
+                           <ToggleRight className={`h-8 w-8 transition-transform ${isActive ? 'rotate-0' : 'rotate-180'}`} />
+                        </button>
                      </div>
-                     <button 
-                        onClick={() => handleToggle(mod.id, isActive)}
-                        className={`p-2 rounded-full transition-colors ${isActive ? 'text-primary hover:bg-primary/20 bg-primary/10' : 'text-slate-600 hover:text-slate-400'}`}
-                     >
-                        <ToggleRight className={`h-8 w-8 transition-transform ${isActive ? 'rotate-0' : 'rotate-180'}`} />
-                     </button>
+
+                     {mod.id === 'pos' && isActive && (
+                        <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between">
+                           <div>
+                              <label htmlFor="posDefaultGstPercent" className="text-xs font-medium text-slate-300">Default GST Rate</label>
+                              <p className="text-[11px] text-slate-500">Suggested on bills (0–28%)</p>
+                           </div>
+                           <div className="flex items-center gap-2">
+                              <input
+                                 id="posDefaultGstPercent"
+                                 type="number"
+                                 min={0}
+                                 max={28}
+                                 value={posGst}
+                                 onChange={(e) => setPosGst(Number(e.target.value))}
+                                 onBlur={async () => {
+                                    const fd = new FormData()
+                                    fd.set('posDefaultGstPercent', String(posGst))
+                                    await updatePosGstRate({}, fd)
+                                 }}
+                                 className="w-16 px-2 py-1 bg-[#1c1829] border border-white/10 rounded text-right text-sm text-white focus:outline-none focus:border-primary"
+                              />
+                              <span className="text-xs text-slate-400">%</span>
+                           </div>
+                        </div>
+                     )}
                   </div>
                )
             })}

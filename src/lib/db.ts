@@ -59,7 +59,10 @@ export const DB_FILES = {
   BRANCH_CATEGORIES: 'branch_categories.json',
   MENU_ITEM_VARIANTS: 'menu_item_variants.json',
   MENU_PRICE_HISTORY: 'menu_price_history.json',
-  AUDIT_LOGS: 'audit_logs.json'
+  AUDIT_LOGS: 'audit_logs.json',
+  POS_TABLES: 'pos_tables.json',
+  POS_ORDERS: 'pos_orders.json',
+  POS_KOTS: 'pos_kots.json'
 };
 
 /**

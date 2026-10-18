@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest'
-import { NextRequest, NextResponse } from 'next/server'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { NextRequest } from 'next/server'
 import { proxy } from '@/proxy'
 
 // Mock jose jwtVerify since we run in jsdom

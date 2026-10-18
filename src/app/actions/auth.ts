@@ -52,6 +52,7 @@ export async function login(prevState: any, formData: FormData) {
     const isOwner = role === 'owner';
     const isGlobalAdmin = isAdmin || isOwner;
     const isGlobalOwner = isOwner;
+    const isPosRole = ['billing', 'kitchen', 'waiter'].includes(role);
     const token = await signToken({
       userId: user.id || user.name,
       name: user.name,
@@ -60,6 +61,7 @@ export async function login(prevState: any, formData: FormData) {
       isGlobalOwner,
       isGlobalAdmin,
       isRootAdmin: isAdmin,
+      posRole: isPosRole || undefined,
     });
 
     const cookieStore = await cookies()

@@ -84,14 +84,14 @@ describe('Staff Requirements Actions', () => {
   })
 
   it('deleteRequirement succeeds and keeps other requirements', async () => {
-    vi.mocked(db.withTransaction).mockImplementation(async (file, cb) => {
+    vi.mocked(db.withTransaction).mockImplementation(async (file, cb: any) => {
       if (file === db.DB_FILES.STAFF) {
-        const staff = await cb([{ positionId: 'req1' }])
+        const staff = (await cb([{ positionId: 'req1' }])) as any[]
         expect(staff[0].positionId).toBeUndefined()
         return true
       }
       if (file === db.DB_FILES.STAFF_REQUIREMENTS) {
-        const reqs = await cb([{ id: 'req1' }, { id: 'other' }])
+        const reqs = (await cb([{ id: 'req1' }, { id: 'other' }])) as any[]
         expect(reqs).toHaveLength(1)
         expect(reqs[0].id).toBe('other')
         return true

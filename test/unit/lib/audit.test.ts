@@ -20,7 +20,7 @@ describe('audit.ts - logAction', () => {
   it('writes log with system user when no session', async () => {
     vi.mocked(auth.getSession).mockResolvedValue(null as any)
     vi.mocked(db.readJSON).mockResolvedValue([])
-    vi.mocked(db.writeJSON).mockResolvedValue(undefined)
+    vi.mocked(db.writeJSON).mockResolvedValue(true)
     await logAction('CREATE', 'STAFF', 'Added a staff member')
     expect(db.writeJSON).toHaveBeenCalledTimes(1)
     const writtenLogs = vi.mocked(db.writeJSON).mock.calls[0][1] as any[]
@@ -30,7 +30,7 @@ describe('audit.ts - logAction', () => {
   it('writes audit log with session', async () => {
     vi.mocked(auth.getSession).mockResolvedValue({ userId: 'u1', name: 'Alice', role: 'owner' } as any)
     vi.mocked(db.readJSON).mockResolvedValue([])
-    vi.mocked(db.writeJSON).mockResolvedValue(undefined)
+    vi.mocked(db.writeJSON).mockResolvedValue(true)
     await logAction('UPDATE', 'EXPENSE', 'Updated expense', 'e1')
     expect(db.writeJSON).toHaveBeenCalledTimes(1)
     const writtenLogs = vi.mocked(db.writeJSON).mock.calls[0][1] as any[]
@@ -41,7 +41,7 @@ describe('audit.ts - logAction', () => {
   it('handles read failure gracefully (uses empty array)', async () => {
     vi.mocked(auth.getSession).mockResolvedValue({ userId: 'u1', name: 'Bob', role: 'owner' } as any)
     vi.mocked(db.readJSON).mockRejectedValue(new Error('File not found'))
-    vi.mocked(db.writeJSON).mockResolvedValue(undefined)
+    vi.mocked(db.writeJSON).mockResolvedValue(true)
     await logAction('DELETE', 'VENDOR', 'Removed vendor')
     expect(db.writeJSON).toHaveBeenCalledTimes(1)
   })
@@ -68,7 +68,7 @@ describe('audit.ts - logAction', () => {
   it('falls back to system user when getSession throws', async () => {
     vi.mocked(auth.getSession).mockRejectedValue(new Error('no cookie store'))
     vi.mocked(db.readJSON).mockResolvedValue([])
-    vi.mocked(db.writeJSON).mockResolvedValue(undefined)
+    vi.mocked(db.writeJSON).mockResolvedValue(true)
     await logAction('CREATE', 'STAFF', 'x')
     const writtenLogs = vi.mocked(db.writeJSON).mock.calls[0][1] as any[]
     expect(writtenLogs[0]).toMatchObject({ userId: 'system', userName: 'system' })
@@ -78,7 +78,7 @@ describe('audit.ts - logAction', () => {
     vi.mocked(auth.getSession).mockResolvedValue({ userId: 'u1', name: 'Alice' } as any)
     const existing = Array.from({ length: 3000 }, (_, i) => ({ id: `old_${i}`, action: 'OLD' }))
     vi.mocked(db.readJSON).mockResolvedValue(existing as any)
-    vi.mocked(db.writeJSON).mockResolvedValue(undefined)
+    vi.mocked(db.writeJSON).mockResolvedValue(true)
     await logAction('NEW', 'STAFF', 'newest')
     const writtenLogs = vi.mocked(db.writeJSON).mock.calls[0][1] as any[]
     expect(writtenLogs).toHaveLength(3000)                 // capped

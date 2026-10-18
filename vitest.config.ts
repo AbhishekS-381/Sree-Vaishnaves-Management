@@ -34,6 +34,7 @@ export default defineConfig({
         'src/app/**/page.tsx',
         'src/app/**/[id]/page.tsx',
         'src/**/*.d.ts',
+        'src/app/actions/posTypes.ts',
       ],
       thresholds: {
         // Global floors — raised as coverage improved. Keep these just under the

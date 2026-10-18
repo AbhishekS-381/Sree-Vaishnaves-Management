@@ -70,7 +70,7 @@ describe('EODClientPage component', () => {
   })
 
   it('calculates total income correctly', async () => {
-    const { container } = render(<EODClientPage branches={mockBranches} categories={mockCategories} />)
+    const { container } = render(<EODClientPage branches={mockBranches} categories={mockCategories} attendance={[]} />)
     
     await waitFor(() => {
       const inputs = container.querySelectorAll('input[type="number"]')
@@ -91,7 +91,7 @@ describe('EODClientPage component', () => {
   })
 
   it('calculates cash discrepancy and highlights correctly', async () => {
-    const { container } = render(<EODClientPage branches={mockBranches} categories={mockCategories} />)
+    const { container } = render(<EODClientPage branches={mockBranches} categories={mockCategories} attendance={[]} />)
     
     await waitFor(() => {
       const inputs = container.querySelectorAll('input[type="number"]')
@@ -109,7 +109,7 @@ describe('EODClientPage component', () => {
   })
 
   it('shows warning modal if submitting with float incomplete', async () => {
-    render(<EODClientPage branches={mockBranches} categories={mockCategories} />)
+    render(<EODClientPage branches={mockBranches} categories={mockCategories} attendance={[]} />)
     
     await screen.findByText('Submit EOD Entry')
     // Set income but NO float
@@ -127,7 +127,7 @@ describe('EODClientPage component', () => {
   })
 
   it('shows warning modal if billing gap > 1000', async () => {
-    render(<EODClientPage branches={mockBranches} categories={mockCategories} />)
+    render(<EODClientPage branches={mockBranches} categories={mockCategories} attendance={[]} />)
     
     await screen.findByText('Submit EOD Entry')
     // Enable Billing
@@ -152,7 +152,7 @@ describe('EODClientPage component', () => {
 
   it('shows zero revenue confirmation banner when handleSave returns ZERO_REVENUE_UNCONFIRMED', async () => {
     mockHandleSave.mockResolvedValue({ success: false, error: 'ZERO_REVENUE_UNCONFIRMED' })
-    render(<EODClientPage branches={mockBranches} categories={mockCategories} />)
+    render(<EODClientPage branches={mockBranches} categories={mockCategories} attendance={[]} />)
 
     await screen.findByText('Submit EOD Entry')
     const inputs = document.querySelectorAll('input[type="number"]')
@@ -176,7 +176,7 @@ describe('EODClientPage component', () => {
       ops: { staffOnDuty: 3 }
     })
     
-    render(<EODClientPage branches={mockBranches} categories={mockCategories} />)
+    render(<EODClientPage branches={mockBranches} categories={mockCategories} attendance={[]} />)
     
     // Wait for the restore draft banner to appear after loading completes
     const restoreBtn = await screen.findByText('Restore')
@@ -196,7 +196,7 @@ describe('EODClientPage component', () => {
       actualClosingFloat: 150
     } as any)
 
-    const { container } = render(<EODClientPage branches={mockBranches} categories={mockCategories} />)
+    const { container } = render(<EODClientPage branches={mockBranches} categories={mockCategories} attendance={[]} />)
     
     await waitFor(() => {
       const inputs = container.querySelectorAll('input[type="number"]') as NodeListOf<HTMLInputElement>

@@ -69,7 +69,7 @@ describe('Auth Actions', () => {
 
   it('login returns error for invalid credentials', async () => {
     const bcrypt = (await import('bcryptjs')).default
-    vi.mocked(bcrypt.compare).mockResolvedValue(false)
+    vi.mocked(bcrypt.compare as any).mockResolvedValue(false)
     vi.mocked(db.readJSON).mockResolvedValue([{ name: 'abhishek', password: '$2a$10$hash', role: 'owner' }])
     const fd = { get: (k: string) => k === 'name' ? 'abhishek' : 'StrongPass1!' } as any
     const res = await login({}, fd)
@@ -78,7 +78,7 @@ describe('Auth Actions', () => {
 
   it('login succeeds and calls redirect with valid hash', async () => {
     const bcrypt = (await import('bcryptjs')).default
-    vi.mocked(bcrypt.compare).mockResolvedValue(true)
+    vi.mocked(bcrypt.compare as any).mockResolvedValue(true)
     const { redirect } = await import('next/navigation')
     vi.mocked(db.readJSON).mockResolvedValue([{ name: 'abhishek', password: '$2a$10$hash', role: 'owner' }])
     const fd = { get: (k: string) => k === 'name' ? 'abhishek' : 'StrongPass123' } as any
@@ -88,7 +88,7 @@ describe('Auth Actions', () => {
 
   it('login fails with plain password (fallback removed)', async () => {
     const bcrypt = (await import('bcryptjs')).default
-    vi.mocked(bcrypt.compare).mockResolvedValue(false)
+    vi.mocked(bcrypt.compare as any).mockResolvedValue(false)
     vi.mocked(db.readJSON).mockResolvedValue([{ name: 'test', password: 'plain', role: 'owner' }])
     const fd = { get: (k: string) => k === 'name' ? 'test' : 'plain' } as any
     const res = await login({}, fd)
@@ -101,13 +101,13 @@ describe('Auth Actions', () => {
     Math.random = () => 0.005 // Trigger the < 0.01 condition
     
     const bcrypt = (await import('bcryptjs')).default
-    vi.mocked(bcrypt.compare).mockResolvedValue(true)
+    vi.mocked(bcrypt.compare as any).mockResolvedValue(true)
     const { redirect } = await import('next/navigation')
     vi.mocked(db.readJSON).mockResolvedValue([{ name: 'test', password: '$2a$10$hash', role: 'owner' }])
     const fd = { get: (k: string) => k === 'name' ? 'test' : 'password' } as any
     
     // Prevent redirect throwing
-    vi.mocked(redirect).mockImplementation(() => {})
+    vi.mocked(redirect as any).mockImplementation(() => {})
     
     await login({}, fd)
     expect(pruneRateLimits).toHaveBeenCalled()

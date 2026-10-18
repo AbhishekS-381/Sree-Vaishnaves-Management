@@ -34,6 +34,9 @@ export const ToggleRight = MockIcon; export const LayoutTemplate = MockIcon; exp
 export const FileWarning = MockIcon; export const Copy = MockIcon
 export const MapPin = MockIcon; export const Phone = MockIcon
 export const ReceiptText = MockIcon; export const Scale = MockIcon; export const PieChart = MockIcon
+export const Flame = MockIcon; export const Receipt = MockIcon; export const RotateCcw = MockIcon
+export const Ban = MockIcon; export const ShoppingBag = MockIcon; export const CreditCard = MockIcon
+export const PlusCircle = MockIcon; export const Utensils = MockIcon; export const History = MockIcon
 
 // Catch-all default so `import Icon from 'lucide-react'` style access still works
 export default MockIcon

@@ -8,6 +8,8 @@ import {
   AlertCircle, CheckCircle
 } from 'lucide-react'
 import { getEODByDate, getExpensesByDate } from '@/app/actions/eod'
+import { getPosDataForEOD } from '@/app/actions/pos'
+import type { PosEodData } from '@/app/actions/posTypes'
 import { useDraft } from '@/lib/useDraft'
 import { useEODSave } from '@/hooks/useEODSave'
 
@@ -19,9 +21,9 @@ type Expense = {
 }
 
 export default function EODClientPage({
-  branches, categories, attendance
+  branches, categories, attendance, posEodData, posEnabled
 }: {
-  branches: any[], categories: any[], attendance: any[]
+  branches: any[], categories: any[], attendance: any[], posEodData?: PosEodData | null, posEnabled?: boolean
 }) {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0])
   const [selectedBranch, setSelectedBranch] = useState(branches[0]?.id || '')
@@ -74,6 +76,7 @@ export default function EODClientPage({
 
   const [showDraftBanner, setShowDraftBanner] = useState(false)
   const [pendingDraft, setPendingDraft] = useState<any>(null)
+  const [posNotice, setPosNotice] = useState<string | null>(null)
 
   const { isSaving, handleSave } = useEODSave(selectedBranch, date)
   const { saveDraft, loadDraft, clearDraft } = useDraft('eod')
@@ -88,12 +91,26 @@ export default function EODClientPage({
     const eod = await getEODByDate(date, selectedBranch)
     const exs = await getExpensesByDate(date, selectedBranch)
     
+    // Query POS data for this date & branch (Req 6.1-6.7)
+    let currentPosData: PosEodData | null = null
+    if (selectedBranch && date) {
+      try {
+        const posRes = await getPosDataForEOD(date, selectedBranch)
+        if ('data' in posRes && posRes.data) {
+          currentPosData = posRes.data
+        }
+      } catch {
+        // fail open
+      }
+    }
+
     if (eod) {
       setIncome(eod.income)
       setNotes(eod.notes || '')
       setOpeningFloat(eod.openingFloat || '')
       setActualClosingFloat(eod.actualClosingFloat || '')
       setLocked(eod.status === 'locked')
+      setPosNotice(null)
 
       // Restore billing if it exists
       if (eod.billing) {
@@ -111,19 +128,52 @@ export default function EODClientPage({
         setOpsEnabled(false)
       }
     } else {
-      setIncome({ dineInCash: 0, dineInUpi: 0, takeawayCash: 0, takeawayUpi: 0 })
+      const draft = loadDraft(`${selectedBranch}_${date}`)
+      const hasDraft = draft && Object.keys(draft).length > 0
+
+      if (hasDraft) {
+        setPendingDraft(draft)
+        setShowDraftBanner(true)
+      }
+
+      if (!hasDraft && currentPosData && currentPosData.billCount > 0) {
+        // Pre-fill from POS (Req 6.1, 6.2, 6.3, 6.7)
+        setIncome({
+          dineInCash: currentPosData.dineInCash,
+          dineInUpi: currentPosData.dineInUpi,
+          takeawayCash: currentPosData.takeawayCash,
+          takeawayUpi: currentPosData.takeawayUpi,
+        })
+        setBilling({
+          totalBillAmount: currentPosData.totalBillAmount,
+          billCount: currentPosData.billCount,
+          dineInCovers: currentPosData.dineInCovers,
+          takeawayOrders: currentPosData.takeawayOrders,
+          cashCollectedAsBilled: currentPosData.cashCollectedAsBilled,
+          upiCollectedAsBilled: currentPosData.upiCollectedAsBilled,
+          voids: currentPosData.voids,
+          discounts: currentPosData.discounts,
+          gstCollected: currentPosData.gstCollected,
+        })
+        setBillingEnabled(true)
+        setPosNotice(null)
+      } else {
+        if (!hasDraft) {
+          setIncome({ dineInCash: 0, dineInUpi: 0, takeawayCash: 0, takeawayUpi: 0 })
+          setBillingEnabled(false)
+        }
+        if (!currentPosData || currentPosData.billCount === 0) {
+          setPosNotice('No POS data is available for this date and branch.')
+        } else {
+          setPosNotice(null)
+        }
+      }
+
       setNotes('')
       setOpeningFloat('')
       setActualClosingFloat('')
       setLocked(false)
-      setBillingEnabled(false)
       setOpsEnabled(false)
-      
-      const draft = loadDraft(`${selectedBranch}_${date}`)
-      if (draft && Object.keys(draft).length > 0) {
-        setPendingDraft(draft)
-        setShowDraftBanner(true)
-      }
     }
 
     if (eod) {
@@ -371,6 +421,13 @@ export default function EODClientPage({
               <button onClick={restoreDraft} className="px-3 py-1.5 bg-violet-600 text-white text-xs rounded-lg font-bold">Restore</button>
               <button onClick={discardDraft} className="px-3 py-1.5 bg-slate-700 text-white text-xs rounded-lg">Discard</button>
             </div>
+          </div>
+        )}
+
+        {posNotice && !locked && (
+          <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3 flex items-center gap-2 text-xs text-blue-300">
+            <Info className="w-4 h-4 shrink-0 text-blue-400" />
+            <span>{posNotice}</span>
           </div>
         )}
       </div>

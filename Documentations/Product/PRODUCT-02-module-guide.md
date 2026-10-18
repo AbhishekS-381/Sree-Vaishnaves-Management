@@ -155,7 +155,29 @@ The owner reviews, saves (which stores all rows as **PENDING**), and later marks
 
 ---
 
+# MODULE 11 — POS, Billing & Kitchen Order Ticket (KOT) *(toggleable)*
+
+**Problem:** Pen-and-paper order taking causes lost orders, kitchen delays, billing discrepancies, and tedious manual Day-End entry.
+
+**What it does:** A real-time, multi-role point-of-sale system:
+- **Table Grid & Order Taking:** Real-time table status (derived occupancy) and takeaway support; dine-in covers; branch menu catalog with effective pricing and dietary tags.
+- **Incremental KOTs:** Kitchen Order Tickets compute item deltas so re-ordering only sends newly added quantities to the kitchen.
+- **Dedicated Kitchen Display (KDS):** FIFO order queue with status chips (`pending` -> `preparing` -> `ready` -> `served`), item-level notes, 30s auto-polling, and complete absence of financial data.
+- **Billing & Settlement:** Bill generation with configurable GST percentage suggestion (0–28%), discount validation, zero-bill confirmation flow, and payment recording (cash, UPI, split) with change-due calculator.
+- **Order Lifecycle & Safety:** Order status transitions strictly enforced (`open` -> `billed` -> `paid`). Paid orders cannot be reopened; voids are restricted to owner/admin on the same business day with mandatory reason audit.
+- **EOD Integration:** Seamless pre-fill into Day-End (EOD) entry with cash/UPI dine-in/takeaway revenue, GST, covers, voids, and discounts.
+
+**Dedicated Roles & Page-Locking:**
+- **`waiter`:** Scoped exclusively to `/management/pos/order`. Sidebar suppressed. Can only create, modify, and fire KOTs for orders opened by themselves. Cost prices and billing controls are strictly hidden.
+- **`billing`:** Scoped exclusively to `/management/pos/billing`. Sidebar suppressed. Manages the queue of billed orders, bills open orders, collects cash/UPI/split payments, and views running totals.
+- **`kitchen`:** Scoped exclusively to `/management/pos/kitchen`. Sidebar suppressed. Displays active KOTs in FIFO order with 30s polling and single-click status advancement. No financial data visible.
+
+**Connects to:** Feeds Day-End (EOD) entry, Dashboard, Menu catalog, and User Management.
+
+---
+
 # System-wide features
+
 
 ## Multi-branch architecture
 Most records carry a `branchId`. Managers are sandboxed to one branch in both the action layer and the page loaders; admins/owners/analysts see all branches. Adding a branch is a data operation, not a code change.

@@ -43,13 +43,14 @@ type User = {
   id: string;                 // u_<uuid> (seeded owner: u_owner_default)
   name: string;               // also used as the login username (case-insensitive)
   password?: string;          // bcrypt hash
-  role: string;               // 'admin' | 'owner' | 'manager' | 'readonly'
-  branchId?: string;          // set only for managers
+  role: string;               // 'admin' | 'owner' | 'manager' | 'readonly' | 'billing' | 'kitchen' | 'waiter'
+  branchId?: string;          // mandatory for manager, billing, kitchen, and waiter roles
   isActive?: boolean;
   deletedAt?: string;
 }
 ```
 There is **no `email` field**. Login matches on `name`.
+
 
 ### `departments.json`
 ```ts
@@ -284,9 +285,112 @@ type Config = {
   inventory: boolean;
   menu: boolean;
   reports: boolean;
+  pos: boolean;
+  posDefaultGstPercent?: number; // 0-28%
 }
 ```
 Seeded with all flags `false`. `false` hides the module from navigation and suppresses its dashboard alerts.
+
+### `pos_tables.json`
+Represents physical dining tables configured for each branch. Table occupancy is derived at runtime from today's open orders referencing `tableId`.
+```ts
+type PosTable = {
+  id: string;                 // ptbl_<uuid>
+  branchId: string;
+  name: string;               // unique per branch (case-insensitive), max 50 chars
+  isActive: boolean;          // soft-delete flag
+  createdAt: string;          // ISO string
+  updatedAt: string;
+  deletedAt?: string;
+}
+```
+
+### `pos_orders.json`
+Orders placed for dine-in or takeaway. Follows the lifecycle: `open` -> `billed` -> `paid` (or `voided`). Money amounts are stored as integer rupees.
+```ts
+type OrderType = 'dine-in' | 'takeaway';
+type OrderStatus = 'open' | 'billed' | 'paid' | 'voided';
+
+type OrderItem = {
+  id: string;                 // uuid
+  menuItemId: string;
+  variantId?: string;
+  nameSnapshot: string;
+  unitPrice: number;          // integer rupees (immutable once created)
+  quantity: number;           // 1-99
+  note?: string;              // max 80 chars
+}
+
+type BillSnapshot = {
+  subtotal: number;
+  discount: number;
+  gst: number;
+  totalPayable: number;
+  billedAt: string;
+  billedBy: string;
+}
+
+type PaymentSnapshot = {
+  method: 'cash' | 'upi' | 'split';
+  cashAmount: number;
+  upiAmount: number;
+  paidAt: string;
+  receivedBy: string;
+}
+
+type VoidInfo = {
+  reason: string;
+  voidedAt: string;
+  voidedBy: string;
+}
+
+type PosOrder = {
+  id: string;                 // pord_<uuid>
+  branchId: string;
+  tableId?: string;           // required for dine-in; undefined for takeaway
+  orderType: OrderType;
+  takeawayNumber?: string;    // 'T-N' sequential per branch/date for takeaway
+  status: OrderStatus;
+  covers?: number;            // 1-30 for dine-in
+  items: OrderItem[];
+  kotCount: number;           // cached count of KOTs fired for this order
+  bill?: BillSnapshot;
+  payment?: PaymentSnapshot;
+  void?: VoidInfo;
+  note?: string;              // max 200 chars
+  openedBy: string;
+  date: string;               // YYYY-MM-DD in Asia/Kolkata
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+### `pos_kots.json`
+Kitchen Order Tickets sent to the kitchen display. Each KOT captures delta items and progresses through: `pending` -> `preparing` -> `ready` -> `served`.
+```ts
+type KotStatus = 'pending' | 'preparing' | 'ready' | 'served';
+
+type KotItem = {
+  menuItemId: string;
+  variantId?: string;
+  nameSnapshot: string;
+  quantity: number;
+  note?: string;
+}
+
+type PosKot = {
+  id: string;                 // pkot_<uuid>
+  branchId: string;
+  orderId: string;
+  kotNumber: number;          // 1, 2, ... sequential per order
+  items: KotItem[];
+  status: KotStatus;
+  firedBy: string;
+  firedAt: string;
+  updatedAt: string;
+}
+```
+
 
 ### `audit_logs.json`
 ```ts

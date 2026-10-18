@@ -2,13 +2,14 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Store, Users, FileText, Settings, Menu, X, LogOut, Shield, Package, Truck, BarChart3 } from 'lucide-react'
+import { LayoutDashboard, Store, Users, FileText, Settings, Menu, X, LogOut, Shield, Package, Truck, BarChart3, ShoppingCart } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useState } from 'react'
 import { logout } from '@/app/actions/auth'
 
 const navItems = [
   { name: 'Dashboard', href: '/management', icon: LayoutDashboard },
+  { name: 'POS', href: '/management/pos', icon: ShoppingCart },
   { name: 'Menu', href: '/management/menu', icon: FileText },
   { name: 'Inventory', href: '/management/inventory', icon: Package },
   { name: 'Vendors', href: '/management/vendors', icon: Truck },
@@ -67,6 +68,7 @@ export function Navigation({ role, config, isGlobalOwner, isRootAdmin, userName 
           {/* Nav Items */}
           <nav className="flex-1 px-4 space-y-2 overflow-y-auto">
             {navItems.map((item) => {
+              if (item.name === 'POS' && (config?.pos === false || isReadOnly || ['billing', 'kitchen', 'waiter'].includes(role))) return null;
               if (item.name === 'Menu' && config?.menu === false) return null;
               if (item.name === 'Inventory' && config?.inventory === false) return null;
               if (item.name === 'Vendors' && config?.vendors === false) return null;

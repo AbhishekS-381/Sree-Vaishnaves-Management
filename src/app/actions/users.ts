@@ -5,6 +5,7 @@ import { randomUUID } from 'crypto'
 import { revalidatePath } from 'next/cache'
 import { getSession } from './auth'
 import bcrypt from 'bcryptjs'
+import { BRANCH_SCOPED_ROLES } from '@/lib/posUtils'
 
 export type User = {
   id: string
@@ -26,6 +27,11 @@ export async function addUser(prevState: any, formData: FormData) {
   const branchId = formData.get('branchId') as string
 
   if (!name || !password || !role) return { error: 'All fields required' }
+
+  // POS-dedicated roles require a branchId
+  const isBranchScoped = (BRANCH_SCOPED_ROLES as readonly string[]).includes(role)
+  if (isBranchScoped && !branchId) return { error: 'Branch is required for this role' }
+
   const hashedPassword = await bcrypt.hash(password, 10)
 
   let alreadyExists = false
@@ -39,7 +45,7 @@ export async function addUser(prevState: any, formData: FormData) {
       name,
       password: hashedPassword,
       role,
-      branchId: role === 'manager' && branchId ? branchId : undefined,
+      branchId: isBranchScoped && branchId ? branchId : undefined,
       isActive: true
     })
     return list
@@ -62,6 +68,11 @@ export async function updateUser(prevState: any, formData: FormData) {
   const branchId = formData.get('branchId') as string
 
   if (!id || !name || !role) return { error: 'Invalid data' }
+
+  // POS-dedicated roles require a branchId
+  const isBranchScoped = (BRANCH_SCOPED_ROLES as readonly string[]).includes(role)
+  if (isBranchScoped && !branchId) return { error: 'Branch is required for this role' }
+
   const hashedPassword = password ? await bcrypt.hash(password, 10) : undefined
 
   let notFound = false
@@ -84,7 +95,7 @@ export async function updateUser(prevState: any, formData: FormData) {
        ...list[index],
        name, 
        role, 
-       branchId: role === 'manager' && branchId ? branchId : undefined,
+       branchId: isBranchScoped && branchId ? branchId : undefined,
        password: hashedPassword || existingPassword 
     }
     return list

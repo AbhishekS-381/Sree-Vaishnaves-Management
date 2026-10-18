@@ -34,6 +34,7 @@ graph TD
     INV["Inventory"]
     MENU["Menu"]
     REP["Reports"]
+    POS["POS / Billing / KOT"]
   end
 
   subgraph PUBLIC["Public"]
@@ -54,6 +55,8 @@ graph TD
   PAY --> DASH
   EOD --> DASH
   MENU --> STAFF
+  POS --> EOD
+  POS --> DASH
   CONFIG --> TOGGLE
 ```
 
@@ -315,6 +318,54 @@ flowchart TD
 
 ---
 
+## MAP 14 — POS, Billing & Kitchen Order Ticket (KOT)
+
+```mermaid
+flowchart TD
+  subgraph ROUTES["POS Routes & Dedicated Interfaces"]
+    POS_MAIN["/management/pos\nMain Dashboard\nTable Grid · Order Panel · KOTs · Bill/Pay · Daily Summary"]
+    POS_WAIT["/management/pos/order\nWaiter Order Station\nOwn orders only · Dietary tags · No financials"]
+    POS_BILL["/management/pos/billing\nBilling Clerk Station\nBilled Queue · Split Payment · Running Totals"]
+    POS_KITCH["/management/pos/kitchen\nKitchen Display Station\nFIFO Queue · 30s Polling · Advance status · Zero financials"]
+    POS_HIST["/management/pos/history\nOrder Audit History\nDate range · AOV · Voids · Discounts"]
+  end
+
+  subgraph ROLES["Role Access & Page Locking (src/proxy.ts)"]
+    ADM_OWN["admin / owner\nFull access to all 5 routes"]
+    MGR["manager\nBranch-scoped access to all 5 routes"]
+    W_ROLE["waiter (posRole=true)\nPage-locked to /pos/order (no sidebar)"]
+    B_ROLE["billing (posRole=true)\nPage-locked to /pos/billing (no sidebar)"]
+    K_ROLE["kitchen (posRole=true)\nPage-locked to /pos/kitchen (no sidebar)"]
+  end
+
+  subgraph ACTIONS["Server Actions (src/app/actions/pos.ts)"]
+    ACT_ORD["createOrder / addOrUpdateOrderItem / removeOrderItem / updateOrderNote"]
+    ACT_KOT["fireKot (delta calculation) / advanceKotStatus"]
+    ACT_BILL["generateBill (discount, GST suggestion) / reopenOrder"]
+    ACT_PAY["recordPayment (cash, UPI, split)"]
+    ACT_VOID["voidOrder (same-day paid or open)"]
+    ACT_EOD["getPosDataForEOD / computePosEodData"]
+  end
+
+  ADM_OWN --> POS_MAIN
+  ADM_OWN --> POS_HIST
+  MGR --> POS_MAIN
+  W_ROLE --> POS_WAIT
+  B_ROLE --> POS_BILL
+  K_ROLE --> POS_KITCH
+
+  POS_MAIN --> ACTIONS
+  POS_WAIT --> ACT_ORD
+  POS_WAIT --> ACT_KOT
+  POS_BILL --> ACT_BILL
+  POS_BILL --> ACT_PAY
+  POS_KITCH --> ACT_KOT
+
+  ACT_PAY --> EOD_FEED["Feeds Day-End (EOD) prefill\n(cash/UPI dine-in/takeaway, GST, covers)"]
+```
+
+---
+
 ## Summary — module relationships
 
 ```mermaid
@@ -328,6 +379,8 @@ graph LR
   EXP --> VEN["Vendors"]
   BRANCH --> MENU["Menu"]
   BRANCH --> INV["Inventory"]
+  BRANCH --> POS["POS / Billing / KOT"]
+  POS --> EOD
   EOD --> DASH["Dashboard"]
   ATT --> DASH
   PAY --> REP["Reports"]
@@ -339,4 +392,6 @@ graph LR
   CONFIG -.-> INV
   CONFIG -.-> MENU
   CONFIG -.-> REP
+  CONFIG -.-> POS
 ```
+
