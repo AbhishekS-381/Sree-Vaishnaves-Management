@@ -72,6 +72,15 @@ export async function login(prevState: any, formData: FormData) {
       maxAge: 60 * 60 * 2, // 2 hours
       path: '/',
     })
+    if (isPosRole) {
+      const ROLE_HOME: Record<string, string> = {
+        billing: '/management/pos/billing',
+        kitchen: '/management/pos/kitchen',
+        waiter: '/management/pos/order',
+      }
+      redirect(ROLE_HOME[role] || '/management')
+    }
+
     redirect('/management')
   } else {
     return { error: 'Invalid Credentials' }

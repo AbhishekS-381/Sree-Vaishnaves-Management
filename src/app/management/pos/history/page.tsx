@@ -12,8 +12,30 @@ export default async function PosHistoryPage() {
     redirect('/management')
   }
 
-  let allBranches = await readJSON<{ id: string; name: string; isActive?: boolean }>(DB_FILES.BRANCHES).catch(() => [])
-  allBranches = allBranches.filter(b => b.isActive !== false)
+  const [allBranches, allTables, allUsers] = await Promise.all([
+    readJSON<{ id: string; name: string; isActive?: boolean }>(DB_FILES.BRANCHES).catch(() => []),
+    readJSON<{ id: string; name: string }>(DB_FILES.POS_TABLES).catch(() => []),
+    readJSON<{ id: string; name: string }>(DB_FILES.USERS).catch(() => []),
+  ])
 
-  return <PosHistoryClientPage branches={allBranches} session={session} />
+  const activeBranches = allBranches.filter(b => b.isActive !== false)
+
+  const tableMap: Record<string, string> = {}
+  for (const t of allTables) {
+    tableMap[t.id] = t.name
+  }
+
+  const userMap: Record<string, string> = {}
+  for (const u of allUsers) {
+    userMap[u.id] = u.name
+  }
+
+  return (
+    <PosHistoryClientPage
+      branches={activeBranches}
+      tableMap={tableMap}
+      userMap={userMap}
+      session={session}
+    />
+  )
 }

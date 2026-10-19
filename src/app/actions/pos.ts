@@ -457,7 +457,7 @@ export async function addOrUpdateOrderItem(
   const success = await withTransaction<PosOrder>(DB_FILES.POS_ORDERS, (orders) => {
     const order = orders.find(o => o.id === orderId)
     if (!order) { notFound = true; return orders }
-    if (order.branchId !== enforcedBranchId) { branchDenied = true; return orders }
+    if (enforcedBranchId && order.branchId !== enforcedBranchId) { branchDenied = true; return orders }
     if (order.status !== 'open') { notOpen = true; return orders }
     if (!isWaiterOwnOrder(session.role, order.openedBy, session.userId)) {
       waiterForbidden = true; return orders
@@ -520,7 +520,7 @@ export async function removeOrderItem(orderId: string, orderItemId: string) {
   const success = await withTransaction<PosOrder>(DB_FILES.POS_ORDERS, (orders) => {
     const order = orders.find(o => o.id === orderId)
     if (!order) { notFound = true; return orders }
-    if (order.branchId !== enforcedBranchId) { branchDenied = true; return orders }
+    if (enforcedBranchId && order.branchId !== enforcedBranchId) { branchDenied = true; return orders }
     // Req 2.6: allow removal to complete even if status changed from open
     // during the action — the guard only applies at initiation time
     if (order.status !== 'open') { notOpen = true; return orders }
@@ -572,7 +572,7 @@ export async function updateOrderNote(orderId: string, note: string) {
   const success = await withTransaction<PosOrder>(DB_FILES.POS_ORDERS, (orders) => {
     const order = orders.find(o => o.id === orderId)
     if (!order) { notFound = true; return orders }
-    if (order.branchId !== enforcedBranchId) { branchDenied = true; return orders }
+    if (enforcedBranchId && order.branchId !== enforcedBranchId) { branchDenied = true; return orders }
     if (order.status !== 'open') { notOpen = true; return orders }
     if (!isWaiterOwnOrder(session.role, order.openedBy, session.userId)) {
       waiterForbidden = true; return orders
@@ -612,7 +612,7 @@ export async function fireKot(orderId: string) {
   const allOrders = await readJSON<PosOrder>(DB_FILES.POS_ORDERS).catch(() => [])
   const order = allOrders.find(o => o.id === orderId)
   if (!order) return { error: 'Order not found' }
-  if (order.branchId !== enforcedBranchId) return { error: 'BranchAccessDenied' }
+  if (enforcedBranchId && order.branchId !== enforcedBranchId) return { error: 'BranchAccessDenied' }
   if (order.status !== 'open') return { error: 'Order is not open' }
   if (!isWaiterOwnOrder(session.role, order.openedBy, session.userId)) {
     return { error: 'Forbidden: waiters can only edit their own orders' }
@@ -659,7 +659,7 @@ export async function fireKot(orderId: string) {
     kots.push({
       id: kotId,
       orderId,
-      branchId: enforcedBranchId,
+      branchId: order.branchId,
       kotNumber: newKotNumber,
       items: kotItems,
       status: 'pending',
@@ -730,7 +730,7 @@ export async function generateBill(prevState: unknown, formData: FormData) {
   const success = await withTransaction<PosOrder>(DB_FILES.POS_ORDERS, (orders) => {
     const order = orders.find(o => o.id === orderId)
     if (!order) { notFound = true; return orders }
-    if (order.branchId !== enforcedBranchId) { branchDenied = true; return orders }
+    if (enforcedBranchId && order.branchId !== enforcedBranchId) { branchDenied = true; return orders }
     if (order.status === 'billed') { alreadyBilled = true; return orders }
     if (order.status !== 'open') { notOpen = true; return orders }
     if (order.items.length === 0) { noItems = true; return orders }
@@ -791,7 +791,7 @@ export async function reopenOrder(orderId: string) {
   const success = await withTransaction<PosOrder>(DB_FILES.POS_ORDERS, (orders) => {
     const order = orders.find(o => o.id === orderId)
     if (!order) { notFound = true; return orders }
-    if (order.branchId !== enforcedBranchId) { branchDenied = true; return orders }
+    if (enforcedBranchId && order.branchId !== enforcedBranchId) { branchDenied = true; return orders }
     if (order.status === 'paid') { isPaid = true; return orders }
     if (order.status !== 'billed') { wrongStatus = true; return orders }
 
@@ -853,7 +853,7 @@ export async function recordPayment(prevState: unknown, formData: FormData) {
   const success = await withTransaction<PosOrder>(DB_FILES.POS_ORDERS, (orders) => {
     const order = orders.find(o => o.id === orderId)
     if (!order) { notFound = true; return orders }
-    if (order.branchId !== enforcedBranchId) { branchDenied = true; return orders }
+    if (enforcedBranchId && order.branchId !== enforcedBranchId) { branchDenied = true; return orders }
     if (order.status !== 'billed') { notBilled = true; return orders }
     if (!order.bill) { noBill = true; return orders }
 
@@ -881,7 +881,7 @@ export async function recordPayment(prevState: unknown, formData: FormData) {
   if (mismatch) return { error: 'Payment amounts do not balance with total payable' }
   if (!success) return { error: 'Transaction failed' }
 
-  const changeDue = (method === 'cash' || method === 'split') ? cashTendered - cashAmountStored : 0
+  const changeDue = (method === 'cash' || method === 'split') ? Math.max(0, cashTendered - cashAmountStored) : 0
 
   await logAction('RECORD_PAYMENT', 'POS_ORDER', JSON.stringify({ orderId, method, cashAmount: cashAmountStored, upiAmount, totalPayable: cashAmountStored + upiAmount }), orderId)
   revalidatePath('/management/pos')
@@ -913,13 +913,15 @@ export async function voidOrder(prevState: unknown, formData: FormData) {
   let crossDay = false
   let wrongStatus = false
   let previousStatus: OrderStatus | undefined
+  let orderBranchId: string | undefined
   const now = nowISO()
 
   const success = await withTransaction<PosOrder>(DB_FILES.POS_ORDERS, (orders) => {
     const order = orders.find(o => o.id === orderId)
     if (!order) { notFound = true; return orders }
-    if (order.branchId !== enforcedBranchId) { branchDenied = true; return orders }
+    if (enforcedBranchId && order.branchId !== enforcedBranchId) { branchDenied = true; return orders }
 
+    orderBranchId = order.branchId
     previousStatus = order.status
 
     if (order.status === 'paid') {
@@ -948,7 +950,7 @@ export async function voidOrder(prevState: unknown, formData: FormData) {
   if (wrongStatus) return { error: 'Only open or paid orders can be voided' }
   if (!success) return { error: 'Transaction failed' }
 
-  await logAction('VOID_POS_ORDER', 'POS_ORDER', JSON.stringify({ orderId, reason, previousStatus, branchId: enforcedBranchId }), orderId)
+  await logAction('VOID_POS_ORDER', 'POS_ORDER', JSON.stringify({ orderId, reason, previousStatus, branchId: orderBranchId || enforcedBranchId }), orderId)
   revalidatePath('/management/pos')
   return { success: true }
 }
@@ -978,7 +980,7 @@ export async function advanceKotStatus(kotId: string) {
   const success = await withTransaction<PosKot>(DB_FILES.POS_KOTS, (kots) => {
     const kot = kots.find(k => k.id === kotId)
     if (!kot) { notFound = true; return kots }
-    if (kot.branchId !== enforcedBranchId) { branchDenied = true; return kots }
+    if (enforcedBranchId && kot.branchId !== enforcedBranchId) { branchDenied = true; return kots }
 
     const currentIdx = KOT_SEQUENCE.indexOf(kot.status as typeof KOT_SEQUENCE[number])
     if (currentIdx === -1) { invalidTransition = true; return kots }

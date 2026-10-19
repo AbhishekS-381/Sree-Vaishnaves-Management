@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   Flame,
   CheckCircle2,
@@ -28,16 +29,19 @@ type KitchenKot = {
 }
 
 export default function KitchenClientPage({
+  branches = [],
   branchId,
   initialActiveKots,
   initialServedKots,
   session,
 }: {
+  branches?: { id: string; name: string }[]
   branchId: string
   initialActiveKots: KitchenKot[]
   initialServedKots: KitchenKot[]
   session: { userId: string; name: string; role: string; isGlobalAdmin?: boolean }
 }) {
+  const router = useRouter()
   const { messages, dismiss, success, error } = useToast()
   const [isPending, startTransition] = useTransition()
 
@@ -120,7 +124,21 @@ export default function KitchenClientPage({
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {session.isGlobalAdmin && branches.length > 1 && (
+            <select
+              value={branchId}
+              onChange={e => router.push(`/management/pos/kitchen?branch=${e.target.value}`)}
+              className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-sm font-medium text-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-500"
+            >
+              {branches.map(b => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          )}
+
           <button
             onClick={() => setIsPollingActive(!isPollingActive)}
             className={`flex items-center gap-1.5 px-3 py-2 border text-sm font-semibold rounded-xl transition-all ${
@@ -198,7 +216,7 @@ export default function KitchenClientPage({
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {activeKots.map(kot => {
             const firedTime = new Date(kot.firedAt).toLocaleTimeString([], {
               hour: '2-digit',
@@ -242,9 +260,20 @@ export default function KitchenClientPage({
                   {/* Card Header */}
                   <div className="flex items-start justify-between pb-3 border-b border-slate-800">
                     <div>
-                      <h3 className="text-xl font-black text-white tracking-tight">
-                        {kot.orderIdentifier}
-                      </h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-xl font-black text-white tracking-tight">
+                          {kot.orderIdentifier}
+                        </h3>
+                        {kot.orderType === 'takeaway' ? (
+                          <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                            Takeaway
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                            Dine-In
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
                         <Clock className="w-3.5 h-3.5 text-slate-500" />
                         Fired at {firedTime}

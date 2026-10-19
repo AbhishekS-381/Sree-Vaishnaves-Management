@@ -9,10 +9,17 @@ const initialState: any = { message: '', error: '' }
 export function UserModal({ isOpen, onClose, editData, branches = [] }: { isOpen: boolean, onClose: () => void, editData?: any, branches?: any[] }) {
   const [state, action, isPending] = useActionState(editData ? updateUser : addUser, initialState)
   const [selectedRole, setSelectedRole] = useState(editData?.role || 'manager')
+  const [hasSubmitted, setHasSubmitted] = useState(false)
 
   useEffect(() => {
     setSelectedRole(editData?.role || 'manager')
   }, [editData?.role])
+
+  useEffect(() => {
+    if (hasSubmitted && state?.success) {
+      onClose()
+    }
+  }, [hasSubmitted, state?.success, onClose])
 
   if (!isOpen) return null
 
@@ -29,10 +36,13 @@ export function UserModal({ isOpen, onClose, editData, branches = [] }: { isOpen
             <button disabled={isPending} onClick={onClose} className="text-slate-400 hover:text-white">&times;</button>
           </div>
           
-          <form action={async (fd) => {
-             await action(fd)
-             onClose()
-          }} className="p-6 space-y-4">
+          <form
+            action={(formData) => {
+              setHasSubmitted(true)
+              action(formData)
+            }}
+            className="p-6 space-y-4"
+          >
             
             {editData && <input type="hidden" name="id" value={editData.id} />}
             

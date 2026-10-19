@@ -20,6 +20,7 @@ import {
   Trash2,
   Layers,
   AlertTriangle,
+  Tag,
 } from 'lucide-react'
 import { useToast, ToastStack } from '@/components/Toast'
 import type {
@@ -113,6 +114,9 @@ export default function PosClientPage({
   const [voidOrderId, setVoidOrderId] = useState<string | null>(null)
   const [voidReason, setVoidReason] = useState('')
 
+  // Item Note editing modal
+  const [editingNoteItem, setEditingNoteItem] = useState<{ id: string; name: string; note: string } | null>(null)
+
   // Daily summary drawer / card
   const [isSummaryExpanded, setIsSummaryExpanded] = useState(false)
   const [dailySummary, setDailySummary] = useState<{
@@ -134,20 +138,20 @@ export default function PosClientPage({
   const catalog = useMemo(() => initialData?.catalog ?? [], [initialData?.catalog])
 
 
-  // Derive occupied tables (today's open orders)
+  // Derive occupied tables (today's open or billed orders)
   const openOrdersByTable = useMemo(() => {
     const map = new Map<string, PosOrder>()
     for (const o of orders) {
-      if (o.status === 'open' && o.tableId) {
+      if ((o.status === 'open' || o.status === 'billed') && o.tableId) {
         map.set(o.tableId, o)
       }
     }
     return map
   }, [orders])
 
-  // Open takeaways
+  // Open & billed takeaways
   const openTakeaways = useMemo(() => {
-    return orders.filter(o => o.orderType === 'takeaway' && o.status === 'open')
+    return orders.filter(o => o.orderType === 'takeaway' && (o.status === 'open' || o.status === 'billed'))
   }, [orders])
 
   // Active selected order
@@ -161,6 +165,23 @@ export default function PosClientPage({
     if (!selectedOrderId) return []
     return kots.filter(k => k.orderId === selectedOrderId).sort((a, b) => a.kotNumber - b.kotNumber)
   }, [kots, selectedOrderId])
+
+  // Items with pending delta for KOT
+  const hasUnfiredKotItems = useMemo(() => {
+    if (!selectedOrder || selectedOrder.items.length === 0) return false
+    for (const item of selectedOrder.items) {
+      const priorTotal = activeOrderKots.reduce((sum, kot) => {
+        return sum + kot.items
+          .filter(ki =>
+            ki.menuItemId === item.menuItemId &&
+            (ki.variantId ?? undefined) === (item.variantId ?? undefined)
+          )
+          .reduce((s, ki) => s + ki.quantity, 0)
+      }, 0)
+      if (item.quantity > priorTotal) return true
+    }
+    return false
+  }, [selectedOrder, activeOrderKots])
 
   // Categories in catalog
   const categories = useMemo(() => {
@@ -304,6 +325,28 @@ export default function PosClientPage({
       if (res?.error) error(res.error)
       else {
         success('Item removed')
+        router.refresh()
+      }
+    })
+  }
+
+  const handleSaveItemNote = (orderItemId: string, noteText: string) => {
+    if (!selectedOrder) return
+    const item = selectedOrder.items.find(i => i.id === orderItemId)
+    if (!item) return
+    startTransition(async () => {
+      const res = await addOrUpdateOrderItem(
+        selectedOrder.id,
+        item.menuItemId,
+        item.quantity,
+        item.unitPrice,
+        item.nameSnapshot,
+        item.variantId,
+        noteText
+      )
+      if (res?.error) error(res.error)
+      else {
+        success('Item note saved')
         router.refresh()
       }
     })
@@ -682,12 +725,12 @@ export default function PosClientPage({
 
           {/* Table Grid */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 md:p-6 shadow-xl">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
               <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
                 <Layers className="w-4 h-4 text-amber-400" />
                 Seating & Tables ({tables.length})
               </h2>
-              <div className="flex items-center gap-3 text-xs">
+              <div className="flex flex-wrap items-center gap-3 text-xs">
                 <span className="flex items-center gap-1.5 text-slate-400">
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> Available
                 </span>
@@ -712,7 +755,7 @@ export default function PosClientPage({
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                 {tables.map(table => {
                   const existingOrder = openOrdersByTable.get(table.id)
                   const isOccupied = !!existingOrder
@@ -730,51 +773,64 @@ export default function PosClientPage({
                           : 'bg-slate-950/40 border-slate-800 hover:border-slate-700'
                       }`}
                     >
-                      <div className="flex items-start justify-between">
-                        <span className="font-bold text-base text-white group-hover:text-amber-300 transition-colors">
-                          {table.name}
-                        </span>
+                      <div className="flex items-center gap-2 pr-2">
                         <span
-                          className={`w-2.5 h-2.5 rounded-full ${
+                          className={`w-2.5 h-2.5 rounded-full shrink-0 ${
                             isOccupied ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'
                           }`}
                         />
+                        <span className="font-bold text-base text-white group-hover:text-amber-300 transition-colors truncate">
+                          {table.name}
+                        </span>
                       </div>
 
-                      {isOccupied && existingOrder ? (
-                        <div className="text-xs text-slate-400">
-                          <p className="font-medium text-amber-300">{existingOrder.items.length} items</p>
-                          <p className="text-[10px] text-slate-500">{existingOrder.covers || 1} covers</p>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-slate-500 font-medium">Available</span>
-                      )}
+                      <div className="flex items-center justify-between mt-auto">
+                        {isOccupied && existingOrder ? (
+                          <div className="text-xs text-slate-400">
+                            <div className="flex items-center gap-1.5 mb-0.5">
+                              <span
+                                className={`text-[10px] px-1.5 py-0.2 rounded font-bold uppercase ${
+                                  existingOrder.status === 'billed'
+                                    ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                                    : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                }`}
+                              >
+                                {existingOrder.status === 'billed' ? 'Billed' : 'Occupied'}
+                              </span>
+                            </div>
+                            <p className="font-medium text-amber-300">{existingOrder.items.length} items</p>
+                            <p className="text-[10px] text-slate-500">{existingOrder.covers || 1} covers</p>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-slate-500 font-medium">Available</span>
+                        )}
 
-                      {/* Quick Rename/Deactivate Table Controls on Hover */}
-                      <div className="absolute top-2 right-2 hidden group-hover:flex items-center gap-1 bg-slate-900/90 p-1 rounded-lg border border-slate-700">
-                        <button
-                          onClick={e => {
-                            e.stopPropagation()
-                            setSelectedTableForRename(table)
-                            setTableNameInput(table.name)
-                            setTableModalMode('rename')
-                            setIsTableModalOpen(true)
-                          }}
-                          className="p-1 hover:text-amber-400 text-slate-400"
-                          title="Rename"
-                        >
-                          <Edit2 className="w-3 h-3" />
-                        </button>
-                        <button
-                          onClick={e => {
-                            e.stopPropagation()
-                            handleDeactivateTable(table.id)
-                          }}
-                          className="p-1 hover:text-red-400 text-slate-400"
-                          title="Deactivate"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
+                        {/* Quick Rename/Deactivate Table Controls */}
+                        <div className="flex items-center gap-1 bg-slate-900/90 px-1 py-0.5 rounded-lg border border-slate-700/80">
+                          <button
+                            onClick={e => {
+                              e.stopPropagation()
+                              setSelectedTableForRename(table)
+                              setTableNameInput(table.name)
+                              setTableModalMode('rename')
+                              setIsTableModalOpen(true)
+                            }}
+                            className="p-1 hover:text-amber-400 text-slate-400"
+                            title="Rename"
+                          >
+                            <Edit2 className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={e => {
+                              e.stopPropagation()
+                              handleDeactivateTable(table.id)
+                            }}
+                            className="p-1 hover:text-red-400 text-slate-400"
+                            title="Deactivate"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )
@@ -862,9 +918,28 @@ export default function PosClientPage({
                       className="flex items-center justify-between p-2.5 bg-slate-950/60 rounded-xl border border-slate-800/80 text-sm"
                     >
                       <div className="flex-1 min-w-0 pr-2">
-                        <p className="font-semibold text-slate-200 truncate">{item.nameSnapshot}</p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="font-semibold text-slate-200 truncate">{item.nameSnapshot}</p>
+                          {selectedOrder.status === 'open' && (
+                            <button
+                              onClick={() => setEditingNoteItem({ id: item.id, name: item.nameSnapshot, note: item.note || '' })}
+                              className="text-slate-500 hover:text-amber-400 p-0.5 rounded transition-colors"
+                              title="Add/edit item kitchen note"
+                            >
+                              <Tag className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
                         <p className="text-xs text-slate-400">₹{item.unitPrice} each</p>
-                        {item.note && <p className="text-[11px] italic text-amber-400/80">{item.note}</p>}
+                        {item.note && (
+                          <p
+                            onClick={() => selectedOrder.status === 'open' && setEditingNoteItem({ id: item.id, name: item.nameSnapshot, note: item.note || '' })}
+                            className="text-[11px] italic text-amber-400/80 cursor-pointer hover:underline"
+                            title="Click to edit kitchen note"
+                          >
+                            &ldquo;{item.note}&rdquo;
+                          </p>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0">
@@ -928,11 +1003,11 @@ export default function PosClientPage({
                     <>
                       <button
                         onClick={handleFireKot}
-                        disabled={selectedOrder.items.length === 0 || isPending}
+                        disabled={!hasUnfiredKotItems || isPending}
                         className="flex items-center justify-center gap-1.5 py-2.5 px-3 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-amber-600/20"
                       >
                         <Flame className="w-4 h-4" />
-                        Fire KOT
+                        {hasUnfiredKotItems ? 'Fire KOT' : (activeOrderKots.length > 0 ? 'Kitchen Up to Date' : 'Fire KOT')}
                       </button>
 
                       <button
@@ -1043,15 +1118,15 @@ export default function PosClientPage({
                     )}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
-                    {filteredCatalog.slice(0, 20).map(item => (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1">
+                    {filteredCatalog.slice(0, 30).map(item => (
                       <button
                         key={`${item.menuItemId}_${item.variantId || 'base'}`}
                         onClick={() => handleAddItem(item)}
-                        className="flex flex-col items-start p-2 bg-slate-950/60 hover:bg-slate-800/80 border border-slate-800 rounded-xl text-left transition-colors"
+                        className="flex items-center justify-between p-2.5 bg-slate-950/60 hover:bg-slate-800/80 border border-slate-800 rounded-xl text-left transition-colors"
                       >
-                        <span className="font-semibold text-xs text-white truncate w-full">{item.name}</span>
-                        <span className="text-[11px] font-bold text-emerald-400">₹{item.effectivePrice}</span>
+                        <span className="font-semibold text-xs text-white truncate pr-2">{item.name}</span>
+                        <span className="text-[11px] font-bold text-emerald-400 shrink-0">₹{item.effectivePrice}</span>
                       </button>
                     ))}
                   </div>
@@ -1077,40 +1152,108 @@ export default function PosClientPage({
       {/* Table Management Modal */}
       {isTableModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-5 shadow-2xl">
-            <h3 className="text-base font-bold text-white mb-3">
-              {tableModalMode === 'create' ? 'Add New Table' : 'Rename Table'}
-            </h3>
-            <form onSubmit={handleSaveTable} className="flex flex-col gap-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-5 shadow-2xl flex flex-col gap-4 max-h-[85vh] overflow-hidden">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <h3 className="text-base font-bold text-white">
+                {tableModalMode === 'rename' ? 'Rename Table' : 'Manage Tables'}
+              </h3>
+              <button
+                onClick={() => {
+                  setIsTableModalOpen(false)
+                  setSelectedTableForRename(null)
+                  setTableNameInput('')
+                }}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveTable} className="flex flex-col gap-3">
               <div>
-                <label className="text-xs font-semibold text-slate-300 block mb-1">Table Name</label>
-                <input
-                  type="text"
-                  required
-                  maxLength={50}
-                  value={tableNameInput}
-                  onChange={e => setTableNameInput(e.target.value)}
-                  placeholder="e.g. Table 1, T12, Patio 4"
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-                />
+                <label className="text-xs font-semibold text-slate-300 block mb-1">
+                  {tableModalMode === 'rename' ? 'New Table Name' : 'Add New Table'}
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    required
+                    maxLength={50}
+                    value={tableNameInput}
+                    onChange={e => setTableNameInput(e.target.value)}
+                    placeholder="e.g. Table 1, T12, Patio 4"
+                    className="flex-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                  <button
+                    type="submit"
+                    disabled={isPending || !tableNameInput.trim()}
+                    className="px-4 py-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-sm font-semibold rounded-xl"
+                  >
+                    {tableModalMode === 'rename' ? 'Update' : 'Add Table'}
+                  </button>
+                </div>
               </div>
-              <div className="flex justify-end gap-2">
+              {tableModalMode === 'rename' && (
                 <button
                   type="button"
-                  onClick={() => setIsTableModalOpen(false)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-semibold rounded-xl"
+                  onClick={() => {
+                    setTableModalMode('create')
+                    setTableNameInput('')
+                    setSelectedTableForRename(null)
+                  }}
+                  className="text-xs text-amber-400 hover:underline self-start"
                 >
-                  Cancel
+                  &larr; Switch back to Add Table
                 </button>
-                <button
-                  type="submit"
-                  disabled={isPending}
-                  className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold rounded-xl"
-                >
-                  Save
-                </button>
-              </div>
+              )}
             </form>
+
+            {tableModalMode === 'create' && (
+              <div className="flex flex-col gap-2 pt-2 border-t border-slate-800 overflow-y-auto max-h-60 pr-1">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  Current Active Tables ({tables.length})
+                </span>
+                {tables.length === 0 ? (
+                  <p className="text-xs text-slate-500 py-3 text-center">No active tables found.</p>
+                ) : (
+                  <div className="flex flex-col gap-1.5">
+                    {tables.map(t => {
+                      const isOccupied = openOrdersByTable.has(t.id)
+                      return (
+                        <div key={t.id} className="flex items-center justify-between p-2 rounded-xl bg-slate-950/60 border border-slate-800/80 text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-white">{t.name}</span>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold uppercase ${isOccupied ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'}`}>
+                              {isOccupied ? 'Occupied' : 'Available'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedTableForRename(t)
+                                setTableNameInput(t.name)
+                                setTableModalMode('rename')
+                              }}
+                              className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-amber-400 rounded-lg font-semibold"
+                            >
+                              Rename
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeactivateTable(t.id)}
+                              className="px-2 py-1 bg-red-600/10 hover:bg-red-600/20 text-red-400 border border-red-500/30 rounded-lg font-semibold"
+                            >
+                              Deactivate
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1380,6 +1523,43 @@ export default function PosClientPage({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Item Note Modal */}
+      {editingNoteItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-5 shadow-2xl">
+            <h3 className="text-sm font-bold text-white mb-2">Item Kitchen Note ({editingNoteItem.name})</h3>
+            <p className="text-xs text-slate-400 mb-3">Add special instructions for kitchen preparation (max 80 chars).</p>
+            <input
+              type="text"
+              maxLength={80}
+              value={editingNoteItem.note}
+              onChange={e => setEditingNoteItem({ ...editingNoteItem, note: e.target.value })}
+              placeholder="e.g. extra spicy, no onion, less oil"
+              className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:ring-1 focus:ring-amber-500 mb-4"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setEditingNoteItem(null)}
+                className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  handleSaveItemNote(editingNoteItem.id, editingNoteItem.note)
+                  setEditingNoteItem(null)
+                }}
+                className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold rounded-xl"
+              >
+                Save Note
+              </button>
+            </div>
           </div>
         </div>
       )}

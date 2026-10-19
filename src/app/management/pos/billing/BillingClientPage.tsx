@@ -14,6 +14,8 @@ import type { PosOrder } from '@/app/actions/posTypes'
 import { recordPayment, generateBill } from '@/app/actions/pos'
 
 export default function BillingClientPage({
+  branches = [],
+  activeBranchId,
   billedOrders,
   paidOrders,
   openOrders,
@@ -41,11 +43,12 @@ export default function BillingClientPage({
   )
 
   // Payment form state
+  const initialPayable = billedOrders[0]?.bill?.totalPayable ?? 0
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'upi' | 'split'>('cash')
-  const [splitCash, setSplitCash] = useState<number>(0)
+  const [splitCash, setSplitCash] = useState<number>(initialPayable)
   const [splitUpi, setSplitUpi] = useState<number>(0)
-  const [cashTendered, setCashTendered] = useState<number>(0)
-  const [changeDueDisplay, setChangeDueDisplay] = useState<number | null>(null)
+  const [cashTendered, setCashTendered] = useState<number>(initialPayable)
+  const [changeDueDisplay, setChangeDueDisplay] = useState<number | null>(billedOrders[0]?.bill ? 0 : null)
 
   // Secondary "Bill an open order" drawer / modal
   const [selectedOpenOrderId, setSelectedOpenOrderId] = useState<string>('')
@@ -191,18 +194,34 @@ export default function BillingClientPage({
           </div>
         </div>
 
-        {openOrders.filter(o => o.items.length > 0).length > 0 && (
-          <button
-            onClick={() => {
-              const firstOpen = openOrders.find(o => o.items.length > 0)
-              if (firstOpen) handleOpenBillDrawer(firstOpen.id)
-            }}
-            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded-xl transition-all shadow-md shadow-blue-600/20"
-          >
-            <PlusCircle className="w-4 h-4" />
-            Bill an Open Order ({openOrders.filter(o => o.items.length > 0).length})
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {session.isGlobalAdmin && branches && branches.length > 1 && (
+            <select
+              value={activeBranchId}
+              onChange={e => router.push(`/management/pos/billing?branch=${e.target.value}`)}
+              className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-sm font-medium text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            >
+              {branches.map(b => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {openOrders.filter(o => o.items.length > 0).length > 0 && (
+            <button
+              onClick={() => {
+                const firstOpen = openOrders.find(o => o.items.length > 0)
+                if (firstOpen) handleOpenBillDrawer(firstOpen.id)
+              }}
+              className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded-xl transition-all shadow-md shadow-blue-600/20"
+            >
+              <PlusCircle className="w-4 h-4" />
+              Bill an Open Order ({openOrders.filter(o => o.items.length > 0).length})
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Running Totals Strip (Req 14.8) */}
@@ -435,8 +454,9 @@ export default function BillingClientPage({
                 {paymentMethod === 'split' && (
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-xs font-semibold text-slate-300 block mb-1">Cash Part (₹)</label>
+                      <label htmlFor="splitCash" className="text-xs font-semibold text-slate-300 block mb-1">Cash Part (₹)</label>
                       <input
+                        id="splitCash"
                         type="number"
                         min={0}
                         value={splitCash}
@@ -449,8 +469,9 @@ export default function BillingClientPage({
                       />
                     </div>
                     <div>
-                      <label className="text-xs font-semibold text-slate-300 block mb-1">UPI Part (₹)</label>
+                      <label htmlFor="splitUpi" className="text-xs font-semibold text-slate-300 block mb-1">UPI Part (₹)</label>
                       <input
+                        id="splitUpi"
                         type="number"
                         min={0}
                         value={splitUpi}
@@ -467,10 +488,11 @@ export default function BillingClientPage({
 
                 {(paymentMethod === 'cash' || paymentMethod === 'split') && (
                   <div>
-                    <label className="text-xs font-semibold text-slate-300 block mb-1">
+                    <label htmlFor="cashTendered" className="text-xs font-semibold text-slate-300 block mb-1">
                       Cash Tendered from Customer (₹)
                     </label>
                     <input
+                      id="cashTendered"
                       type="number"
                       min={0}
                       value={cashTendered}
@@ -532,8 +554,9 @@ export default function BillingClientPage({
                   </div>
 
                   <div>
-                    <label className="text-xs font-semibold text-slate-300 block mb-1">Discount (₹)</label>
+                    <label htmlFor="discountInput" className="text-xs font-semibold text-slate-300 block mb-1">Discount (₹)</label>
                     <input
+                      id="discountInput"
                       type="number"
                       min={0}
                       max={subtotal}
@@ -544,8 +567,9 @@ export default function BillingClientPage({
                   </div>
 
                   <div>
-                    <label className="text-xs font-semibold text-slate-300 block mb-1">GST (₹)</label>
+                    <label htmlFor="gstInput" className="text-xs font-semibold text-slate-300 block mb-1">GST (₹)</label>
                     <input
+                      id="gstInput"
                       type="number"
                       min={0}
                       value={gstInput}

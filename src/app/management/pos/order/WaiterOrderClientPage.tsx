@@ -9,6 +9,7 @@ import {
   Layers,
   ShoppingBag,
   AlertTriangle,
+  Tag,
 } from 'lucide-react'
 import { useToast, ToastStack } from '@/components/Toast'
 import type {
@@ -61,6 +62,9 @@ export default function WaiterOrderClientPage({
   const [coversInput, setCoversInput] = useState(1)
   const [newOrderNote, setNewOrderNote] = useState('')
 
+  // Item Note editing modal
+  const [editingNoteItem, setEditingNoteItem] = useState<{ id: string; name: string; note: string } | null>(null)
+
   // Catalog search / Filter
   const [searchCatalogQuery, setSearchCatalogQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
@@ -106,6 +110,23 @@ export default function WaiterOrderClientPage({
     if (!selectedOrderId) return []
     return kots.filter(k => k.orderId === selectedOrderId).sort((a, b) => a.kotNumber - b.kotNumber)
   }, [kots, selectedOrderId])
+
+  // Delta: does selectedOrder have any items or qty not yet in activeOrderKots?
+  const hasUnfiredKotItems = useMemo(() => {
+    if (!selectedOrder || selectedOrder.items.length === 0) return false
+    for (const item of selectedOrder.items) {
+      const priorTotal = activeOrderKots.reduce((sum, kot) => {
+        return sum + kot.items
+          .filter(ki =>
+            ki.menuItemId === item.menuItemId &&
+            (ki.variantId ?? undefined) === (item.variantId ?? undefined)
+          )
+          .reduce((s, ki) => s + ki.quantity, 0)
+      }, 0)
+      if (item.quantity > priorTotal) return true
+    }
+    return false
+  }, [selectedOrder, activeOrderKots])
 
   // Catalog categories
   const categories = useMemo(() => {
@@ -229,6 +250,28 @@ export default function WaiterOrderClientPage({
     })
   }
 
+  const handleSaveItemNote = (orderItemId: string, noteText: string) => {
+    if (!selectedOrder) return
+    const item = selectedOrder.items.find(i => i.id === orderItemId)
+    if (!item) return
+    startTransition(async () => {
+      const res = await addOrUpdateOrderItem(
+        selectedOrder.id,
+        item.menuItemId,
+        item.quantity,
+        item.unitPrice,
+        item.nameSnapshot,
+        item.variantId,
+        noteText
+      )
+      if (res?.error) error(res.error)
+      else {
+        success('Item note saved')
+        router.refresh()
+      }
+    })
+  }
+
   const handleFireKot = () => {
     if (!selectedOrder) return
     startTransition(async () => {
@@ -325,12 +368,12 @@ export default function WaiterOrderClientPage({
 
           {/* Table Grid */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 md:p-6 shadow-xl">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
               <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
                 <Layers className="w-4 h-4 text-amber-400" />
                 Tables
               </h2>
-              <div className="flex items-center gap-3 text-xs">
+              <div className="flex flex-wrap items-center gap-3 text-xs">
                 <span className="flex items-center gap-1.5 text-slate-400">
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> Available
                 </span>
@@ -343,7 +386,7 @@ export default function WaiterOrderClientPage({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
               {tables.map(table => {
                 const existingOrder = openOrdersByTable.get(table.id)
                 const isOccupied = !!existingOrder
@@ -414,6 +457,7 @@ export default function WaiterOrderClientPage({
                   </p>
                 </div>
                 <button
+                  aria-label="Close Order Panel"
                   onClick={() => setSelectedOrderId(null)}
                   className="p-2 text-slate-400 hover:text-white"
                 >
@@ -446,8 +490,26 @@ export default function WaiterOrderClientPage({
                       className="flex items-center justify-between p-2.5 bg-slate-950/60 rounded-xl border border-slate-800/80 text-sm"
                     >
                       <div className="flex-1 min-w-0 pr-2">
-                        <p className="font-semibold text-slate-200 truncate">{item.nameSnapshot}</p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="font-semibold text-slate-200 truncate">{item.nameSnapshot}</p>
+                          <button
+                            onClick={() => setEditingNoteItem({ id: item.id, name: item.nameSnapshot, note: item.note || '' })}
+                            className="text-slate-500 hover:text-amber-400 p-0.5 rounded transition-colors"
+                            title="Add/edit item kitchen note"
+                          >
+                            <Tag className="w-3 h-3" />
+                          </button>
+                        </div>
                         <p className="text-xs text-slate-400">₹{item.unitPrice}</p>
+                        {item.note && (
+                          <p
+                            onClick={() => setEditingNoteItem({ id: item.id, name: item.nameSnapshot, note: item.note || '' })}
+                            className="text-[11px] italic text-amber-400/80 cursor-pointer hover:underline"
+                            title="Click to edit kitchen note"
+                          >
+                            &ldquo;{item.note}&rdquo;
+                          </p>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-1 bg-slate-800 rounded-lg p-0.5 border border-slate-700 shrink-0">
@@ -494,11 +556,11 @@ export default function WaiterOrderClientPage({
               <div className="pt-3 border-t border-slate-800">
                 <button
                   onClick={handleFireKot}
-                  disabled={selectedOrder.items.length === 0 || isPending}
+                  disabled={selectedOrder.items.length === 0 || !hasUnfiredKotItems || isPending}
                   className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-amber-600/20"
                 >
                   <Flame className="w-5 h-5" />
-                  Fire KOT to Kitchen
+                  {hasUnfiredKotItems ? 'Fire KOT to Kitchen' : 'Kitchen Up to Date'}
                 </button>
               </div>
 
@@ -610,8 +672,9 @@ export default function WaiterOrderClientPage({
             <form onSubmit={handleCreateOrderSubmit} className="flex flex-col gap-4">
               {orderTypeSelection === 'dine-in' && (
                 <div>
-                  <label className="text-xs font-semibold text-slate-300 block mb-1">Guests / Covers</label>
+                  <label htmlFor="coversInput" className="text-xs font-semibold text-slate-300 block mb-1">Guests / Covers</label>
                   <input
+                    id="coversInput"
                     type="number"
                     min={1}
                     max={30}
@@ -623,8 +686,9 @@ export default function WaiterOrderClientPage({
                 </div>
               )}
               <div>
-                <label className="text-xs font-semibold text-slate-300 block mb-1">Optional Note</label>
+                <label htmlFor="newOrderNote" className="text-xs font-semibold text-slate-300 block mb-1">Optional Note</label>
                 <input
+                  id="newOrderNote"
                   type="text"
                   maxLength={200}
                   value={newOrderNote}
@@ -650,6 +714,43 @@ export default function WaiterOrderClientPage({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Item Note Modal */}
+      {editingNoteItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-5 shadow-2xl">
+            <h3 className="text-sm font-bold text-white mb-2">Item Kitchen Note ({editingNoteItem.name})</h3>
+            <p className="text-xs text-slate-400 mb-3">Add special instructions for kitchen preparation (max 80 chars).</p>
+            <input
+              type="text"
+              maxLength={80}
+              value={editingNoteItem.note}
+              onChange={e => setEditingNoteItem({ ...editingNoteItem, note: e.target.value })}
+              placeholder="e.g. extra spicy, no onion, less oil"
+              className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:ring-1 focus:ring-amber-500 mb-4"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setEditingNoteItem(null)}
+                className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  handleSaveItemNote(editingNoteItem.id, editingNoteItem.note)
+                  setEditingNoteItem(null)
+                }}
+                className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold rounded-xl"
+              >
+                Save Note
+              </button>
+            </div>
           </div>
         </div>
       )}

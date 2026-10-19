@@ -31,7 +31,14 @@
 - Combos / thali composition, add-ons / modifier groups, tax class / HSN / short codes, recipe-level inventory BOM, and scheduled (effective-dated) pricing.
 
 ## Larger initiatives
-- **POS & billing**: table/takeaway order capture that auto-feeds EOD income and auto-deducts inventory. (Not started; the EOD `billing` block is entered manually.)
+- [x] **POS & billing**: table/takeaway order capture that auto-feeds EOD income (implemented and fully validated via unit tests and E2E Playwright/browser testing according to `.kiro/specs/pos-billing-kot`).
 
 ## Testing
 - Unit (Vitest) and integration (Playwright) suites exist with coverage thresholds configured and currently **passing**. Keep coverage green as features change; expand Playwright scenarios beyond the current EOD smoke tests — especially menu item edit, bulk repricing and branch cloning.
+
+
+
+Ideas:
+1. Can we integrate billing to this app?
+2. GST billing
+3. Enhanced authorization

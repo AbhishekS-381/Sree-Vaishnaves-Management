@@ -87,6 +87,7 @@ export default async function KitchenPage({
 
   return (
     <KitchenClientPage
+      branches={allBranches}
       branchId={activeBranchId}
       initialActiveKots={initialKots}
       initialServedKots={initialServedKots}

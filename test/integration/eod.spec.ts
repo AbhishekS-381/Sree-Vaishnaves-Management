@@ -2,13 +2,13 @@ import { test, expect } from '@playwright/test';
 
 test.describe('EOD Scenarios', () => {
   test('should load the EOD page', async ({ page }) => {
-    await page.goto('/login');
+    await page.goto('/management/login');
     await page.fill('input[name="name"]', 'Abhishek');
     await page.fill('input[name="password"]', 'Hpab522tx@');
     await page.click('button[type="submit"]');
-    await page.waitForURL('/');
+    await page.waitForURL('/management');
 
-    await page.goto('/eod');
+    await page.goto('/management/eod');
     
     // Expect the title to be present
     await expect(page.locator('h1').filter({ hasText: 'Daily EOD Entry' })).toBeVisible();
@@ -23,13 +23,13 @@ test.describe('EOD Scenarios', () => {
   });
 
   test('should allow adding an expense row', async ({ page }) => {
-    await page.goto('/login');
+    await page.goto('/management/login');
     await page.fill('input[name="name"]', 'Abhishek');
     await page.fill('input[name="password"]', 'Hpab522tx@');
     await page.click('button[type="submit"]');
-    await page.waitForURL('/');
+    await page.waitForURL('/management');
 
-    await page.goto('/eod');
+    await page.goto('/management/eod');
 
     const addExpenseBtn = page.getByRole('button', { name: 'Add Expense' });
     if (await addExpenseBtn.isVisible()) {

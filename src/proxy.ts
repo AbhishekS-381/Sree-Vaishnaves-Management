@@ -38,9 +38,25 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  // Already logged in → hitting login page → redirect to dashboard
+  // Already logged in → hitting login page → redirect to dashboard or designated POS home
   if (pathname === '/management/login') {
     if (isValidSession) {
+      try {
+        const { payload } = await jwtVerify(token!, getSecretKey())
+        if (payload.posRole === true && typeof payload.role === 'string') {
+          const ROLE_HOME: Record<string, string> = {
+            billing: '/management/pos/billing',
+            kitchen: '/management/pos/kitchen',
+            waiter:  '/management/pos/order',
+          }
+          const home = ROLE_HOME[payload.role]
+          if (home) {
+            return NextResponse.redirect(new URL(home, request.url))
+          }
+        }
+      } catch {
+        // Fallback to /management
+      }
       return NextResponse.redirect(new URL('/management', request.url))
     }
     return NextResponse.next()

@@ -19,8 +19,12 @@ function todayIST(): string {
 
 export default function PosHistoryClientPage({
   branches,
+  tableMap = {},
+  userMap = {},
 }: {
   branches: { id: string; name: string }[]
+  tableMap?: Record<string, string>
+  userMap?: Record<string, string>
   session?: { userId: string; name: string; role: string; isGlobalAdmin?: boolean }
 }) {
   const { messages, dismiss, error } = useToast()
@@ -98,7 +102,7 @@ export default function PosHistoryClientPage({
       {/* Filters Form */}
       <form
         onSubmit={handleFilterSubmit}
-        className="bg-slate-900 border border-slate-800 rounded-2xl p-4 md:p-5 shadow-xl grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 items-end"
+        className="bg-slate-900 border border-slate-800 rounded-2xl p-4 md:p-5 shadow-xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end"
       >
         <div>
           <label className="text-xs font-semibold text-slate-300 block mb-1.5">Branch</label>
@@ -151,7 +155,7 @@ export default function PosHistoryClientPage({
 
       {/* Summary Row (Req 7.6) */}
       {summary && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-xl">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-xl">
           <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
             <span className="text-xs text-slate-400 font-medium">Total Revenue</span>
             <p className="text-xl font-bold text-emerald-400">₹{summary.totalRevenue}</p>
@@ -210,7 +214,7 @@ export default function PosHistoryClientPage({
                       <div>
                         <div className="flex items-center gap-2">
                           <h3 className="font-bold text-white text-base">
-                            {order.takeawayNumber || 'Dine-In Table'}
+                            {(order.tableId && tableMap[order.tableId]) ? tableMap[order.tableId] : (order.takeawayNumber || (order.orderType === 'dine-in' ? 'Table' : 'Takeaway'))}
                           </h3>
                           <span
                             className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
@@ -227,7 +231,7 @@ export default function PosHistoryClientPage({
                           </span>
                         </div>
                         <p className="text-xs text-slate-400 mt-0.5">
-                          Date: {order.date} &bull; Opened By: {order.openedBy} &bull; {order.items.length} item(s)
+                          Date: {order.date} &bull; Opened By: {userMap[order.openedBy] || order.openedBy} &bull; {order.items.length} item(s)
                         </p>
                       </div>
                     </div>
@@ -292,7 +296,7 @@ export default function PosHistoryClientPage({
                           <span className="font-bold">Void Information:</span>
                           <p>Reason: &ldquo;{order.void.reason}&rdquo;</p>
                           <p className="text-[11px] text-red-400/80">
-                            Voided by: {order.void.voidedBy} at {order.void.voidedAt}
+                            Voided by: {userMap[order.void.voidedBy] || order.void.voidedBy} at {order.void.voidedAt}
                           </p>
                         </div>
                       )}

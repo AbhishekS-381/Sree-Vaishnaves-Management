@@ -29,7 +29,7 @@ export default function SettingsClientPage({ roles, departments, categories, con
   const [userModal, setUserModal] = useState<{ open: boolean, data: any }>({ open: false, data: null })
   const [confirmAction, setConfirmAction] = useState<{ label: string, fn: () => Promise<void> } | null>(null)
   const [confirming, setConfirming] = useState(false)
-  const [posGst, setPosGst] = useState<number>(config?.posDefaultGstPercent ?? 5)
+  const [posGst, setPosGst] = useState<number>(config?.posDefaultGstPercent ?? 0)
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
@@ -296,8 +296,8 @@ export default function SettingsClientPage({ roles, departments, categories, con
          </div>
       </section>
 
-      {/* System Users Settings (Owner Only) */}
-      {sessionRole === 'admin' && (
+      {/* System Users Settings (Admin & Owner) */}
+      {(sessionRole === 'admin' || sessionRole === 'owner') && (
         <section className="bg-card rounded-2xl border border-card shadow-lg shadow-black/20 p-6 flex flex-col h-full mt-8">
            <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
@@ -392,7 +392,15 @@ export default function SettingsClientPage({ roles, departments, categories, con
         ]}
       />
 
-      <UserModal isOpen={userModal.open} onClose={() => setUserModal({ open: false, data: null })} editData={userModal.data} branches={branches} />
+      {userModal.open && (
+        <UserModal
+          key={userModal.data?.id || 'new'}
+          isOpen={userModal.open}
+          onClose={() => setUserModal({ open: false, data: null })}
+          editData={userModal.data}
+          branches={branches}
+        />
+      )}
 
       {/* Shared Delete Confirmation Modal */}
       {confirmAction && (

@@ -36,7 +36,7 @@ export default async function SettingsPage() {
     menu: true,
     reports: true,
     pos: false,
-    posDefaultGstPercent: 5
+    posDefaultGstPercent: 0
   }
 
 
