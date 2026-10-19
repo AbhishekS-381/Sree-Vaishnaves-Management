@@ -881,7 +881,8 @@ describe('BillingClientPage Component Tests', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/Total is ₹0. Please confirm you wish to issue a ₹0 complimentary bill/i)).toBeDefined()
-      expect(screen.getByRole('button', { name: 'Confirm ₹0 Bill' })).toBeDefined()
+      const btn = screen.getByRole('button', { name: 'Confirm ₹0 Bill' })
+      expect(btn).not.toBeDisabled()
     })
 
     // Now clicking Confirm ₹0 Bill submits confirmed=true

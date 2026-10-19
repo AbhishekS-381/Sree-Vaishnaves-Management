@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, fireEvent } from '@testing-library/react'
+import { render, fireEvent, waitFor } from '@testing-library/react'
 import { RoleModal } from '@/components/RoleModal'
 
 vi.mock('lucide-react')
@@ -71,17 +71,19 @@ describe('RoleModal component', () => {
     fireEvent.change(container.querySelector('input[name="name"]') as HTMLElement, { target: { value: 'Cook' } })
     fireEvent.click(container.querySelector('input[name="departmentIds"]') as HTMLElement)
     fireEvent.submit(container.querySelector('form') as HTMLFormElement)
-    await vi.waitFor(() => expect(settings.addRole).toHaveBeenCalled())
-    await vi.waitFor(() => expect(onClose).toHaveBeenCalled())
+    await waitFor(() => expect(settings.addRole).toHaveBeenCalled())
+    await waitFor(() => expect(onClose).toHaveBeenCalled())
   })
 
   it('submits (updateRole) when editing', async () => {
     const settings = await import('@/app/actions/settings')
+    const onClose = vi.fn()
     const { container } = render(
-      <RoleModal isOpen={true} onClose={vi.fn()} departments={departments}
+      <RoleModal isOpen={true} onClose={onClose} departments={departments}
         editData={{ id: 'r1', name: 'Manager', departmentIds: ['d1'] } as any} />
     )
     fireEvent.submit(container.querySelector('form') as HTMLFormElement)
-    await vi.waitFor(() => expect(settings.updateRole).toHaveBeenCalled())
+    await waitFor(() => expect(settings.updateRole).toHaveBeenCalled())
+    await waitFor(() => expect(onClose).toHaveBeenCalled())
   })
 })
