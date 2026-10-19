@@ -529,6 +529,15 @@ describe('POS Server Pages - posServerPages.test.tsx', () => {
       }
     })
 
+    it('redirects to /management if pos config is disabled', async () => {
+      authMocks.getSession.mockResolvedValue({ role: 'admin', isGlobalAdmin: true })
+      dbMocks.readJSON.mockImplementation(async (file: string) => {
+        if (file === DB_FILES.CONFIG) return [{ pos: false }]
+        return []
+      })
+      await expect(PosHistoryPage()).rejects.toThrow('NEXT_REDIRECT: /management')
+    })
+
     it('constructs branches, tableMap and userMap from database', async () => {
       authMocks.getSession.mockResolvedValue({ role: 'admin', isGlobalAdmin: true })
       const res = await PosHistoryPage()

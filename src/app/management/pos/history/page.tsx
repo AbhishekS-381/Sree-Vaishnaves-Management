@@ -12,6 +12,12 @@ export default async function PosHistoryPage() {
     redirect('/management')
   }
 
+  const configList = await readJSON<{ pos?: boolean }>(DB_FILES.CONFIG).catch(() => [])
+  const config = configList[0]
+  if (!config?.pos) {
+    redirect('/management')
+  }
+
   const [allBranches, allTables, allUsers] = await Promise.all([
     readJSON<{ id: string; name: string; isActive?: boolean }>(DB_FILES.BRANCHES).catch(() => []),
     readJSON<{ id: string; name: string }>(DB_FILES.POS_TABLES).catch(() => []),
