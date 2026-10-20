@@ -2,6 +2,8 @@ import { Navigation } from '@/components/Navigation'
 import { getSession } from '@/app/actions/auth'
 import { readJSON, DB_FILES } from '@/lib/db'
 
+import { headers } from 'next/headers'
+
 export default async function ManagementLayout({
   children,
 }: {
@@ -23,8 +25,12 @@ export default async function ManagementLayout({
     reports: true,
   }
 
-  // POS-dedicated roles (billing/kitchen/waiter) see only their page — no sidebar
-  if (session?.posRole) {
+  const headerList = await headers().catch(() => null)
+  const pathname = headerList?.get('x-pathname') || ''
+  const isPosRoute = pathname.startsWith('/management/pos')
+
+  // POS-dedicated roles (billing/kitchen/waiter) and POS station routes see full-screen station — no sidebar
+  if (session?.posRole || isPosRoute) {
     return (
       <main className="h-screen w-full overflow-y-auto">
         {children}

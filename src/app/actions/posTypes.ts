@@ -102,6 +102,7 @@ export type CatalogItem = {
   variantId?: string
   name: string
   categoryId: string
+  categoryName?: string
   effectivePrice: number  // integer rupees — branch override or basePrice
   dietary?: string
   prepTimeMins?: number

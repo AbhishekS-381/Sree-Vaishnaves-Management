@@ -31,6 +31,10 @@ vi.mock('@/app/actions/pos', () => ({
   getDailySummary: vi.fn(),
 }))
 
+vi.mock('@/app/actions/auth', () => ({
+  logout: vi.fn(),
+}))
+
 describe('PosClientPage Component Tests', () => {
   const branches = [
     { id: 'br-1', name: 'Main Branch' },
@@ -768,4 +772,117 @@ describe('PosClientPage Component Tests', () => {
       )
     })
   })
+
+  // ── Print Bill Feature ──
+  describe('Print Bill during Payment Phase', () => {
+    it('renders Print Bill button in order drawer when billed order is selected', () => {
+      render(
+        <PosClientPage
+          branches={branches}
+          activeBranchId="br-1"
+          initialData={initialData}
+          staleOrders={[]}
+          session={adminSession}
+          posDefaultGstPercent={5}
+        />
+      )
+      fireEvent.click(screen.getByText('Table 2'))
+      expect(screen.getByRole('button', { name: 'Print Bill' })).toBeDefined()
+    })
+
+    it('clicking Print Bill opens ReceiptPrintModal with bill details', () => {
+      render(
+        <PosClientPage
+          branches={branches}
+          activeBranchId="br-1"
+          initialData={initialData}
+          staleOrders={[]}
+          session={adminSession}
+          posDefaultGstPercent={5}
+        />
+      )
+      fireEvent.click(screen.getByText('Table 2'))
+      fireEvent.click(screen.getByRole('button', { name: 'Print Bill' }))
+
+      expect(screen.getByText('Customer Bill')).toBeDefined()
+      expect(screen.getAllByText(/SREE VAISHNAVES/i).length).toBeGreaterThan(0)
+    })
+
+    it('renders Print Bill Preview and Settle & Print button in Payment Modal', () => {
+      render(
+        <PosClientPage
+          branches={branches}
+          activeBranchId="br-1"
+          initialData={initialData}
+          staleOrders={[]}
+          session={adminSession}
+          posDefaultGstPercent={5}
+        />
+      )
+      fireEvent.click(screen.getByText('Table 2'))
+      fireEvent.click(screen.getByRole('button', { name: /Settle Payment/i }))
+
+      expect(screen.getByRole('button', { name: /Print Bill Preview/i })).toBeDefined()
+      expect(screen.getByRole('button', { name: /Settle & Print/i })).toBeDefined()
+      expect(screen.getByLabelText(/Print receipt automatically on settlement/i)).toBeDefined()
+    })
+  })
+
+  // ── Station Navigation & Logout (Goal Requirements 2 & 3) ──
+  describe('Station Navigation & Logout Controls', () => {
+    it('renders Kitchen, Order, Billing, History, and Dashboard navigation buttons for admin/owner', () => {
+      render(
+        <PosClientPage
+          branches={branches}
+          activeBranchId="br-1"
+          initialData={initialData}
+          staleOrders={[]}
+          session={adminSession}
+          posDefaultGstPercent={5}
+        />
+      )
+
+      const kitchenLink = screen.getByRole('link', { name: /Kitchen/i })
+      expect(kitchenLink).toBeDefined()
+      expect(kitchenLink.getAttribute('href')).toContain('/management/pos/kitchen')
+
+      const orderLink = screen.getByRole('link', { name: /Order/i })
+      expect(orderLink).toBeDefined()
+      expect(orderLink.getAttribute('href')).toContain('/management/pos/order')
+
+      const billingLink = screen.getByRole('link', { name: /Billing/i })
+      expect(billingLink).toBeDefined()
+      expect(billingLink.getAttribute('href')).toContain('/management/pos/billing')
+
+      const historyLink = screen.getByRole('link', { name: /History/i })
+      expect(historyLink).toBeDefined()
+      expect(historyLink.getAttribute('href')).toContain('/management/pos/history')
+
+      const dashboardLink = screen.getByRole('link', { name: /Dashboard/i })
+      expect(dashboardLink).toBeDefined()
+      expect(dashboardLink.getAttribute('href')).toBe('/management')
+    })
+
+    it('renders Logout button and clicking it triggers logout', async () => {
+      const { logout } = await import('@/app/actions/auth')
+
+      render(
+        <PosClientPage
+          branches={branches}
+          activeBranchId="br-1"
+          initialData={initialData}
+          staleOrders={[]}
+          session={adminSession}
+          posDefaultGstPercent={5}
+        />
+      )
+
+      const logoutBtn = screen.getByRole('button', { name: /Logout/i })
+      expect(logoutBtn).toBeDefined()
+
+      fireEvent.click(logoutBtn)
+      expect(logout).toHaveBeenCalled()
+    })
+  })
 })
+

@@ -98,6 +98,12 @@ export async function getTodayPosData(branchId: string) {
   const allMenuItems = await readJSON<MenuItem>(DB_FILES.MENU).catch(() => [])
   const activeMenuItems = allMenuItems.filter(m => m.isActive === true)
 
+  const allCategories = await readJSON<{ id: string; name: string }>(DB_FILES.MENU_CATEGORIES).catch(() => [])
+  const categoryMap = new Map<string, string>()
+  for (const c of allCategories) {
+    categoryMap.set(c.id, c.name)
+  }
+
   const branchRows = await readBranchMenuItems<BranchMenuItemRow>(enforcedBranchId)
 
   // Build a lookup map for branch overrides (only item-level rows, no variantId)
@@ -125,6 +131,7 @@ export async function getTodayPosData(branchId: string) {
       menuItemId: item.id,
       name: item.name,
       categoryId: item.categoryId,
+      categoryName: categoryMap.get(item.categoryId) || undefined,
       effectivePrice,
       dietary: item.dietary,
       prepTimeMins: item.prepTimeMins,
@@ -154,11 +161,13 @@ export async function getTodayPosData(branchId: string) {
       ? variantBranchRow.price
       : v.basePrice
 
+    const parentCatId = parentItem?.categoryId ?? ''
     catalog.push({
       menuItemId: v.menuItemId,
       variantId: v.id,
       name: `${parentItem?.name ?? ''} - ${v.name}`,
-      categoryId: parentItem?.categoryId ?? '',
+      categoryId: parentCatId,
+      categoryName: categoryMap.get(parentCatId) || undefined,
       effectivePrice,
       dietary: parentItem?.dietary,
       prepTimeMins: parentItem?.prepTimeMins,

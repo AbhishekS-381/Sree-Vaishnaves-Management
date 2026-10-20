@@ -41,6 +41,22 @@ describe('proxy.ts (route protection)', () => {
     expect(res.status).toBe(200) // next()
   })
 
+  it.each([
+    ['http://localhost/kitchen', '/management/pos/kitchen'],
+    ['http://localhost/kitchen/1', '/management/pos/kitchen/1'],
+    ['http://localhost/order', '/management/pos/order'],
+    ['http://localhost/order/1', '/management/pos/order/1'],
+    ['http://localhost/billing', '/management/pos/billing'],
+    ['http://localhost/billing/1', '/management/pos/billing/1'],
+    ['http://localhost/pos', '/management/pos'],
+    ['http://localhost/pos/1', '/management/pos/1'],
+  ])('redirects friendly short alias %s to %s', async (url, expectedLocation) => {
+    const req = makeRequest(url)
+    const res = await proxy(req)
+    expect(res.status).toBe(307)
+    expect(res.headers.get('location')).toContain(expectedLocation)
+  })
+
   it('redirects logged-in user away from /management/login', async () => {
     const { jwtVerify } = await import('jose')
     vi.mocked(jwtVerify).mockResolvedValue({ payload: { role: 'owner', isGlobalOwner: true } } as any)

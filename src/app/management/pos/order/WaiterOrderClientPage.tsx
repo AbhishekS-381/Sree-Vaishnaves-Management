@@ -2,6 +2,7 @@
 
 import React, { useState, useTransition, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import {
   UtensilsCrossed,
   Flame,
@@ -10,7 +11,10 @@ import {
   ShoppingBag,
   AlertTriangle,
   Tag,
+  LogOut,
+  LayoutDashboard,
 } from 'lucide-react'
+import { logout } from '@/app/actions/auth'
 import { useToast, ToastStack } from '@/components/Toast'
 import type {
   PosTable,
@@ -41,12 +45,14 @@ export default function WaiterOrderClientPage({
   initialData,
   staleOrders,
   session,
+  categoryMap = {},
 }: {
   branches?: { id: string; name: string }[]
   activeBranchId: string
   initialData: PosInitialData
   staleOrders: StaleOrder[]
   session: { userId: string; name: string; role: string; isGlobalAdmin?: boolean }
+  categoryMap?: Record<string, string>
 }) {
   const router = useRouter()
   const { messages, dismiss, success, error } = useToast()
@@ -128,14 +134,22 @@ export default function WaiterOrderClientPage({
     return false
   }, [selectedOrder, activeOrderKots])
 
-  // Catalog categories
+  // Catalog categories: array of { id: string; name: string }
   const categories = useMemo(() => {
-    const set = new Set<string>()
+    const map = new Map<string, string>()
     catalog.forEach(item => {
-      if (item.categoryId) set.add(item.categoryId)
+      if (item.categoryId) {
+        const name =
+          categoryMap[item.categoryId] ||
+          item.categoryName ||
+          item.categoryId
+        map.set(item.categoryId, name)
+      }
     })
-    return Array.from(set)
-  }, [catalog])
+    return Array.from(map.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [catalog, categoryMap])
 
   const filteredCatalog = useMemo(() => {
     return catalog.filter(item => {
@@ -307,18 +321,53 @@ export default function WaiterOrderClientPage({
           </div>
         </div>
 
-        <button
-          onClick={() => {
-            setTargetTableId(null)
-            setOrderTypeSelection('takeaway')
-            setNewOrderNote('')
-            setIsNewOrderModalOpen(true)
-          }}
-          className="flex items-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold rounded-xl transition-all shadow-md shadow-amber-600/20"
-        >
-          <ShoppingBag className="w-4 h-4" />
-          New Takeaway Order
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {session.role !== 'waiter' && (
+            <>
+              <Link
+                href={activeBranchId ? `/management/pos?branch=${activeBranchId}` : '/management/pos'}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-sm font-semibold rounded-xl transition-all"
+                title="POS Register"
+              >
+                <UtensilsCrossed className="w-4 h-4 text-amber-400" />
+                <span>POS</span>
+              </Link>
+              {Boolean(session.isGlobalAdmin || session.role === 'admin' || session.role === 'owner') && (
+                <Link
+                  href="/management"
+                  className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-sm font-semibold rounded-xl transition-all"
+                  title="Back to Management Portal"
+                >
+                  <LayoutDashboard className="w-4 h-4 text-indigo-400" />
+                  <span className="hidden lg:inline">Dashboard</span>
+                </Link>
+              )}
+            </>
+          )}
+
+          <button
+            onClick={() => {
+              setTargetTableId(null)
+              setOrderTypeSelection('takeaway')
+              setNewOrderNote('')
+              setIsNewOrderModalOpen(true)
+            }}
+            className="flex items-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold rounded-xl transition-all shadow-md shadow-amber-600/20"
+          >
+            <ShoppingBag className="w-4 h-4" />
+            New Takeaway Order
+          </button>
+
+          {/* Logout Button (Req 2) */}
+          <button
+            onClick={() => logout()}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-sm font-semibold rounded-xl transition-all"
+            title="Logout from Order Station"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>Logout</span>
+          </button>
+        </div>
       </div>
 
       {/* Stale Orders Warning (Informational, non-blocking per Req 10.3) */}
@@ -386,8 +435,18 @@ export default function WaiterOrderClientPage({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-              {tables.map(table => {
+            {tables.length === 0 ? (
+              <div className="flex flex-col items-center justify-center p-8 bg-slate-950/40 border border-dashed border-slate-800 rounded-xl text-center">
+                <Layers className="w-8 h-8 text-slate-600 mb-2" />
+                <p className="text-sm font-semibold text-slate-300">No tables configured for this branch</p>
+                <p className="text-xs text-slate-500 max-w-sm mt-1">
+                  Ask a branch manager or administrator to configure dining tables in the POS Register or management portal.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                {tables.map(table => {
+
                 const existingOrder = openOrdersByTable.get(table.id)
                 const isOccupied = !!existingOrder
                 const isMyOrder = isOccupied && (!isWaiter || existingOrder.openedBy === session.userId)
@@ -434,7 +493,9 @@ export default function WaiterOrderClientPage({
                 )
               })}
             </div>
+            )}
           </div>
+
         </div>
 
         {/* Right Column: Order Panel & Menu Catalog */}
@@ -619,8 +680,8 @@ export default function WaiterOrderClientPage({
                     >
                       <option value="all">All</option>
                       {categories.map(c => (
-                        <option key={c} value={c}>
-                          {c}
+                        <option key={c.id} value={c.id}>
+                          {c.name}
                         </option>
                       ))}
                     </select>

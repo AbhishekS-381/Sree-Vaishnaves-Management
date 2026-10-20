@@ -3,7 +3,24 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import PosHistoryClientPage from '@/app/management/pos/history/PosHistoryClientPage'
 import type { PosOrder } from '@/app/actions/posTypes'
 
-vi.mock('lucide-react')
+vi.mock('lucide-react', () => {
+  const MockIcon = () => null
+  return {
+    __esModule: true,
+    ArrowLeft: MockIcon,
+    ChevronDown: MockIcon,
+    ChevronUp: MockIcon,
+    Search: MockIcon,
+    Receipt: MockIcon,
+    Printer: MockIcon,
+    X: MockIcon,
+    Check: MockIcon,
+    Copy: MockIcon,
+    SlidersHorizontal: MockIcon,
+    LayoutDashboard: MockIcon,
+    LogOut: MockIcon,
+  }
+})
 
 const { posActions } = vi.hoisted(() => ({
   posActions: {
@@ -422,6 +439,21 @@ describe('PosHistoryClientPage Component Tests', () => {
     expect(screen.getByText('Void Information:')).toBeDefined()
     expect(screen.getByText(/Guest cancelled before prep/)).toBeDefined()
     expect(screen.getByText(/Voided by: Abhishek/)).toBeDefined()
+  })
+
+  it('expanded view renders Print Receipt button and opens ReceiptPrintModal', async () => {
+    render(<PosHistoryClientPage branches={branches} tableMap={tableMap} userMap={userMap} />)
+    await waitFor(() => {
+      expect(screen.getByText('Table 1')).toBeDefined()
+    })
+
+    fireEvent.click(screen.getByText('Table 1'))
+    const printBtn = screen.getByRole('button', { name: /Print Receipt/i })
+    expect(printBtn).toBeDefined()
+    fireEvent.click(printBtn)
+
+    expect(screen.getByText('Customer Receipt')).toBeDefined()
+    expect(screen.getAllByText(/\*\*\* DUPLICATE \/ REPRINT \*\*\*/i).length).toBeGreaterThan(0)
   })
 
   // ── Empty State ──

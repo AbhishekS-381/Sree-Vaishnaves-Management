@@ -92,3 +92,33 @@ export function computePosEodData(orders: PosOrder[]): PosEodData {
   }
 }
 
+/**
+ * Resolves a branch identifier from route param or search query.
+ * Supports exact branch ID, 1-based index (e.g. "1" -> branches[0], "2" -> branches[1]),
+ * case-insensitive branch name match, or fallbackId.
+ */
+export function resolvePosBranchId(
+  param: string | undefined,
+  branches: { id: string; name?: string }[],
+  fallbackId: string
+): string {
+  if (!param) return fallbackId
+  const trimmed = param.trim()
+  if (!trimmed) return fallbackId
+
+  // 1. Direct match on branch id
+  const exact = branches.find(b => b.id === trimmed)
+  if (exact) return exact.id
+
+  // 2. Numeric 1-based index (e.g. "1" -> branches[0], "2" -> branches[1])
+  const num = parseInt(trimmed, 10)
+  if (!isNaN(num) && num >= 1 && num <= branches.length) {
+    return branches[num - 1].id
+  }
+
+  // 3. Case-insensitive branch name match
+  const byName = branches.find(b => b.name && b.name.toLowerCase() === trimmed.toLowerCase())
+  if (byName) return byName.id
+
+  return fallbackId
+}

@@ -6,17 +6,21 @@ import type { Config } from '@/app/actions/config'
 import type { PosOrder, PosTable } from '@/app/actions/posTypes'
 import WaiterOrderClientPage from './WaiterOrderClientPage'
 
+import { resolvePosBranchId } from '@/lib/posUtils'
+
 function todayIST(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
 }
 
-export default async function WaiterOrderPage({
-  searchParams,
-}: {
+export async function loadWaiterOrderPage(
+  branchParam?: string,
   searchParams?: Promise<{ branch?: string }>
-}) {
+) {
   const session = await getSession()
-  if (!session) redirect('/management/login')
+  if (!session) {
+    redirect('/management/login')
+    return null as any
+  }
 
   // Allowed roles: waiter, manager, owner, admin
   if (!['waiter', 'manager', 'owner', 'admin'].includes(session.role)) {
@@ -32,15 +36,18 @@ export default async function WaiterOrderPage({
   let allBranches = await readJSON<{ id: string; name: string; isActive?: boolean }>(DB_FILES.BRANCHES).catch(() => [])
   allBranches = allBranches.filter(b => b.isActive !== false)
 
-  if (!session.isGlobalAdmin) {
+  const isGlobalAdmin = Boolean(session.isGlobalAdmin || session.role === 'admin' || session.role === 'owner')
+
+  if (!isGlobalAdmin) {
     allBranches = allBranches.filter(b => b.id === session.branchId)
   }
 
   const resolvedParams = searchParams ? await searchParams : undefined
-  const requestedBranch = resolvedParams?.branch
-  const activeBranchId = (session.isGlobalAdmin && requestedBranch && allBranches.some(b => b.id === requestedBranch))
-    ? requestedBranch
-    : (session.isGlobalAdmin ? allBranches[0]?.id : session.branchId) || ''
+  const requestedBranch = branchParam || resolvedParams?.branch
+  const fallbackBranchId = (isGlobalAdmin ? allBranches[0]?.id : session.branchId) || ''
+  const activeBranchId = isGlobalAdmin
+    ? resolvePosBranchId(requestedBranch, allBranches, fallbackBranchId)
+    : (session.branchId || fallbackBranchId)
 
   if (!activeBranchId) {
     redirect('/management')
@@ -64,6 +71,9 @@ export default async function WaiterOrderPage({
       tableName: o.tableId ? tableMap.get(o.tableId) || 'Table' : o.takeawayNumber || 'Takeaway',
     }))
 
+  const allCategories = await readJSON<{ id: string; name: string }>(DB_FILES.MENU_CATEGORIES).catch(() => [])
+  const categoryMap = Object.fromEntries(allCategories.map(c => [c.id, c.name]))
+
   return (
     <WaiterOrderClientPage
       branches={allBranches}
@@ -71,6 +81,16 @@ export default async function WaiterOrderPage({
       initialData={todayDataResult}
       staleOrders={staleOrders}
       session={session}
+      categoryMap={categoryMap}
     />
   )
 }
+
+export default async function WaiterOrderPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ branch?: string }>
+}) {
+  return loadWaiterOrderPage(undefined, searchParams)
+}
+

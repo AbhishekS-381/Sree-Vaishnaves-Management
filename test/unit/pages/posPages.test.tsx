@@ -31,6 +31,10 @@ vi.mock('next/navigation', () => ({
   useRouter: () => navMocks,
 }))
 
+vi.mock('@/app/actions/auth', () => ({
+  logout: vi.fn(),
+}))
+
 describe('BillingClientPage Component Tests (Task 10.6, Req 14.5, 14.8)', () => {
   const branches = [{ id: 'b1', name: 'Main Branch' }]
   const session = { userId: 'u_bill', name: 'Cashier Alice', role: 'billing' }
@@ -305,4 +309,52 @@ describe('WaiterOrderClientPage Component Tests (Task 10.2, Req 16.5, 16.6, 16.8
     // Cost price is never rendered
     expect(container.textContent).not.toContain('Cost Price')
   })
+
+  it('renders Logout button on WaiterOrderClientPage and clicking it calls logout', async () => {
+    const { logout } = await import('@/app/actions/auth')
+    render(
+      <WaiterOrderClientPage
+        branches={branches}
+        activeBranchId="b1"
+        initialData={{
+          tables: [],
+          orders: [],
+          kots: [],
+          catalog: [],
+          todayIST: '2026-10-19',
+        }}
+        staleOrders={[]}
+        session={waiterSession}
+      />
+    )
+
+    const logoutBtn = screen.getByRole('button', { name: /Logout/i })
+    expect(logoutBtn).toBeDefined()
+    fireEvent.click(logoutBtn)
+    expect(logout).toHaveBeenCalled()
+  })
+
+  it('renders POS and Dashboard link on KitchenClientPage for admin/owner', () => {
+    const adminSession = { userId: 'u_admin', name: 'Boss', role: 'admin', isGlobalAdmin: true }
+    render(
+      <KitchenClientPage
+        branchId="b1"
+        initialActiveKots={[]}
+        initialServedKots={[]}
+        session={adminSession}
+      />
+    )
+
+    const posLink = screen.getByRole('link', { name: /POS/i })
+    expect(posLink).toBeDefined()
+    expect(posLink.getAttribute('href')).toContain('/management/pos')
+
+    const dashboardLink = screen.getByRole('link', { name: /Dashboard/i })
+    expect(dashboardLink).toBeDefined()
+    expect(dashboardLink.getAttribute('href')).toBe('/management')
+
+    const logoutBtn = screen.getByRole('button', { name: /Logout/i })
+    expect(logoutBtn).toBeDefined()
+  })
 })
+

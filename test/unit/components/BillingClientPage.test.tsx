@@ -19,6 +19,10 @@ vi.mock('@/app/actions/pos', () => ({
   generateBill: vi.fn(),
 }))
 
+vi.mock('@/app/actions/auth', () => ({
+  logout: vi.fn(),
+}))
+
 describe('BillingClientPage Component Tests', () => {
   const branches = [
     { id: 'br-1', name: 'Main Branch' },
@@ -936,4 +940,163 @@ describe('BillingClientPage Component Tests', () => {
       expect(screen.getByText('Cannot bill empty order')).toBeDefined()
     })
   })
+
+  // ── Print Bill during Payment Phase ──
+  describe('Print Bill during Payment Phase', () => {
+    it('renders Print Bill button in settlement panel for billed order', () => {
+      render(
+        <BillingClientPage
+          branches={branches}
+          activeBranchId="br-1"
+          billedOrders={sampleBilledOrders}
+          paidOrders={samplePaidOrders}
+          openOrders={sampleOpenOrders}
+          tableMap={tableMap}
+          session={cashierSession}
+          posDefaultGstPercent={5}
+        />
+      )
+
+      expect(screen.getByRole('button', { name: 'Print Bill' })).toBeDefined()
+    })
+
+    it('opens ReceiptPrintModal when clicking Print Bill button', () => {
+      render(
+        <BillingClientPage
+          branches={branches}
+          activeBranchId="br-1"
+          billedOrders={sampleBilledOrders}
+          paidOrders={samplePaidOrders}
+          openOrders={sampleOpenOrders}
+          tableMap={tableMap}
+          session={cashierSession}
+          posDefaultGstPercent={5}
+        />
+      )
+
+      fireEvent.click(screen.getByRole('button', { name: 'Print Bill' }))
+      expect(screen.getByText('Customer Bill')).toBeDefined()
+      expect(screen.getAllByText(/SREE VAISHNAVES/i).length).toBeGreaterThan(0)
+    })
+
+    it('renders Settle & Print Bill button and print checkbox in settlement form', () => {
+      render(
+        <BillingClientPage
+          branches={branches}
+          activeBranchId="br-1"
+          billedOrders={sampleBilledOrders}
+          paidOrders={samplePaidOrders}
+          openOrders={sampleOpenOrders}
+          tableMap={tableMap}
+          session={cashierSession}
+          posDefaultGstPercent={5}
+        />
+      )
+
+      expect(screen.getByRole('button', { name: /Settle & Print Bill/i })).toBeDefined()
+      expect(screen.getByLabelText(/Print receipt automatically on settlement/i)).toBeDefined()
+    })
+
+    it('clicking Settle & Print Bill records payment and triggers receipt print modal', async () => {
+      posActions.recordPayment.mockResolvedValueOnce({ success: true, changeDue: 0 })
+
+      render(
+        <BillingClientPage
+          branches={branches}
+          activeBranchId="br-1"
+          billedOrders={sampleBilledOrders}
+          paidOrders={samplePaidOrders}
+          openOrders={sampleOpenOrders}
+          tableMap={tableMap}
+          session={cashierSession}
+          posDefaultGstPercent={5}
+        />
+      )
+
+      fireEvent.click(screen.getByRole('button', { name: /Settle & Print Bill/i }))
+
+      await waitFor(() => {
+        expect(posActions.recordPayment).toHaveBeenCalled()
+        expect(screen.getByText('Customer Receipt')).toBeDefined()
+      })
+    })
+
+    it('allows reprinting from settled transactions list', () => {
+      render(
+        <BillingClientPage
+          branches={branches}
+          activeBranchId="br-1"
+          billedOrders={sampleBilledOrders}
+          paidOrders={samplePaidOrders}
+          openOrders={sampleOpenOrders}
+          tableMap={tableMap}
+          session={cashierSession}
+          posDefaultGstPercent={5}
+        />
+      )
+
+      const reprintButtons = screen.getAllByRole('button', { name: /Reprint receipt/i })
+      expect(reprintButtons.length).toBeGreaterThan(0)
+      fireEvent.click(reprintButtons[0])
+
+      expect(screen.getByText('Customer Receipt')).toBeDefined()
+      expect(screen.getAllByText(/\*\*\* DUPLICATE \/ REPRINT \*\*\*/i).length).toBeGreaterThan(0)
+    })
+  })
+
+  describe('Billing Logout and Navigation Controls (Goal Requirement 2)', () => {
+    it('renders Logout button and clicking it calls logout', async () => {
+      const { logout } = await import('@/app/actions/auth')
+
+      render(
+        <BillingClientPage
+          branches={branches}
+          activeBranchId="br-1"
+          billedOrders={[]}
+          paidOrders={[]}
+          openOrders={[]}
+          tableMap={tableMap}
+          session={cashierSession}
+          posDefaultGstPercent={5}
+        />
+      )
+
+      const logoutBtn = screen.getByRole('button', { name: /Logout/i })
+      expect(logoutBtn).toBeDefined()
+
+      fireEvent.click(logoutBtn)
+      expect(logout).toHaveBeenCalled()
+    })
+
+    it('renders POS and Dashboard link when session is admin/owner', () => {
+      const adminSession = {
+        userId: 'u-admin',
+        name: 'Manager Bob',
+        role: 'manager',
+        isGlobalAdmin: true,
+      }
+
+      render(
+        <BillingClientPage
+          branches={branches}
+          activeBranchId="br-1"
+          billedOrders={[]}
+          paidOrders={[]}
+          openOrders={[]}
+          tableMap={tableMap}
+          session={adminSession}
+          posDefaultGstPercent={5}
+        />
+      )
+
+      const posLink = screen.getByRole('link', { name: /POS/i })
+      expect(posLink).toBeDefined()
+      expect(posLink.getAttribute('href')).toContain('/management/pos')
+
+      const dashboardLink = screen.getByRole('link', { name: /Dashboard/i })
+      expect(dashboardLink).toBeDefined()
+      expect(dashboardLink.getAttribute('href')).toBe('/management')
+    })
+  })
 })
+

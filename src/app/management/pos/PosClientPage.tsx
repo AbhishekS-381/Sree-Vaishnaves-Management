@@ -21,7 +21,11 @@ import {
   Layers,
   AlertTriangle,
   Tag,
+  Printer,
+  LayoutDashboard,
+  LogOut,
 } from 'lucide-react'
+import { logout } from '@/app/actions/auth'
 import { useToast, ToastStack } from '@/components/Toast'
 import type {
   PosTable,
@@ -29,6 +33,7 @@ import type {
   PosKot,
   CatalogItem,
 } from '@/app/actions/posTypes'
+import { ReceiptPrintModal } from '@/components/ReceiptPrintModal'
 import {
   createTable,
   renameTable,
@@ -64,7 +69,7 @@ export default function PosClientPage({
   session,
   posDefaultGstPercent,
 }: {
-  branches: { id: string; name: string }[]
+  branches: { id: string; name: string; address?: string; phone?: string }[]
   activeBranchId: string
   initialData: PosInitialData | null
   staleOrders: StaleOrder[]
@@ -74,6 +79,7 @@ export default function PosClientPage({
   const router = useRouter()
   const { messages, dismiss, success, error } = useToast()
   const [isPending, startTransition] = useTransition()
+  const isOwnerOrAdmin = Boolean(session.isGlobalAdmin || session.role === 'admin' || session.role === 'owner')
 
   // State
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null)
@@ -108,6 +114,25 @@ export default function PosClientPage({
   const [splitUpi, setSplitUpi] = useState<number>(0)
   const [cashTendered, setCashTendered] = useState<number>(0)
   const [changeDueDisplay, setChangeDueDisplay] = useState<number | null>(null)
+
+  // Receipt Print Modal state (Payment Phase)
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false)
+  const [printOrder, setPrintOrder] = useState<PosOrder | null>(null)
+  const [isReprintMode, setIsReprintMode] = useState(false)
+  const [autoPrintTrigger, setAutoPrintTrigger] = useState(false)
+  const [autoPrintOnPayment, setAutoPrintOnPayment] = useState(true)
+  const [isSettleAndPrintPayment, setIsSettleAndPrintPayment] = useState(false)
+
+  const currentBranch = useMemo(() => {
+    return branches.find(b => b.id === activeBranchId) || branches[0] || null
+  }, [branches, activeBranchId])
+
+  const handleOpenPrintModal = (order: PosOrder, isReprint = false, autoPrint = false) => {
+    setPrintOrder(order)
+    setIsReprintMode(isReprint)
+    setAutoPrintTrigger(autoPrint)
+    setIsPrintModalOpen(true)
+  }
 
   // Void modal
   const [isVoidModalOpen, setIsVoidModalOpen] = useState(false)
@@ -427,6 +452,10 @@ export default function PosClientPage({
   const handleRecordPaymentSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!selectedOrder) return
+
+    const orderToSettle = selectedOrder
+    const shouldPrint = isSettleAndPrintPayment || autoPrintOnPayment
+
     const formData = new FormData()
     formData.set('orderId', selectedOrder.id)
     formData.set('method', paymentMethod)
@@ -452,6 +481,19 @@ export default function PosClientPage({
         success(`Payment recorded! Change Due: ₹${res?.changeDue ?? 0}`)
         setIsPaymentModalOpen(false)
         setSelectedOrderId(null)
+        if (shouldPrint && orderToSettle) {
+          const paidSnapshot: PosOrder = {
+            ...orderToSettle,
+            status: 'paid',
+            payment: {
+              method: paymentMethod,
+              cashAmount: paymentMethod === 'cash' ? (orderToSettle.bill?.totalPayable ?? 0) : (paymentMethod === 'split' ? splitCash : 0),
+              upiAmount: paymentMethod === 'upi' ? (orderToSettle.bill?.totalPayable ?? 0) : (paymentMethod === 'split' ? splitUpi : 0),
+              paidAt: new Date().toISOString(),
+            },
+          }
+          handleOpenPrintModal(paidSnapshot, false, true)
+        }
         router.refresh()
       }
     })
@@ -593,14 +635,50 @@ export default function PosClientPage({
             New Takeaway
           </button>
 
-          {session.isGlobalAdmin && (
-            <Link
-              href="/management/pos/history"
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-sm font-semibold rounded-xl transition-all"
-            >
-              <History className="w-4 h-4" />
-              History
-            </Link>
+          {/* Owner / Admin POS Station Navigation (Req 3) */}
+          {isOwnerOrAdmin && (
+            <>
+              <Link
+                href={activeBranchId ? `/management/pos/kitchen?branch=${activeBranchId}` : '/management/pos/kitchen'}
+                className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-sm font-semibold rounded-xl transition-all"
+                title="Kitchen Display System"
+              >
+                <Flame className="w-4 h-4 text-orange-400" />
+                <span>Kitchen</span>
+              </Link>
+              <Link
+                href={activeBranchId ? `/management/pos/order?branch=${activeBranchId}` : '/management/pos/order'}
+                className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-sm font-semibold rounded-xl transition-all"
+                title="Waiter Order Station"
+              >
+                <UtensilsCrossed className="w-4 h-4 text-amber-400" />
+                <span>Order</span>
+              </Link>
+              <Link
+                href={activeBranchId ? `/management/pos/billing?branch=${activeBranchId}` : '/management/pos/billing'}
+                className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-sm font-semibold rounded-xl transition-all"
+                title="Billing & Settlement"
+              >
+                <Receipt className="w-4 h-4 text-emerald-400" />
+                <span>Billing</span>
+              </Link>
+              <Link
+                href={activeBranchId ? `/management/pos/history?branch=${activeBranchId}` : '/management/pos/history'}
+                className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-sm font-semibold rounded-xl transition-all"
+                title="POS History"
+              >
+                <History className="w-4 h-4 text-purple-400" />
+                <span>History</span>
+              </Link>
+              <Link
+                href="/management"
+                className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-sm font-semibold rounded-xl transition-all"
+                title="Back to Management Portal"
+              >
+                <LayoutDashboard className="w-4 h-4 text-indigo-400" />
+                <span className="hidden lg:inline">Dashboard</span>
+              </Link>
+            </>
           )}
 
           <button
@@ -613,6 +691,16 @@ export default function PosClientPage({
             <DollarSign className="w-4 h-4 text-emerald-400" />
             Summary
             {isSummaryExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
+
+          {/* Logout Button (Req 2) */}
+          <button
+            onClick={() => logout()}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-sm font-semibold rounded-xl transition-all"
+            title="Logout from POS"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>Logout</span>
           </button>
         </div>
       </div>
@@ -1033,14 +1121,37 @@ export default function PosClientPage({
                       </button>
 
                       <button
+                        type="button"
+                        onClick={() => handleOpenPrintModal(selectedOrder, false, false)}
+                        className="flex items-center justify-center gap-1.5 py-2.5 px-3 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-amber-600/20"
+                        title="Print bill for customer"
+                      >
+                        <Printer className="w-4 h-4" />
+                        Print Bill
+                      </button>
+
+                      <button
                         onClick={handleOpenPaymentModal}
                         disabled={isPending}
-                        className="flex items-center justify-center gap-1.5 py-2.5 px-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-emerald-600/20"
+                        className="col-span-2 flex items-center justify-center gap-1.5 py-2.5 px-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-emerald-600/20"
                       >
                         <Receipt className="w-4 h-4" />
                         Settle Payment (₹{selectedOrder.bill?.totalPayable ?? 0})
                       </button>
                     </>
+                  )}
+
+                  {selectedOrder.status === 'paid' && (
+                    <div className="col-span-2">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenPrintModal(selectedOrder, true, false)}
+                        className="w-full flex items-center justify-center gap-1.5 py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold transition-all"
+                      >
+                        <Printer className="w-4 h-4 text-amber-400" />
+                        Print Receipt / Reprint
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
@@ -1466,18 +1577,49 @@ export default function PosClientPage({
                 </div>
               )}
 
+              <div className="flex justify-between items-center">
+                <button
+                  type="button"
+                  onClick={() => handleOpenPrintModal(selectedOrder, false, false)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 rounded-xl text-xs font-semibold transition-all"
+                >
+                  <Printer className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Print Bill Preview</span>
+                </button>
+              </div>
+
+              <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={autoPrintOnPayment}
+                  onChange={e => setAutoPrintOnPayment(e.target.checked)}
+                  className="w-4 h-4 rounded bg-slate-950 border-slate-700 text-emerald-500 focus:ring-emerald-500"
+                />
+                <span>Print receipt automatically on settlement</span>
+              </label>
+
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsPaymentModalOpen(false)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-semibold rounded-xl"
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isPending}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-xl shadow-md"
+                  onClick={() => setIsSettleAndPrintPayment(true)}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-xl shadow-md"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Settle & Print</span>
+                </button>
+                <button
+                  type="submit"
+                  disabled={isPending}
+                  onClick={() => setIsSettleAndPrintPayment(false)}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-md"
                 >
                   Complete Payment
                 </button>
@@ -1563,6 +1705,22 @@ export default function PosClientPage({
           </div>
         </div>
       )}
+
+      {/* Bill / Receipt Print Modal */}
+      <ReceiptPrintModal
+        isOpen={isPrintModalOpen}
+        onClose={() => setIsPrintModalOpen(false)}
+        order={printOrder}
+        branch={currentBranch}
+        tableName={
+          printOrder?.orderType === 'dine-in'
+            ? (tables.find(t => t.id === printOrder.tableId)?.name || (printOrder.tableId ? `Table ${printOrder.tableId}` : 'Table'))
+            : (printOrder?.takeawayNumber || 'Takeaway')
+        }
+        cashierName={session?.name}
+        isReprint={isReprintMode}
+        autoPrint={autoPrintTrigger}
+      />
     </div>
   )
 }

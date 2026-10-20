@@ -20,6 +20,36 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next()
   }
 
+  // ── Friendly POS short aliases (e.g. /kitchen, /kitchen/1, /order, /billing, /pos) ──
+  if (pathname === '/kitchen' || pathname === '/kitchen/') {
+    return NextResponse.redirect(new URL('/management/pos/kitchen', request.url))
+  }
+  if (pathname.startsWith('/kitchen/')) {
+    const sub = pathname.slice('/kitchen/'.length)
+    return NextResponse.redirect(new URL(`/management/pos/kitchen/${sub}`, request.url))
+  }
+  if (pathname === '/order' || pathname === '/order/') {
+    return NextResponse.redirect(new URL('/management/pos/order', request.url))
+  }
+  if (pathname.startsWith('/order/')) {
+    const sub = pathname.slice('/order/'.length)
+    return NextResponse.redirect(new URL(`/management/pos/order/${sub}`, request.url))
+  }
+  if (pathname === '/billing' || pathname === '/billing/') {
+    return NextResponse.redirect(new URL('/management/pos/billing', request.url))
+  }
+  if (pathname.startsWith('/billing/')) {
+    const sub = pathname.slice('/billing/'.length)
+    return NextResponse.redirect(new URL(`/management/pos/billing/${sub}`, request.url))
+  }
+  if (pathname === '/pos' || pathname === '/pos/') {
+    return NextResponse.redirect(new URL('/management/pos', request.url))
+  }
+  if (pathname.startsWith('/pos/')) {
+    const sub = pathname.slice('/pos/'.length)
+    return NextResponse.redirect(new URL(`/management/pos/${sub}`, request.url))
+  }
+
   // ── Only intercept /management/* routes ─────────────────────────
   // Everything else (static assets, API routes) passes through
   if (!pathname.startsWith('/management')) {
@@ -101,7 +131,14 @@ export async function proxy(request: NextRequest) {
   }
 
   // Logged in → add no-cache headers to prevent browser caching management pages
-  const response = NextResponse.next()
+  // Also pass x-pathname in request headers so layouts know the current path
+  const requestHeaders = new Headers(request.headers)
+  requestHeaders.set('x-pathname', pathname)
+  const response = NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  })
   response.headers.set(
     'Cache-Control',
     'no-store, no-cache, must-revalidate, proxy-revalidate'

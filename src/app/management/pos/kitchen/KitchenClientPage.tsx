@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import {
   Flame,
   CheckCircle2,
@@ -9,7 +10,11 @@ import {
   ChevronDown,
   ChevronUp,
   RefreshCw,
+  LogOut,
+  UtensilsCrossed,
+  LayoutDashboard,
 } from 'lucide-react'
+import { logout } from '@/app/actions/auth'
 import { useToast, ToastStack } from '@/components/Toast'
 import { advanceKotStatus, getKitchenKots } from '@/app/actions/pos'
 
@@ -165,6 +170,39 @@ export default function KitchenClientPage({
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
             Served ({servedKots.length})
             {isServedExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
+
+          {session.role !== 'kitchen' && (
+            <>
+              <Link
+                href={branchId ? `/management/pos?branch=${branchId}` : '/management/pos'}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-sm font-semibold rounded-xl transition-all"
+                title="POS Register"
+              >
+                <UtensilsCrossed className="w-4 h-4 text-amber-400" />
+                <span>POS</span>
+              </Link>
+              {Boolean(session.isGlobalAdmin || session.role === 'admin' || session.role === 'owner') && (
+                <Link
+                  href="/management"
+                  className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-sm font-semibold rounded-xl transition-all"
+                  title="Back to Management Portal"
+                >
+                  <LayoutDashboard className="w-4 h-4 text-indigo-400" />
+                  <span className="hidden lg:inline">Dashboard</span>
+                </Link>
+              )}
+            </>
+          )}
+
+          {/* Logout Button (Req 2) */}
+          <button
+            onClick={() => logout()}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-sm font-semibold rounded-xl transition-all"
+            title="Logout from POS"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>Logout</span>
           </button>
         </div>
       </div>

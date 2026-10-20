@@ -150,4 +150,38 @@ describe('posUtils.ts - POS capability helpers (Task 1.5)', () => {
       }
     })
   })
+
+  describe('resolvePosBranchId', () => {
+    const branches = [
+      { id: 'b_main', name: 'Main Branch' },
+      { id: 'b_second', name: 'Second Branch' },
+    ]
+
+    it('returns exact matching branch id', async () => {
+      const { resolvePosBranchId } = await import('@/lib/posUtils')
+      expect(resolvePosBranchId('b_second', branches, 'b_main')).toBe('b_second')
+    })
+
+    it('resolves 1-based index numbers correctly (e.g. "1" and "2")', async () => {
+      const { resolvePosBranchId } = await import('@/lib/posUtils')
+      expect(resolvePosBranchId('1', branches, 'b_fallback')).toBe('b_main')
+      expect(resolvePosBranchId('2', branches, 'b_fallback')).toBe('b_second')
+    })
+
+    it('resolves case-insensitive branch name match', async () => {
+      const { resolvePosBranchId } = await import('@/lib/posUtils')
+      expect(resolvePosBranchId('second branch', branches, 'b_fallback')).toBe('b_second')
+    })
+
+    it('falls back when param is undefined, empty, or out of range', async () => {
+      const { resolvePosBranchId } = await import('@/lib/posUtils')
+      expect(resolvePosBranchId(undefined, branches, 'b_fallback')).toBe('b_fallback')
+      expect(resolvePosBranchId('', branches, 'b_fallback')).toBe('b_fallback')
+      expect(resolvePosBranchId('   ', branches, 'b_fallback')).toBe('b_fallback')
+      expect(resolvePosBranchId('99', branches, 'b_fallback')).toBe('b_fallback')
+      expect(resolvePosBranchId('0', branches, 'b_fallback')).toBe('b_fallback')
+      expect(resolvePosBranchId('unknown', branches, 'b_fallback')).toBe('b_fallback')
+    })
+  })
 })
+

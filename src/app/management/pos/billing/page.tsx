@@ -5,17 +5,21 @@ import type { Config } from '@/app/actions/config'
 import type { PosOrder, PosTable } from '@/app/actions/posTypes'
 import BillingClientPage from './BillingClientPage'
 
+import { resolvePosBranchId } from '@/lib/posUtils'
+
 function todayIST(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
 }
 
-export default async function BillingPage({
-  searchParams,
-}: {
+export async function loadBillingPage(
+  branchParam?: string,
   searchParams?: Promise<{ branch?: string }>
-}) {
+) {
   const session = await getSession()
-  if (!session) redirect('/management/login')
+  if (!session) {
+    redirect('/management/login')
+    return null as any
+  }
 
   // Allowed roles: billing, manager, owner, admin
   if (!['billing', 'manager', 'owner', 'admin'].includes(session.role)) {
@@ -28,18 +32,21 @@ export default async function BillingPage({
     redirect('/management')
   }
 
-  let allBranches = await readJSON<{ id: string; name: string; isActive?: boolean }>(DB_FILES.BRANCHES).catch(() => [])
+  let allBranches = await readJSON<{ id: string; name: string; address?: string; phone?: string; isActive?: boolean }>(DB_FILES.BRANCHES).catch(() => [])
   allBranches = allBranches.filter(b => b.isActive !== false)
 
-  if (!session.isGlobalAdmin) {
+  const isGlobalAdmin = Boolean(session.isGlobalAdmin || session.role === 'admin' || session.role === 'owner')
+
+  if (!isGlobalAdmin) {
     allBranches = allBranches.filter(b => b.id === session.branchId)
   }
 
   const resolvedParams = searchParams ? await searchParams : undefined
-  const requestedBranch = resolvedParams?.branch
-  const activeBranchId = (session.isGlobalAdmin && requestedBranch && allBranches.some(b => b.id === requestedBranch))
-    ? requestedBranch
-    : (session.isGlobalAdmin ? allBranches[0]?.id : session.branchId) || ''
+  const requestedBranch = branchParam || resolvedParams?.branch
+  const fallbackBranchId = (isGlobalAdmin ? allBranches[0]?.id : session.branchId) || ''
+  const activeBranchId = isGlobalAdmin
+    ? resolvePosBranchId(requestedBranch, allBranches, fallbackBranchId)
+    : (session.branchId || fallbackBranchId)
 
   if (!activeBranchId) {
     redirect('/management')
@@ -82,3 +89,12 @@ export default async function BillingPage({
     />
   )
 }
+
+export default async function BillingPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ branch?: string }>
+}) {
+  return loadBillingPage(undefined, searchParams)
+}
+

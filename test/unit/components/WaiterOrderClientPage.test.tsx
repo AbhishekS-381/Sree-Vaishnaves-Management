@@ -723,4 +723,43 @@ describe('WaiterOrderClientPage Component Tests', () => {
       expect(mockRefresh).toHaveBeenCalled()
     })
   })
+
+  it('renders friendly empty state when branch has zero dining tables', () => {
+    render(
+      <WaiterOrderClientPage
+        activeBranchId="br-empty"
+        initialData={{ ...initialData, tables: [] }}
+        staleOrders={[]}
+        session={waiterSession}
+      />
+    )
+    expect(screen.getByText('No tables configured for this branch')).toBeDefined()
+  })
+
+  it('displays category names instead of category IDs in the category filter dropdown', () => {
+    const catalogWithUuids: CatalogItem[] = [
+      { menuItemId: 'm1', name: 'Paneer Tikka', effectivePrice: 200, categoryId: 'mcat_starters_id' },
+      { menuItemId: 'm5', name: 'Mango Lassi', effectivePrice: 70, categoryId: 'mcat_beverages_id', categoryName: 'Beverages' },
+    ]
+    const categoryMap = {
+      mcat_starters_id: 'Starters & Appetizers',
+    }
+
+    render(
+      <WaiterOrderClientPage
+        activeBranchId="br-1"
+        initialData={{ ...initialData, catalog: catalogWithUuids }}
+        staleOrders={[]}
+        session={waiterSession}
+        categoryMap={categoryMap}
+      />
+    )
+    fireEvent.click(screen.getByText('Table 1'))
+
+    // The options should display the human-readable names
+    expect(screen.getByRole('option', { name: 'Starters & Appetizers' })).toBeDefined()
+    expect(screen.getByRole('option', { name: 'Beverages' })).toBeDefined()
+    expect(screen.queryByRole('option', { name: 'mcat_starters_id' })).toBeNull()
+  })
 })
+

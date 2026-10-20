@@ -95,3 +95,61 @@ select option {
   background-color: var(--card-bg) !important;
   color: #ffffff !important;
 }
+
+/* ── POS Thermal Receipt Print Styling ───────────────────────────── */
+@media print {
+  html,
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
+  /* When printing a POS receipt, completely isolate the receipt and remove the entire web application UI */
+  body.pos-printing > *:not(#pos-print-receipt),
+  body:has(#pos-print-receipt) > *:not(#pos-print-receipt),
+  body.pos-printing main,
+  body:has(#pos-print-receipt) main,
+  body.pos-printing header,
+  body.pos-printing nav,
+  body.pos-printing aside,
+  body.pos-printing footer,
+  body.pos-printing [role="dialog"],
+  body.pos-printing #__next,
+  nav,
+  header,
+  aside,
+  footer,
+  [role="dialog"] {
+    display: none !important;
+  }
+
+  /* Thermal receipt styling: cleanly centered, no overlay or colliding with UI, crisp black on white */
+  body > #pos-print-receipt,
+  #pos-print-receipt {
+    display: block !important;
+    visibility: visible !important;
+    position: static !important;
+    margin: 0 auto !important;
+    padding: 4mm !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+  }
+
+  #pos-print-receipt * {
+    visibility: visible !important;
+    color: #000000 !important;
+    background: transparent !important;
+  }
+
+  @page {
+    margin: 4mm;
+    size: auto;
+  }
+}
+

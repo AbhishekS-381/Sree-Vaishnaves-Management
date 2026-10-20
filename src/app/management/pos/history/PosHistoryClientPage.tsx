@@ -8,10 +8,15 @@ import {
   ChevronUp,
   Search,
   Receipt,
+  Printer,
+  LayoutDashboard,
+  LogOut,
 } from 'lucide-react'
+import { logout } from '@/app/actions/auth'
 import { useToast, ToastStack } from '@/components/Toast'
 import { getPosOrderHistory } from '@/app/actions/pos'
 import type { PosOrder } from '@/app/actions/posTypes'
+import { ReceiptPrintModal } from '@/components/ReceiptPrintModal'
 
 function todayIST(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
@@ -45,6 +50,12 @@ export default function PosHistoryClientPage({
   } | null>(null)
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null)
   const [hasSearched, setHasSearched] = useState(false)
+
+  // Print Receipt Modal
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false)
+  const [printOrder, setPrintOrder] = useState<PosOrder | null>(null)
+
+  const activeBranch = branches.find(b => b.id === selectedBranchId) || branches[0] || null
 
   const fetchHistory = useCallback((branchId: string, from: string, to: string) => {
     if (!branchId || !from || !to) return
@@ -96,6 +107,27 @@ export default function PosHistoryClientPage({
               Query historical orders, revenue aggregates, and transaction audit trails
             </p>
           </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Link
+            href="/management"
+            className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-sm font-semibold rounded-xl transition-all"
+            title="Back to Management Portal"
+          >
+            <LayoutDashboard className="w-4 h-4 text-indigo-400" />
+            <span className="hidden sm:inline">Dashboard</span>
+          </Link>
+
+          {/* Logout Button (Req 2) */}
+          <button
+            onClick={() => logout()}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-sm font-semibold rounded-xl transition-all"
+            title="Logout from POS"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>Logout</span>
+          </button>
         </div>
       </div>
 
@@ -300,6 +332,22 @@ export default function PosHistoryClientPage({
                           </p>
                         </div>
                       )}
+
+                      {order.bill && (
+                        <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPrintOrder(order)
+                              setIsPrintModalOpen(true)
+                            }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-semibold transition-all shadow-sm active:scale-95"
+                          >
+                            <Printer className="w-3.5 h-3.5 text-amber-400" />
+                            <span>Print Receipt</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -308,6 +356,16 @@ export default function PosHistoryClientPage({
           </div>
         )}
       </div>
+
+      {/* Bill / Receipt Print Modal */}
+      <ReceiptPrintModal
+        isOpen={isPrintModalOpen}
+        onClose={() => setIsPrintModalOpen(false)}
+        order={printOrder}
+        branch={activeBranch}
+        tableName={printOrder?.orderType === 'dine-in' ? (tableMap[printOrder.tableId || ''] || 'Table') : (printOrder?.takeawayNumber || 'Takeaway')}
+        isReprint={true}
+      />
     </div>
   )
 }
