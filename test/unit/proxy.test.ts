@@ -166,7 +166,7 @@ describe('proxy.ts (route protection)', () => {
     expect(res.headers.get('location')).toContain('/management')
   })
 
-  it('redirects away from /management/pos/* if config is empty list', async () => {
+  it('fails open to page guard if config is empty list (e.g. Edge datastore read failure)', async () => {
     const { jwtVerify } = await import('jose')
     const { readJSON } = await import('@/lib/db')
     vi.mocked(jwtVerify).mockResolvedValue({ payload: { role: 'admin' } } as any)
@@ -174,8 +174,7 @@ describe('proxy.ts (route protection)', () => {
 
     const req = makeRequest('http://localhost/management/pos/kitchen', 'valid-token')
     const res = await proxy(req)
-    expect(res.status).toBe(307)
-    expect(res.headers.get('location')).toContain('/management')
+    expect(res.status).toBe(200)
   })
 
   it('fails open if readJSON throws when checking POS enabled', async () => {

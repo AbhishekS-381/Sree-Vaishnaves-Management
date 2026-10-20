@@ -102,8 +102,10 @@ export async function proxy(request: NextRequest) {
   if (pathname.startsWith('/management/pos')) {
     try {
       const configList = await readJSON<Config>(DB_FILES.CONFIG)
-      const isPosEnabled = configList.length > 0 && configList[0]?.pos === true
-      if (!isPosEnabled) {
+      // Only redirect if config was successfully loaded AND pos is explicitly false.
+      // If configList is empty (e.g. Edge datastore read failure or uninitialized),
+      // fail open to the page guard which runs in Node.js runtime with native Netlify DB.
+      if (configList.length > 0 && configList[0]?.pos === false) {
         return NextResponse.redirect(new URL('/management', request.url))
       }
     } catch {

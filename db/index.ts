@@ -4,7 +4,21 @@ import * as schema from "./schema";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let db: any;
 
-const dbUrl = process.env.DATABASE_URL || process.env.NETLIFY_DB_URL || "";
+function getDbUrl(): string {
+  if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
+  if (process.env.NETLIFY_DB_URL) return process.env.NETLIFY_DB_URL;
+  if (typeof (globalThis as any).Netlify !== "undefined" && (globalThis as any).Netlify?.env?.get) {
+    const u = (globalThis as any).Netlify.env.get("DATABASE_URL") || (globalThis as any).Netlify.env.get("NETLIFY_DB_URL");
+    if (u) return u;
+  }
+  if (typeof (globalThis as any).Deno !== "undefined" && (globalThis as any).Deno?.env?.get) {
+    const u = (globalThis as any).Deno.env.get("DATABASE_URL") || (globalThis as any).Deno.env.get("NETLIFY_DB_URL");
+    if (u) return u;
+  }
+  return "";
+}
+
+const dbUrl = getDbUrl();
 
 if (process.env.NETLIFY === "true" && process.env.NEXT_RUNTIME !== "edge") {
   // Use the native Netlify Database connection in production Node.js runtime.
