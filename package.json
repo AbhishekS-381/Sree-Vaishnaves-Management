@@ -18,7 +18,8 @@
     "test:integration": "playwright test",
     "test:all": "cross-env NODE_OPTIONS=--max-old-space-size=4096 vitest run && playwright test",
     "prepare": "husky",
-    "db:generate": "drizzle-kit generate --name rdbms_schema"
+    "db:generate": "drizzle-kit generate --name rdbms_schema",
+    "db:push": "drizzle-kit push"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
