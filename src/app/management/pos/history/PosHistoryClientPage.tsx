@@ -27,7 +27,7 @@ export default function PosHistoryClientPage({
   tableMap = {},
   userMap = {},
 }: {
-  branches: { id: string; name: string }[]
+  branches: { id: string; name: string; address?: string; phone?: string; gstin?: string }[]
   tableMap?: Record<string, string>
   userMap?: Record<string, string>
   session?: { userId: string; name: string; role: string; isGlobalAdmin?: boolean }
@@ -368,7 +368,7 @@ export default function PosHistoryClientPage({
         isOpen={isPrintModalOpen}
         onClose={() => setIsPrintModalOpen(false)}
         order={printOrder}
-        branch={activeBranch}
+        branch={(printOrder?.branchId ? branches.find(b => b.id === printOrder.branchId) : null) || activeBranch}
         tableName={printOrder?.orderType === 'dine-in' ? (tableMap[printOrder.tableId || ''] || 'Table') : (printOrder?.takeawayNumber || 'Takeaway')}
         isReprint={true}
       />

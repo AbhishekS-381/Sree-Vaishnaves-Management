@@ -58,7 +58,7 @@ export function formatThermalReceipt(order: PosOrder, options: ReceiptOptions = 
   // Header
   const restName = options.restaurantName || 'SREE VAISHNAVES'
   lines.push(centerText(restName, width))
-  if (options.branchName) {
+  if (options.branchName && options.branchName.trim().toLowerCase() !== restName.trim().toLowerCase()) {
     lines.push(centerText(options.branchName, width))
   }
   if (options.branchAddress) {

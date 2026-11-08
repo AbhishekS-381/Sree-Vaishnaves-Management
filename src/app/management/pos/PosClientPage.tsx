@@ -1948,7 +1948,7 @@ export default function PosClientPage({
         isOpen={isPrintModalOpen}
         onClose={() => setIsPrintModalOpen(false)}
         order={printOrder}
-        branch={currentBranch}
+        branch={(printOrder?.branchId ? branches.find(b => b.id === printOrder.branchId) : null) || currentBranch}
         tableName={
           printOrder?.orderType === 'dine-in'
             ? (tables.find(t => t.id === printOrder.tableId)?.name || (printOrder.tableId ? `Table ${printOrder.tableId}` : 'Table'))

@@ -827,7 +827,7 @@ export default function BillingClientPage({
         isOpen={isPrintModalOpen}
         onClose={() => setIsPrintModalOpen(false)}
         order={printOrder}
-        branch={currentBranch}
+        branch={(printOrder?.branchId ? branches?.find(b => b.id === printOrder.branchId) : null) || currentBranch}
         tableName={printOrder ? getOrderIdentifier(printOrder) : undefined}
         cashierName={session?.name}
         isReprint={isReprintMode}

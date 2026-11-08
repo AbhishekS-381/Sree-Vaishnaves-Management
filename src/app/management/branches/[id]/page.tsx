@@ -98,17 +98,17 @@ export default async function BranchDetailPage({ params }: { params: Promise<{ i
               <span className="font-medium">{branch.phone}</span>
             </div>
           </div>
-          {branch.gstin && (
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-amber-500/10 text-amber-400 rounded-lg border border-amber-500/20">
-                <FileText className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-xs text-slate-500">GSTIN</p>
-                <span className="font-medium font-mono">{branch.gstin}</span>
-              </div>
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-amber-500/10 text-amber-400 rounded-lg border border-amber-500/20">
+              <FileText className="h-5 w-5" />
             </div>
-          )}
+            <div>
+              <p className="text-xs text-slate-500">GSTIN</p>
+              <span className={`font-medium font-mono ${branch.gstin ? 'text-slate-200' : 'text-slate-500 italic'}`}>
+                {branch.gstin || 'Not Provided'}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 

@@ -92,6 +92,7 @@ export async function addBranch(prevState: any, formData: FormData) {
     })
 
     revalidatePath('/management/branches')
+    revalidatePath('/management/pos', 'layout')
     return { success: true }
   } catch (error) {
     console.error('Failed to add branch:', error)
@@ -178,6 +179,7 @@ export async function updateBranch(prevState: any, formData: FormData) {
 
     revalidatePath('/management/branches')
     revalidatePath(`/management/branches/${id}`)
+    revalidatePath('/management/pos', 'layout')
     return { success: true }
   } catch (error) {
     console.error('Failed to update branch:', error)
@@ -219,6 +221,7 @@ export async function deleteBranch(id: string) {
       .where(eq(branches.id, id))
 
     revalidatePath('/management/branches')
+    revalidatePath('/management/pos', 'layout')
     return { success: true }
   } catch (error) {
     console.error('Failed to delete branch:', error)

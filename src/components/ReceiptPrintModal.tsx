@@ -177,7 +177,7 @@ export function ReceiptPrintModal({
                 <h4 className="font-extrabold text-sm tracking-wide text-slate-950 uppercase">
                   SREE VAISHNAVES
                 </h4>
-                {branch?.name && (
+                {branch?.name && branch.name.trim().toLowerCase() !== 'sree vaishnaves' && (
                   <p className="text-[11px] font-semibold text-slate-700">{branch.name}</p>
                 )}
                 {branch?.address && (
@@ -372,7 +372,9 @@ export function ReceiptPrintModal({
           >
             <div className="text-center pb-2 border-b border-black">
               <p className="font-extrabold text-sm uppercase">SREE VAISHNAVES</p>
-              {branch?.name && <p className="text-[11px] font-semibold">{branch.name}</p>}
+              {branch?.name && branch.name.trim().toLowerCase() !== 'sree vaishnaves' && (
+                <p className="text-[11px] font-semibold">{branch.name}</p>
+              )}
               {branch?.address && <p className="text-[9px]">{branch.address}</p>}
               {branch?.phone && <p className="text-[9px]">Ph: {branch.phone}</p>}
               {branch?.gstin && <p className="text-[9px] font-semibold">GSTIN: {branch.gstin}</p>}

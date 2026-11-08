@@ -27,7 +27,14 @@ export default async function PosHistoryPage() {
 
   const [allBranches, allTables, allUsers] = await Promise.all([
     db
-      .select({ id: branchesTable.id, name: branchesTable.name, isActive: branchesTable.isActive })
+      .select({
+        id: branchesTable.id,
+        name: branchesTable.name,
+        address: branchesTable.address,
+        phone: branchesTable.phone,
+        gstin: branchesTable.gstin,
+        isActive: branchesTable.isActive,
+      })
       .from(branchesTable)
       .where(and(eq(branchesTable.isActive, true), isNull(branchesTable.deletedAt)))
       .catch(() => []),
@@ -55,7 +62,13 @@ export default async function PosHistoryPage() {
 
   return (
     <PosHistoryClientPage
-      branches={allBranches}
+      branches={allBranches.map((b) => ({
+        id: b.id,
+        name: b.name,
+        address: b.address ?? undefined,
+        phone: b.phone ?? undefined,
+        gstin: b.gstin ?? undefined,
+      }))}
       tableMap={tableMap}
       userMap={userMap}
       session={session}
