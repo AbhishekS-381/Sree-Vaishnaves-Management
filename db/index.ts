@@ -18,7 +18,7 @@ if (process.env.AIVEN_DATABASE_URL && !AIVEN_CA_CERT) {
 const sql = postgres(DATABASE_URL, {
   ssl: AIVEN_CA_CERT
     ? { rejectUnauthorized: true, ca: AIVEN_CA_CERT }
-    : undefined,
+    : (DATABASE_URL.includes('sslmode=require') || DATABASE_URL.includes('aivencloud.com') ? 'require' : false),
   max: 2,
   idle_timeout: 20,
   max_lifetime: 1800,
