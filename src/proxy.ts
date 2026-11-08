@@ -1,9 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { jwtVerify } from 'jose'
-import { db, config as configTable } from '@/lib/db'
-import { eq } from 'drizzle-orm'
-import { GLOBAL_CONFIG_ID } from '@/lib/configTypes'
 
 function getSecretKey() {
   if (!process.env.JWT_SECRET) {
@@ -96,42 +93,6 @@ export async function proxy(request: NextRequest) {
   // Not logged in → hitting any other /management/* route → redirect to login
   if (!isValidSession) {
     return NextResponse.redirect(new URL('/management/login', request.url))
-  }
-
-  // ── POS module enabled check ────────────────────────────────────
-  // Intercept direct access to /management/pos/* when POS is toggled off (Req 9.2)
-  // NOTE: On Netlify, middleware runs in the Edge runtime where raw TCP database connections
-  // to external databases are blocked or stall until connect_timeout (10s).
-  // In production Edge, skip the DB check in middleware so requests pass instantly (<1ms);
-  // the Node.js Server Component page guards on all POS routes enforce config.pos.
-  if (pathname.startsWith('/management/pos')) {
-    if (process.env.NEXT_RUNTIME !== 'edge') {
-      try {
-        const configRows = await db
-          .select()
-          .from(configTable)
-          .where(eq(configTable.id, GLOBAL_CONFIG_ID))
-          .limit(1)
-
-        const globalConfig = configRows[0] || {
-          attendance: true,
-          payroll: true,
-          vendors: true,
-          inventory: true,
-          menu: true,
-          reports: true,
-          pos: true,
-        }
-
-        // Only redirect if config was successfully loaded AND pos is explicitly false.
-        // If config row is missing or datastore errors, fail open to the page guard.
-        if (globalConfig?.pos === false) {
-          return NextResponse.redirect(new URL('/management', request.url))
-        }
-      } catch {
-        // Default fail-open to page guard if datastore read errors
-      }
-    }
   }
 
   // ── POS-dedicated role redirect enforcement ─────────────────────

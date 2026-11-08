@@ -235,33 +235,15 @@ describe('POS Settings, Navigation Guards, and User Management (Tasks 9.1–9.7)
     })
   })
 
-  // ─── 9.6 Proxy POS Module Toggle Guard ────────────────────────────
-  describe('proxy.ts - POS disabled redirect (Req 9.2)', () => {
-    it('redirects /management/pos/* to /management when config.pos is false', async () => {
+  // ─── 9.6 Proxy POS Route Pass-Through (Req 9.2 Guarded by Page Components) ──
+  describe('proxy.ts - POS Route Pass-Through (Req 9.2)', () => {
+    it('allows /management/pos requests to pass through to page guard for authenticated users', async () => {
       const { jwtVerify } = await import('jose')
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       vi.mocked(jwtVerify).mockResolvedValue({
         payload: { userId: 'u1', role: 'admin', isGlobalAdmin: true },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any)
-
-      mockDb.state.config = [{ id: 'global', pos: false }]
-
-      const req = makeRequest('http://localhost/management/pos/billing', 'valid-token')
-      const res = await proxy(req)
-      expect(res.status).toBe(307)
-      expect(res.headers.get('location')).toBe('http://localhost/management')
-    })
-
-    it('allows /management/pos access when config.pos is true', async () => {
-      const { jwtVerify } = await import('jose')
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      vi.mocked(jwtVerify).mockResolvedValue({
-        payload: { userId: 'u1', role: 'admin', isGlobalAdmin: true },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any)
-
-      mockDb.state.config = [{ id: 'global', pos: true }]
 
       const req = makeRequest('http://localhost/management/pos', 'valid-token')
       const res = await proxy(req)

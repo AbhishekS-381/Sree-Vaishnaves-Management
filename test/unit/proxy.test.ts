@@ -180,32 +180,11 @@ describe('proxy.ts (route protection)', () => {
     expect(res.headers.get('location')).toContain('/management')
   })
 
-  // ── POS Module Enabled Check ──
-  it('redirects away from /management/pos/* if pos is disabled in config', async () => {
+  // ── POS Module Route Pass-Through (Guard enforced by Page Server Components) ──
+  it('allows /management/pos/* requests through to page guard for authenticated users', async () => {
     const { jwtVerify } = await import('jose')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     vi.mocked(jwtVerify).mockResolvedValue({ payload: { role: 'admin' } } as any)
-    mockDb.state.configRows = [{ pos: false }]
-
-    const req = makeRequest('http://localhost/management/pos/billing', 'valid-token')
-    const res = await proxy(req)
-    expect(res.status).toBe(307)
-    expect(res.headers.get('location')).toContain('/management')
-  })
-
-  it('fails open to page guard if config is empty list (e.g. Edge datastore read failure)', async () => {
-    const { jwtVerify } = await import('jose')
-    vi.mocked(jwtVerify).mockResolvedValue({ payload: { role: 'admin' } } as any)
-    mockDb.state.configRows = []
-
-    const req = makeRequest('http://localhost/management/pos/kitchen', 'valid-token')
-    const res = await proxy(req)
-    expect(res.status).toBe(200)
-  })
-
-  it('fails open if db throws when checking POS enabled', async () => {
-    const { jwtVerify } = await import('jose')
-    vi.mocked(jwtVerify).mockResolvedValue({ payload: { role: 'admin' } } as any)
-    mockDb.state.shouldThrow = true
 
     const req = makeRequest('http://localhost/management/pos/billing', 'valid-token')
     const res = await proxy(req)
