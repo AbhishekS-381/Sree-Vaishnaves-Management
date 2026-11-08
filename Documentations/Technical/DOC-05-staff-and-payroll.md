@@ -1,13 +1,13 @@
 # DOC-05 · Staff & Payroll
-**Version:** v2.0
-**Last updated:** 2026-09-30
+**Version:** v3.0
+**Last updated:** 2026-11-02
 **Depends on:** DOC-01, DOC-02, DOC-03, DOC-04, DOC-06
 
 ---
 
 ## Overview
 
-This module covers three related areas, all implemented as Server Actions and rendered under `/management/staff` and `/management/payroll`:
+This module covers three related areas, all implemented as Server Actions over normalized PostgreSQL tables (`staff`, `staff_requirements`, `payroll`, `advances`) rendered under `/management/staff` and `/management/payroll`:
 
 1. **Staff profiles** — `staff.ts` + `StaffModal.tsx`
 2. **Position requirements & schedules** ("Open Positions" / timeline) — `staff_requirements.ts` + `StaffRequirements.tsx`, `ScheduleTimeline.tsx`, `AutoScheduleModal.tsx`
@@ -61,11 +61,11 @@ Requirements define budgeted headcount per branch/department/role (optionally a 
 | Action | Signature | Notes |
 |--------|-----------|-------|
 | `saveRequirement` | `(id, branchId, departmentId, roleId, requiredCount, specialtyId?, defaultSalary?, startTime?, endTime?, responsibility?)` | create or update; branch enforced |
-| `deleteRequirement` | `(id)` | cascades: clears `positionId`/`positionIndex` on all assigned staff, then removes the requirement |
+| `deleteRequirement` | `(id)` | cascades inside `withDbTransaction`: clears `positionId`/`positionIndex` on all assigned staff, then removes the requirement |
 | `updateRequirementSchedules` | `(id, schedules)` | validates and stores per-position shift schedules |
 
 Business rules enforced:
-- **Duplicate guard:** a requirement with the same branch + department + role + specialty may not be created twice.
+- **Duplicate guard:** a requirement with the same branch + department + role + specialty may not be created twice (`staff_req_branch_dept_role_uniq` index).
 - **Locked edits:** if any active staff are assigned, you cannot change the requirement's role or department.
 - **Headcount warning:** reducing `requiredCount` below the currently filled count returns a `{ success, warning }` telling the user to reassign the excess.
 - `responsibility` is capped at 500 characters.
@@ -95,7 +95,7 @@ Payroll is generated per month/year from the current staff list and manually ent
 ### Actions
 | Action | Signature | Auth | Notes |
 |--------|-----------|------|-------|
-| `savePayroll` | `(prevState, formData)` | any session; managers scoped to their branch | replaces all rows for the month/year |
+| `savePayroll` | `(prevState, formData)` | any session; managers scoped to their branch | replaces all rows for the month/year inside `withDbTransaction` |
 | `markAsPaid` | `(id)` | `isGlobalAdmin` only | sets `status = 'PAID'`, `paidAt` |
 
 ### The salary formula (exact)
@@ -111,7 +111,7 @@ payableAmount = MAX(0, ROUND((monthlySalary / 30) * daysWorked) - advances)
 The client pre-populates `daysWorked` for each staff member by counting that month's attendance from `attendanceLogs` (present = 1, half-day = 0.5), capped at 31, but the owner/manager can override any value before saving. Advances and notes are entered manually.
 
 ### What is NOT implemented
-- No salary advances collection/workflow (`advances.json` is unused; advances are a plain number on the payroll record).
+- No separate standalone UI workflow for `advances` table (advances are captured directly on the monthly payroll record).
 - No PDF salary slips.
 - No per-record override-with-reason field (the payable is recomputed from days/advances).
 - No approval-lock that freezes attendance — a month can be re-saved, which overwrites its records.
@@ -120,7 +120,7 @@ The client pre-populates `daysWorked` for each staff member by counting that mon
 ---
 
 ## Data shapes
-See DOC-03 for `Staff`, `StaffRequirement`/`PositionSchedule`/`Shift`, and `SalaryRecord`.
+See DOC-03 for `staff`, `staff_requirements`, `attendance`, and `payroll` table schemas.
 
 ---
 
@@ -130,4 +130,4 @@ See DOC-03 for `Staff`, `StaffRequirement`/`PositionSchedule`/`Shift`, and `Sala
 3. Only global admins can mark payroll as paid.
 4. Deactivating or deleting staff frees their assigned position slot.
 5. Payable is floored at 0.
-6. Payroll save is destructive per month/year (overwrites), so re-saving recalculates that month.
+6. Payroll save is destructive per month/year (overwrites in an atomic transaction), so re-saving recalculates that month.

@@ -1,23 +1,40 @@
-import { readJSON, DB_FILES } from '@/lib/db'
+import {
+  db,
+  staff as staffTable,
+  payroll as payrollTable,
+  attendance as attendanceTable,
+} from '@/lib/db'
+import { eq, and, isNull } from 'drizzle-orm'
 import PayrollClientPage from './PayrollClientPage'
 import { getSession } from '@/app/actions/auth'
 
 export default async function PayrollPage() {
-  const session = await getSession();
-  try {
-    let [staff, payroll, attendance] = await Promise.all([
-      readJSON<any>(DB_FILES.STAFF),
-      readJSON<any>(DB_FILES.PAYROLL),
-      readJSON<any>(DB_FILES.ATTENDANCE).catch(() => [])
-    ]);
+  const session = await getSession()
+  const isGlobal = session?.isGlobalAdmin || session?.role === 'readonly'
+  const branchId = session?.branchId
 
-    if (!session?.isGlobalAdmin && session?.role !== 'readonly') {
-      staff = staff.filter((s: any) => s.branchId === session?.branchId)
-      payroll = payroll.filter((p: any) => p.branchId === session?.branchId)
-      attendance = attendance.filter((a: any) => a.branchId === session?.branchId)
-    }
-    
-    staff = staff.filter((s: any) => s.isActive === true)
+  try {
+    const [staff, payroll, attendance] = await Promise.all([
+      db
+        .select()
+        .from(staffTable)
+        .where(
+          and(
+            !isGlobal && branchId ? eq(staffTable.branchId, branchId) : undefined,
+            eq(staffTable.isActive, true),
+            isNull(staffTable.deletedAt)
+          )
+        )
+        .catch(() => []),
+      (!isGlobal && branchId
+        ? db.select().from(payrollTable).where(eq(payrollTable.branchId, branchId))
+        : db.select().from(payrollTable)
+      ).catch(() => []),
+      (!isGlobal && branchId
+        ? db.select().from(attendanceTable).where(eq(attendanceTable.branchId, branchId))
+        : db.select().from(attendanceTable)
+      ).catch(() => []),
+    ])
 
     return (
       <PayrollClientPage
@@ -27,7 +44,7 @@ export default async function PayrollPage() {
       />
     )
   } catch (error) {
-    console.error("Critical Error in Payroll Page:", error);
+    console.error('Critical Error in Payroll Page:', error)
     return <div className="p-10 text-red-500 font-bold">Error loading data. See server logs.</div>
   }
 }

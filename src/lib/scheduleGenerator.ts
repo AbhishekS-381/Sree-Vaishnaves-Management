@@ -76,7 +76,7 @@ export function generateSchedules({
       
       if (endMarker - currentMarker >= minSegmentHours * 60) {
         shifts.push({
-          id: `shift_${crypto.randomUUID()}`,
+          id: crypto.randomUUID(),
           start: minsToTime(currentMarker),
           end: minsToTime(endMarker)
         })

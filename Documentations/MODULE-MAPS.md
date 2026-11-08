@@ -1,9 +1,9 @@
 # Sree Vaishnaves Management — Module Maps
 **Document type:** Product · Visual Reference
-**Version:** v2.0 | Last updated: 2026-09-30
+**Version:** v3.0 | Last updated: 2026-11-02
 **Render with:** any Markdown viewer that supports Mermaid (GitHub, VS Code + Mermaid, Obsidian)
 
-These diagrams reflect the **implemented** system: a public website plus a management portal built on Next.js Server Actions over a JSON-blob store. Every module shown is built. Several are toggleable via `config.json`.
+These diagrams reflect the **implemented** system: a public website plus a management portal built on Next.js Server Actions over a normalized PostgreSQL relational database managed by Drizzle ORM. Every module shown is built. Several are toggleable via the `config` table.
 
 ---
 
@@ -12,11 +12,11 @@ These diagrams reflect the **implemented** system: a public website plus a manag
 ```mermaid
 graph TD
   subgraph FOUNDATION["Foundation — cross-cutting"]
-    AUTH["Auth & roles\n4 roles · JWT (2h) · branch-scoped"]
+    AUTH["Auth & roles\n7 roles · JWT (2h) · branch-scoped"]
     MULTI["Multi-branch\nmost records carry branchId"]
-    AUDIT["Audit log (partial)\naudit_logs.json, capped 3000"]
-    CONFIG["Module toggles\nconfig.json (admin, Settings)"]
-    STORE["JSON-blob store\njson_store + rate_limit (Postgres)"]
+    AUDIT["Audit log (partial)\naudit_logs table, capped 3000"]
+    CONFIG["Module toggles\nconfig table (admin, Settings)"]
+    STORE["Normalized RDBMS\n27 tables + rate_limit (Postgres via Drizzle ORM)"]
   end
 
   subgraph CORE["Core modules (always on)"]
@@ -68,10 +68,11 @@ graph TD
 flowchart TD
   STAFF["Staff profiles + position slots"]
   ATT["Daily attendance\n(present/absent/half-day/holiday)"]
+  POS["POS / Billing\n(dine-in/takeaway · cash/UPI)"]
   EOD_INC["Day-End income\n(dine-in + takeaway · cash + UPI)"]
   EOD_EXP["Day-End expenses\n(source = eod)"]
   VEN_EXP["Vendor bills\n(source = vendor)"]
-  LEDGER[("Shared expense ledger\nexpenses.json")]
+  LEDGER[("Shared expense ledger\nexpenses table")]
   PAYROLL["Payroll\nround(salary/30 × days) − advances"]
   REPORTS["Reports (browser-computed)\nP&L · salary% · CSV export"]
   DASH["Dashboard\nKPIs + pending actions"]
@@ -79,6 +80,7 @@ flowchart TD
   STAFF --> ATT
   STAFF --> PAYROLL
   ATT -->|days-worked prefill| PAYROLL
+  POS -->|getPosDataForEOD prefill| EOD_INC
   EOD_INC --> DASH
   EOD_INC --> REPORTS
   EOD_EXP --> LEDGER
@@ -95,16 +97,19 @@ flowchart TD
 ```mermaid
 flowchart TD
   LOGIN["Login (name + password)\nServer Action + rate limit (IP + username)"]
-  JWT["JWT (HS256, 2h) in HttpOnly cookie\nflags: isRootAdmin / isGlobalAdmin / isGlobalOwner"]
+  JWT["JWT (HS256, 2h) in HttpOnly cookie\nflags: isRootAdmin / isGlobalAdmin / isGlobalOwner / posRole"]
   LOGIN --> JWT
 
   JWT --> ADMIN["admin (root)\nSettings + full cross-branch"]
   JWT --> OWNER["owner\nfull ops, no Settings"]
   JWT --> MANAGER["manager\none branch only"]
   JWT --> READONLY["readonly\nview dashboards & reports"]
+  JWT --> WAITER["waiter\npage-locked to /pos/order"]
+  JWT --> KITCHEN["kitchen\npage-locked to /pos/kitchen"]
+  JWT --> BILLING["billing\npage-locked to /pos/billing"]
 
   JWT --> SCOPE
-  subgraph SCOPE["requireBranchAccess (per action)"]
+  subgraph SCOPE["requireBranchAccess (per action) & Proxy sandboxing"]
     Q{"isGlobalAdmin?"}
     Q -->|yes| ANY["any branch"]
     Q -->|no| CHK{"target branch = own?"}
@@ -208,7 +213,7 @@ flowchart LR
   end
   EOD_ENTRY --> LEDGER
   VEN_SCREEN --> LEDGER
-  LEDGER[("expenses.json\nbranchId · amount · categoryId · source · date · notes · isPaid?")]
+  LEDGER[("expenses table\nbranchId · amount · categoryId · source · date · notes · isPaid?")]
   LEDGER --> EXPVIEW["Expenses screen\n(edit/delete = owner/admin, hard delete)"]
   LEDGER --> REPORTS["Reports breakdown"]
   LEDGER --> DASH["Dashboard today's expenses"]
@@ -272,7 +277,7 @@ flowchart TD
   VP["Vendor profile"]
   ADDV --> VP
   VP --> BILL["addVendorBill (amount · category · date · invoice · isPaid)"]
-  BILL --> LEDGER["Writes expenses.json (source = vendor)"]
+  BILL --> LEDGER["Writes expenses table (source = vendor)"]
   LEDGER --> PAID["markVendorBillAsPaid → isPaid = true"]
   LEDGER --> REPORTS["Feeds Reports"]
   note["Editing bill amount/category = Expenses module (owner/admin)"]
@@ -284,8 +289,8 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-  CAT["menu_categories.json (global)"]
-  ITEM["menu.json (global item · basePrice)"]
+  CAT["menu_categories table (global)"]
+  ITEM["menu_items table (global item · basePrice)"]
   CAT --> ITEM
   ITEM --> SEED["On create: seed branch_menu_items for all active branches"]
   SEED --> BMI["branch_menu_items (price? · isAvailable)"]

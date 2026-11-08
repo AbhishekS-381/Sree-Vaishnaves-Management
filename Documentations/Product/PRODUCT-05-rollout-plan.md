@@ -1,15 +1,15 @@
 # Sree Vaishnaves Management — Rollout & Adoption Plan
 **Document type:** Product · High Level
 **Audience:** Product owner, developer
-**Version:** v2.0 | Last updated: 2026-09-30
+**Version:** v3.0 | Last updated: 2026-11-02
 
 ---
 
 ## Context
 
-The software is **fully built** — every module (dashboard, staff/positions, attendance, payroll, day-end entry, expenses, vendors, inventory, menu, reports, branches, settings) is implemented. Rollout is therefore no longer a build sequence; it is an **adoption sequence**. The hard part is getting a busy restaurant team to change habits that have worked for years.
+The software is **fully built** — every module (dashboard, staff/positions, attendance, payroll, day-end entry, expenses, vendors, inventory, menu, pos/billing/kot, reports, branches, settings) is implemented over a normalized PostgreSQL relational database. Rollout is therefore an **adoption sequence**. The hard part is getting a busy restaurant team to change habits that have worked for years.
 
-The key enabler is the **module-toggle system** (`config.json`, Settings → managed by an admin). The business can start with a minimal set of modules switched on and enable more as habits form. Toggleable modules: attendance, payroll, vendors, inventory, menu, reports. When a module is off, it disappears from navigation and its dashboard alerts are silenced.
+The key enabler is the **module-toggle system** (persisted in the `config` table, Settings → managed by an admin). The business can start with a minimal set of modules switched on and enable more as habits form. Toggleable modules: attendance, payroll, vendors, inventory, menu, pos, reports. When a module is off, it disappears from navigation and its dashboard alerts are silenced.
 
 ---
 
@@ -47,25 +47,39 @@ Enable **vendors** and **inventory**. Vendor bills are just expenses with a supp
 **Success signal:** major purchases recorded against vendors; low-stock alerts caught before shortages.
 
 ### Step 6 — Menu
-Enable **menu**. Enter the global catalog once; set per-branch availability/price. This is low-effort maintenance and also unlocks chef-specialty tagging in Staff.
+Enable **menu**. Enter the global catalog once; set per-branch availability/price. This is low-effort maintenance and also unlocks chef-specialty tagging in Staff as well as POS ordering.
 
-### Step 7 — Reports
-Enable **reports** once there are a few months of day-end and payroll data. This is the payoff: revenue trends, expense breakdowns, salary-as-%-of-revenue, net profit, and CSV export for the accountant.
+### Step 7 — POS, Billing & Kitchen Order Tickets (KOT)
+Enable the **pos** toggle. Onboard dining floor waiters (`waiter`), kitchen cooks (`kitchen`), and front cashiers (`billing`).
+- Demonstrate waiter order creation on mobile phones: table picking, dietary notes, and incremental KOT firing.
+- Set up kitchen tablets at `/management/pos/kitchen` displaying the live FIFO ticket queue (auto-polling every 30s) to advance items from PENDING to PREPARING to READY.
+- Train billing clerks on discount application, GST suggestions, split payments (cash/UPI), change calculation, and receipt printing.
+- Showcase the direct EOD prefill payoff: day-end sales, tax, and covers populate automatically from settled POS orders.
+
+**Success signal:** 100% digital order taking and zero manual calculation required for evening Day-End entries.
+
+### Step 8 — Reports
+Enable **reports** once there are a few months of day-end, POS, and payroll data. This is the payoff: revenue trends, expense breakdowns, salary-as-%-of-revenue, net profit, and CSV export for the accountant.
 
 **Success signal:** the owner makes at least one decision (pricing, staffing, supplier) from report data.
 
 ---
 
-## Onboarding a branch manager
+## Onboarding staff & branch managers
 
+### Branch Manager
 When a manager is appointed:
 1. An admin/owner creates their user with role **manager** and the correct **branchId**.
 2. 30-minute walkthrough of Attendance.
-3. 30-minute walkthrough of Day-End Entry.
+3. 30-minute walkthrough of Day-End Entry & POS oversight.
 4. A couple of supervised days where an owner/admin reviews their entries.
 5. A week of independent operation with support on call.
 
 Managers are automatically sandboxed to their branch and cannot open Settings, mark payroll paid, or edit the ledger — so their surface area is small and safe by design.
+
+### Operational POS Staff (Waiter, Kitchen, Billing)
+- Create dedicated accounts with `waiter`, `kitchen`, or `billing` roles assigned to the appropriate branch.
+- Floor staff require minimal training because their interfaces are single-purpose and page-locked with navigation headers hidden in `src/proxy.ts`.
 
 ---
 
@@ -79,14 +93,14 @@ Managers are automatically sandboxed to their branch and cannot open Settings, m
 
 ## Definition of a healthy deployment
 
-1. Consistent daily data — attendance and day-end entered as routine.
+1. Consistent daily data — attendance, POS orders, and day-end entered as routine.
 2. A stored payroll record per month, settled through the app.
 3. The owner uses the dashboard as a daily habit.
-4. Managers operate independently within their branch boundaries.
+4. Managers and floor staff operate independently within their branch boundaries.
 5. Reports are trusted enough to inform real decisions.
 
 ---
 
 ## Security housekeeping before wider rollout
 
-The SQL migrations under `netlify/database/migrations/` seed a bootstrap admin with a **plaintext password** and create a Postgres role with a hardcoded password. Before rolling the system out more widely, rotate those credentials and remove them from source control, and ensure `JWT_SECRET` is a strong environment secret.
+Ensure `JWT_SECRET` is set to a cryptographically strong secret in environment variables. If deploying fresh, configure `ADMIN_PASSWORD` in the environment so that `npm run db:seed` hashes the initial administrator password with bcrypt directly rather than using fallbacks. Ensure production database connections enforce SSL.

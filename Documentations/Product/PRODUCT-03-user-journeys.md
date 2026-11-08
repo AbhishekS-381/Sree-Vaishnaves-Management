@@ -1,13 +1,13 @@
 # Sree Vaishnaves Management — User Journeys
 **Document type:** Product · High Level
 **Audience:** Product owner, UX designers, developers
-**Version:** v2.0 | Last updated: 2026-09-30
+**Version:** v3.0 | Last updated: 2026-11-02
 
 ---
 
 ## What this document is
 
-Real scenarios showing how the portal is used day to day. These journeys reflect the **implemented** behavior (four roles; day-end locks after 24h; attendance statuses present/absent/half-day/holiday; payroll = round(salary/30 × days) − advances). All screens live under `/management/*`.
+Real scenarios showing how the portal is used day to day. These journeys reflect the **implemented** behavior (seven roles; day-end locks after 24h; attendance statuses present/absent/half-day/holiday; payroll = round(salary/30 × days) − advances; POS real-time order-to-settlement). All screens live under `/management/*`.
 
 ---
 
@@ -39,9 +39,9 @@ If he tried to edit a day more than 7 days old, the save would be refused (owner
 
 **Who:** Manager · **When:** 10:30pm · **Goal:** Log the day's income and expenses
 
-The manager opens EOD Entry. He enters dine-in cash/UPI and takeaway cash/UPI; the running total updates live. He optionally records the opening/closing cash float and sees the expected-vs-actual discrepancy. He taps expense category chips (Raw materials ₹5,200, Gas ₹800), and the net updates.
+The manager opens EOD Entry. Today's dine-in and takeaway totals along with cash and UPI splits are already **pre-filled from settled POS orders** via `getPosDataForEOD`. The manager verifies the figures and optionally records the opening/closing cash float to review the live expected-vs-actual discrepancy. He taps expense category chips (Raw materials ₹5,200, Gas ₹800), and the net updates.
 
-He saves. The entry is stored as **submitted**; its EOD-sourced expenses replace any earlier ones for that day. After 24 hours the entry locks — only an owner/admin could edit it then. If the day had zero income, he'd have to tick the zero-revenue confirmation first.
+He saves. The entry is stored as **submitted**; its EOD-sourced expenses replace any earlier ones for that day atomically. After 24 hours the entry locks — only an owner/admin could edit it then. If the day had zero income, he'd have to tick the zero-revenue confirmation first.
 
 **Enabled:** A clean, searchable daily record that feeds Reports and the dashboard.
 
@@ -93,6 +93,32 @@ The owner opens the dashboard between meetings. He sees each branch's today coll
 
 ---
 
-## A note on the read-only analyst
+## Journey 8 — Live POS floor, kitchen, and billing operations
 
-A `readonly` user can open the dashboard and Reports across branches but cannot mark attendance, fill day-end entries, or change any record — the day-end screen redirects them away, and mutation controls are hidden.
+**Who:** Waiter, Kitchen Chef, Billing Clerk · **When:** Lunch and dinner rush · **Goal:** Fast, reliable order-to-payment cycle without pen and paper
+
+1. **Floor Ordering (Waiter):**
+   - The waiter opens `/management/pos/order` on a mobile device. The navigation bar is hidden and the view is strictly sandboxed.
+   - He taps an available table (e.g., Table 4), enters cover count (4), and picks items (2 Masala Dosa, 2 Filter Coffee).
+   - He adds dietary instructions ("less oil, separate chutney") and taps **Fire KOT**. The order transitions to `open` and a KOT ticket is generated.
+   - Later, the customer adds 1 Sweet Pongal. The waiter taps **Fire KOT** again; the system computes the delta and only fires the new item (`pos_kots` ticket #2).
+
+2. **Kitchen Preparation (Chef):**
+   - The kitchen display at `/management/pos/kitchen` auto-polls every 30 seconds. Ticket #1 appears in the FIFO queue with item names and preparation notes. Financial prices and customer bills are completely absent.
+   - The chef taps **Preparing** when cooking begins, and **Ready** when the tray is placed on the counter.
+
+3. **Front Desk Settlement (Billing Clerk):**
+   - The billing clerk at `/management/pos/billing` selects Table 4 from the billed queue.
+   - The system calculates subtotals with configurable GST (5%) and allows authorized discounts.
+   - The customer pays with ₹300 UPI and ₹100 Cash. The clerk selects **Split Payment**, verifies the math, inputs cash tendered to calculate change due, and clicks **Settle & Print Receipt**.
+   - Table 4 is immediately marked vacant and ready for new guests.
+
+4. **Evening Day-End Prefill:**
+   - At closing, the manager opens EOD Entry. Table 4's sales are already aggregated into dine-in cash and UPI totals, with GST and covers accurately accounted for.
+
+---
+
+## A note on operational roles and read-only analysts
+
+- A `readonly` user can open the dashboard and Reports across branches but cannot mark attendance, fill day-end entries, or change any record — the day-end screen redirects them away, and mutation controls are hidden.
+- Floor staff (`waiter`, `kitchen`, `billing`) are locked to their respective single-purpose interfaces with sidebars suppressed in `src/proxy.ts`, preventing accidental access to management settings or financial ledgers.

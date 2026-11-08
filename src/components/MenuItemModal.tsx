@@ -181,10 +181,10 @@ export function MenuItemModal({
 
               <div className={canSeeCost ? 'grid grid-cols-2 gap-4' : ''}>
                 <div>
-                  <label className={label}>Base Price (₹)</label>
+                  <label className={label}>Base Price (Non-AC) (₹)</label>
                   <input required type="number" name="basePrice" min={0} step={1}
                     defaultValue={editData?.basePrice ?? ''} placeholder="0" className={field} />
-                  <p className="text-[11px] text-slate-500 mt-1.5">Applies to all branches unless overridden.</p>
+                  <p className="text-[11px] text-slate-500 mt-1.5">Standard dine-in price.</p>
                 </div>
                 {canSeeCost && (
                   <div>
@@ -194,6 +194,21 @@ export function MenuItemModal({
                     <p className="text-[11px] text-slate-500 mt-1.5">Drives margin / food-cost %.</p>
                   </div>
                 )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className={label}>AC Section Price (₹)</label>
+                  <input type="number" name="acPrice" min={0} step={1}
+                    defaultValue={editData?.acPrice ?? ''} placeholder="Optional (defaults to Base Price)" className={field} />
+                  <p className="text-[11px] text-slate-500 mt-1.5">Used in AC tables when static pricing is chosen.</p>
+                </div>
+                <div>
+                  <label className={label}>Parcel / Takeaway Price (₹)</label>
+                  <input type="number" name="parcelPrice" min={0} step={1}
+                    defaultValue={editData?.parcelPrice ?? ''} placeholder="Optional (defaults to Base Price)" className={field} />
+                  <p className="text-[11px] text-slate-500 mt-1.5">Used for takeaway when static pricing is chosen.</p>
+                </div>
               </div>
 
               {!isEditing && (

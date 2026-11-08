@@ -1,4 +1,13 @@
-import { readJSON, readBranchMenuItems, DB_FILES } from '@/lib/db'
+import {
+  db,
+  branches as branchesTable,
+  menuItems as menuItemsTable,
+  menuCategories as menuCategoriesTable,
+  menuItemVariants as menuItemVariantsTable,
+  branchCategories as branchCategoriesTable,
+  branchMenuItems as branchMenuItemsTable,
+} from '@/lib/db'
+import { eq, and, isNull, inArray } from 'drizzle-orm'
 import MenuClientPage from './MenuClientPage'
 import { getSession } from '@/app/actions/auth'
 
@@ -6,30 +15,32 @@ export default async function MenuPage() {
   const session = await getSession()
 
   const [allBranches, menu, categories, variants, branchCategoriesAll] = await Promise.all([
-    readJSON<any>(DB_FILES.BRANCHES),
-    readJSON<any>(DB_FILES.MENU),
-    readJSON<any>(DB_FILES.MENU_CATEGORIES).catch(() => []),
-    readJSON<any>(DB_FILES.MENU_ITEM_VARIANTS).catch(() => []),
-    readJSON<any>(DB_FILES.BRANCH_CATEGORIES).catch(() => []),
+    db.select().from(branchesTable).where(and(eq(branchesTable.isActive, true), isNull(branchesTable.deletedAt))).catch(() => []),
+    db.select().from(menuItemsTable).where(isNull(menuItemsTable.deletedAt)).catch(() => []),
+    db.select().from(menuCategoriesTable).where(isNull(menuCategoriesTable.deletedAt)).catch(() => []),
+    db.select().from(menuItemVariantsTable).catch(() => []),
+    db.select().from(branchCategoriesTable).catch(() => []),
   ])
 
   const isGlobalAdmin = Boolean(session?.isGlobalAdmin)
   const isReadonly = session?.role === 'readonly'
 
-  // Managers are confined to their own branch; admins/owners/analysts see all.
-  let branches = allBranches.filter((b: any) => b.isActive !== false)
+  let branches = allBranches
   if (!isGlobalAdmin && !isReadonly && session?.branchId) {
     branches = branches.filter((b: any) => b.id === session.branchId)
   }
 
-  // Read only the shards we actually need (one per in-scope branch), instead of
-  // the whole item × branch cross-product.
-  const shards = await Promise.all(
-    branches.map((b: any) => readBranchMenuItems<any>(b.id).catch(() => []))
-  )
-  const branchMenuItems = shards.flat()
+  const inScopeBranchIds = branches.map((b: any) => b.id)
+  let branchMenuItems: any[] = []
+  if (inScopeBranchIds.length > 0) {
+    branchMenuItems = await db
+      .select()
+      .from(branchMenuItemsTable)
+      .where(inArray(branchMenuItemsTable.branchId, inScopeBranchIds))
+      .catch(() => [])
+  }
 
-  const inScope = new Set(branches.map((b: any) => b.id))
+  const inScope = new Set(inScopeBranchIds)
   const branchCategories = branchCategoriesAll.filter((c: any) => inScope.has(c.branchId))
 
   return (

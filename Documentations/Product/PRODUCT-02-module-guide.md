@@ -1,7 +1,7 @@
 # Sree Vaishnaves Management — Module Guide
 **Document type:** Product · High Level
 **Audience:** Product owner, stakeholders, developers onboarding
-**Version:** v2.0 | Last updated: 2026-09-30
+**Version:** v3.0 | Last updated: 2026-11-02
 
 ---
 
@@ -9,7 +9,7 @@
 
 Every module described here is **implemented and shipped**. For each module this guide covers the problem it solves, what it does, what the operator experiences, and how it connects to the rest of the system. Technical detail lives in the matching `DOC-XX` under `Documentations/Technical/`.
 
-Modules marked *(toggleable)* can be switched on/off globally by an admin in Settings; when off, they vanish from navigation and their dashboard alerts are silenced. Toggleable modules: attendance, payroll, vendors, inventory, menu, reports.
+Modules marked *(toggleable)* can be switched on/off globally by an admin in Settings; when off, they vanish from navigation and their dashboard alerts are silenced. Toggleable modules: attendance, payroll, vendors, inventory, menu, pos, reports.
 
 ---
 
@@ -121,7 +121,7 @@ The owner reviews, saves (which stores all rows as **PENDING**), and later marks
 
 **Experience:** Set a threshold per item; when stock dips to/below it, the dashboard warns. Decreases can't push a quantity below zero.
 
-**Connects to:** Low-stock feeds dashboard alerts. No automatic deduction (no POS). (Technical: DOC-10.)
+**Connects to:** Low-stock feeds dashboard alerts. No automatic deduction from sales (recipe-based POS inventory integration planned for a future phase). (Technical: DOC-10.)
 
 ---
 
@@ -183,10 +183,10 @@ The owner reviews, saves (which stores all rows as **PENDING**), and later marks
 Most records carry a `branchId`. Managers are sandboxed to one branch in both the action layer and the page loaders; admins/owners/analysts see all branches. Adding a branch is a data operation, not a code change.
 
 ## Module toggles
-Admins switch modules on/off globally (`config.json`). Off modules disappear from navigation and stop raising dashboard alerts.
+Admins switch modules on/off globally (persisted in the `config` relational table). Off modules disappear from navigation and stop raising dashboard alerts.
 
 ## Audit trail (partial)
-Sensitive mutations (staff create/delete, attendance save, day-end save, expense edit/delete) append to a capped audit log. Coverage is not universal and there is no audit-log UI.
+Sensitive mutations (staff create/delete, attendance save, day-end save, expense edit/delete, order voids) append to the `audit_logs` table (capped at 3000 rows with rolling trims). Coverage is focused on auditable financial and operational actions.
 
 ## In-app reminders
 The dashboard computes gentle nudges (attendance/EOD not done, payroll due, low stock). They inform; they never block. No external messaging.

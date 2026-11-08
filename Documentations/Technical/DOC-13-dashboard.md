@@ -1,19 +1,19 @@
 # DOC-13 · Dashboard
-**Version:** v2.0
-**Last updated:** 2026-09-30
+**Version:** v3.0
+**Last updated:** 2026-11-02
 **Depends on:** DOC-01, DOC-02, DOC-03, DOC-04, DOC-05, DOC-06, DOC-07
 
 ---
 
 ## Overview
 
-The dashboard is the landing page after login at `/management` (`src/app/management/page.tsx`). It is a **server component** that reads collections directly via `readJSON`, applies branch scoping, computes today's snapshot and pending actions, and renders KPI cards plus a branch-status panel. It is not a Server Action and writes nothing.
+The dashboard is the landing page after login at `/management` (`src/app/management/page.tsx`). It is a **server component** that queries PostgreSQL tables via Drizzle ORM, applies branch scoping, computes today's snapshot and pending actions, and renders KPI cards plus a branch-status panel. It is not a Server Action and writes nothing.
 
 ---
 
-## Data sources (read in `page.tsx`)
+## Data sources (queried in `page.tsx`)
 
-`branches`, `staff`, `eod`, `expenses`, `inventory`, `attendance`, `payroll`, and `config` — all via `readJSON`. For non-global users with a `branchId`, each collection is filtered to that branch. Active-only filtering is then applied to branches (`isActive !== false`) and staff (`isActive === true`).
+`branches`, `staff`, `eod`, `expenses`, `inventory`, `attendance`, `payroll`, and `config` — all via Drizzle ORM queries. For non-global users with a `branchId`, queries are filtered to that branch. Active-only filtering is applied to branches (`isActive !== false`) and staff (`isActive === true`).
 
 ---
 
@@ -32,7 +32,7 @@ The dashboard is the landing page after login at `/management` (`src/app/managem
 
 ## Pending actions (computed inline)
 
-Alerts are computed on each load and gated by the `config` module toggles:
+Alerts are computed on each load and gated by the `config` table module toggles:
 
 | Alert | Condition | Gated by |
 |-------|-----------|----------|
@@ -57,7 +57,8 @@ Lists each (scoped, active) branch with a colored status pill:
 ## Role behaviour
 
 - Global admins (admin/owner) and readonly see all branches and consolidated figures.
-- Managers see only their assigned branch (the loader filters every collection by `session.branchId`).
+- Managers see only their assigned branch (loader filters queries by `session.branchId`).
+- Floor roles (`waiter`, `kitchen`, `billing`) are redirected away from `/management` to their designated POS interfaces by `src/proxy.ts`.
 - The dashboard shell (`management/layout.tsx`) renders the `Navigation` sidebar with the same `config` so disabled modules disappear from the menu.
 
 ---
@@ -65,5 +66,5 @@ Lists each (scoped, active) branch with a colored status pill:
 ## Business rules summary
 1. Read-only aggregation — the dashboard never writes.
 2. Today's figures use IST dates.
-3. Pending-action alerts respect the global module toggles in `config.json`.
+3. Pending-action alerts respect the global module toggles in the `config` table.
 4. Branch scoping mirrors the rest of the app (managers → own branch only).

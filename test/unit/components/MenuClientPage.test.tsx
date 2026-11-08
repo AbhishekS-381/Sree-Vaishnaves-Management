@@ -162,10 +162,12 @@ describe('MenuClientPage — branch config actions', () => {
     await waitFor(() => expect(menuActions.updateBranchMenuItemPrice).toHaveBeenCalledWith('b1', 'm2', 45))
   })
 
-  it('toggles category availability', async () => {
+  it('toggles category availability optimistically without manual refresh', async () => {
     renderPage()
+    expect(screen.getAllByText('Enabled').length).toBeGreaterThan(0)
     fireEvent.click(screen.getAllByText('Enabled')[0])
     await waitFor(() => expect(catActions.setBranchCategoryAvailability).toHaveBeenCalledWith('b1', 'c1', false))
+    await waitFor(() => expect(screen.getByText('Disabled')).toBeDefined())
   })
 
   it('archives an item after confirmation', async () => {

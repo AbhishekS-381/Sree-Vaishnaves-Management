@@ -20,6 +20,7 @@ vi.mock('@/app/actions/pos', () => ({
   deactivateTable: vi.fn(),
   createOrder: vi.fn(),
   addOrUpdateOrderItem: vi.fn(),
+  toggleOrderItemParcel: vi.fn(),
   removeOrderItem: vi.fn(),
   updateOrderNote: vi.fn(),
   fireKot: vi.fn(),
@@ -129,10 +130,10 @@ describe('PosClientPage Component Tests', () => {
   ]
 
   const sampleCatalog: CatalogItem[] = [
-    { menuItemId: 'm1', name: 'Paneer Butter Masala', effectivePrice: 220, categoryId: 'Curries', isAvailable: true },
-    { menuItemId: 'm2', name: 'Garlic Roti', effectivePrice: 35, categoryId: 'Breads', isAvailable: true },
-    { menuItemId: 'm3', name: 'Veg Biryani', effectivePrice: 190, categoryId: 'Rice', isAvailable: true },
-    { menuItemId: 'm4', name: 'Masala Dosa', effectivePrice: 85, categoryId: 'Tiffin', isAvailable: true },
+    { menuItemId: 'm1', name: 'Paneer Butter Masala', effectivePrice: 220, categoryId: 'cat-uuid-1', categoryName: 'Curries', isAvailable: true },
+    { menuItemId: 'm2', name: 'Garlic Roti', effectivePrice: 35, categoryId: 'cat-uuid-2', categoryName: 'Breads', isAvailable: true },
+    { menuItemId: 'm3', name: 'Veg Biryani', effectivePrice: 190, categoryId: 'cat-uuid-3', categoryName: 'Rice', isAvailable: true },
+    { menuItemId: 'm4', name: 'Masala Dosa', effectivePrice: 85, categoryId: 'cat-uuid-4', categoryName: 'Tiffin', isAvailable: true },
   ]
 
   const initialData = {
@@ -463,6 +464,25 @@ describe('PosClientPage Component Tests', () => {
     expect(screen.getAllByText('Paneer Butter Masala').length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByText('Garlic Roti').length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText('“Mild”')).toBeDefined()
+  })
+
+  it('renders category names in the catalog category dropdown instead of category IDs', () => {
+    render(
+      <PosClientPage
+        branches={branches}
+        activeBranchId="br-1"
+        initialData={initialData}
+        staleOrders={[]}
+        session={adminSession}
+        posDefaultGstPercent={5}
+      />
+    )
+    fireEvent.click(screen.getByText('Table 1'))
+    expect(screen.getByRole('option', { name: 'Curries' })).toBeDefined()
+    expect(screen.getByRole('option', { name: 'Breads' })).toBeDefined()
+    expect(screen.getByRole('option', { name: 'Rice' })).toBeDefined()
+    expect(screen.getByRole('option', { name: 'Tiffin' })).toBeDefined()
+    expect(screen.queryByRole('option', { name: 'cat-uuid-1' })).toBeNull()
   })
 
   it('clicking + button increments item quantity in order cart', async () => {
@@ -830,7 +850,7 @@ describe('PosClientPage Component Tests', () => {
 
   // ── Station Navigation & Logout (Goal Requirements 2 & 3) ──
   describe('Station Navigation & Logout Controls', () => {
-    it('renders Kitchen, Order, Billing, History, and Dashboard navigation buttons for admin/owner', () => {
+    it('renders Kitchen, Order, Billing, and History navigation buttons for admin/owner without Dashboard link', () => {
       render(
         <PosClientPage
           branches={branches}
@@ -858,9 +878,8 @@ describe('PosClientPage Component Tests', () => {
       expect(historyLink).toBeDefined()
       expect(historyLink.getAttribute('href')).toContain('/management/pos/history')
 
-      const dashboardLink = screen.getByRole('link', { name: /Dashboard/i })
-      expect(dashboardLink).toBeDefined()
-      expect(dashboardLink.getAttribute('href')).toBe('/management')
+      const dashboardLink = screen.queryByRole('link', { name: /Dashboard/i })
+      expect(dashboardLink).toBeNull()
     })
 
     it('renders Logout button and clicking it triggers logout', async () => {
@@ -882,6 +901,58 @@ describe('PosClientPage Component Tests', () => {
 
       fireEvent.click(logoutBtn)
       expect(logout).toHaveBeenCalled()
+    })
+
+    it('displays category names instead of category IDs in the category filter dropdown', () => {
+      const catalogWithUuids: CatalogItem[] = [
+        { menuItemId: 'm1', name: 'Paneer Tikka', effectivePrice: 200, categoryId: 'cat-uuid-starters' },
+        { menuItemId: 'm5', name: 'Mango Lassi', effectivePrice: 70, categoryId: 'cat-uuid-beverages', categoryName: 'Beverages' },
+      ]
+      const categoryMap = {
+        'cat-uuid-starters': 'Starters & Appetizers',
+      }
+
+      render(
+        <PosClientPage
+          branches={branches}
+          activeBranchId="br-1"
+          initialData={{ ...initialData, catalog: catalogWithUuids }}
+          staleOrders={[]}
+          session={adminSession}
+          categoryMap={categoryMap}
+          posDefaultGstPercent={5}
+        />
+      )
+
+      // Click on open table to show order panel and menu quick add
+      fireEvent.click(screen.getByText('Table 1'))
+
+      // The options should display the human-readable names
+      expect(screen.getByRole('option', { name: 'Starters & Appetizers' })).toBeDefined()
+      expect(screen.getByRole('option', { name: 'Beverages' })).toBeDefined()
+      expect(screen.queryByRole('option', { name: 'cat-uuid-starters' })).toBeNull()
+    })
+
+    it('renders parcel toggle badge on dine-in order items and calls toggleOrderItemParcel on click', () => {
+      render(
+        <PosClientPage
+          branches={branches}
+          activeBranchId="br-1"
+          initialData={initialData}
+          staleOrders={[]}
+          session={adminSession}
+        />
+      )
+
+      // Open Table 1 order
+      fireEvent.click(screen.getByText('Table 1'))
+
+      // Item row has Dine-In toggle button
+      const dineInToggleBtns = screen.getAllByRole('button', { name: /🍽️ Dine-In/i })
+      expect(dineInToggleBtns.length).toBeGreaterThan(0)
+
+      fireEvent.click(dineInToggleBtns[0])
+      expect(posActions.toggleOrderItemParcel).toHaveBeenCalled()
     })
   })
 })

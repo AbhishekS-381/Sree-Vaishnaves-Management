@@ -12,7 +12,6 @@ import {
   RefreshCw,
   LogOut,
   UtensilsCrossed,
-  LayoutDashboard,
 } from 'lucide-react'
 import { logout } from '@/app/actions/auth'
 import { useToast, ToastStack } from '@/components/Toast'
@@ -26,6 +25,7 @@ type KitchenKot = {
     nameSnapshot: string
     quantity: number
     note?: string
+    isParcel?: boolean
   }[]
   status: string
   firedAt: string
@@ -173,26 +173,14 @@ export default function KitchenClientPage({
           </button>
 
           {session.role !== 'kitchen' && (
-            <>
-              <Link
-                href={branchId ? `/management/pos?branch=${branchId}` : '/management/pos'}
-                className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-sm font-semibold rounded-xl transition-all"
-                title="POS Register"
-              >
-                <UtensilsCrossed className="w-4 h-4 text-amber-400" />
-                <span>POS</span>
-              </Link>
-              {Boolean(session.isGlobalAdmin || session.role === 'admin' || session.role === 'owner') && (
-                <Link
-                  href="/management"
-                  className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-sm font-semibold rounded-xl transition-all"
-                  title="Back to Management Portal"
-                >
-                  <LayoutDashboard className="w-4 h-4 text-indigo-400" />
-                  <span className="hidden lg:inline">Dashboard</span>
-                </Link>
-              )}
-            </>
+            <Link
+              href={branchId ? `/management/pos?branch=${branchId}` : '/management/pos'}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-sm font-semibold rounded-xl transition-all"
+              title="POS Register"
+            >
+              <UtensilsCrossed className="w-4 h-4 text-amber-400" />
+              <span>POS</span>
+            </Link>
           )}
 
           {/* Logout Button (Req 2) */}
@@ -232,6 +220,7 @@ export default function KitchenClientPage({
                     {kot.items.map((it, idx) => (
                       <li key={idx}>
                         {it.quantity} &times; {it.nameSnapshot}
+                        {it.isParcel && !it.nameSnapshot.toLowerCase().includes('parcel') ? ' [Parcel]' : ''}
                       </li>
                     ))}
                   </ul>
@@ -338,9 +327,16 @@ export default function KitchenClientPage({
                         className="flex items-start justify-between p-2.5 rounded-xl bg-slate-950/70 border border-slate-800/80"
                       >
                         <div className="flex-1 pr-2">
-                          <p className="text-sm font-bold text-white leading-snug">
-                            {item.nameSnapshot}
-                          </p>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className="text-sm font-bold text-white leading-snug">
+                              {item.nameSnapshot}
+                            </p>
+                            {item.isParcel && !item.nameSnapshot.toLowerCase().includes('parcel') && (
+                              <span className="text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                📦 Parcel
+                              </span>
+                            )}
+                          </div>
                           {item.note && (
                             <p className="text-xs italic text-amber-300 font-medium mt-0.5">
                               &ldquo;{item.note}&rdquo;

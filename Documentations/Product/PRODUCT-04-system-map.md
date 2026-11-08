@@ -1,13 +1,13 @@
 # Sree Vaishnaves Management — System Map & Data Flow
 **Document type:** Product · High Level
 **Audience:** Product owner, architects, developers onboarding
-**Version:** v2.0 | Last updated: 2026-09-30
+**Version:** v3.0 | Last updated: 2026-11-02
 
 ---
 
 ## The big picture
 
-One Next.js app serves a public marketing website (`/`) and a private management portal (`/management/*`). The portal's logic runs entirely as **Server Actions** (no REST API); data lives as **JSON blobs in one Postgres table** (`json_store`) plus a `rate_limit` table. Every module below is implemented.
+One Next.js app serves a public marketing website (`/`) and a private management portal (`/management/*`). The portal's logic runs entirely as **Server Actions** (no REST API); data lives in a **normalized PostgreSQL relational database (27 tables)** managed by Drizzle ORM plus a `rate_limit` table. Every module below is implemented.
 
 ---
 
@@ -15,16 +15,22 @@ One Next.js app serves a public marketing website (`/`) and a private management
 
 ```
 BRANCHES
-  └── each branch scopes its staff, operations, and finances
+  └── each branch scopes its staff, operations, POS orders, and finances
 
 STAFF
   └── belong to a branch, map to budgeted POSITION slots
   └── generate ATTENDANCE
   └── attendance pre-fills PAYROLL
 
+POS / BILLING / KOT
+  └── branch-scoped active tables and takeaway queues
+  └── orders generate incremental kitchen tickets (pos_kots)
+  └── settlements record cash, UPI, or split payments (pos_payments)
+  └── settled orders prefill DAY-END (EOD) ENTRIES
+
 DAY-END (EOD) ENTRIES
   └── one per branch per day
-  └── income + optional float/billing/ops
+  └── income (prefilled by POS) + optional float/billing/ops
   └── lock after 24h
   └── EOD expenses flow into the shared EXPENSE LEDGER
 ```
@@ -38,11 +44,11 @@ STAFF ─────────► ATTENDANCE ─────────► P
 (profiles,        (present/absent/      (round(salary/30 × days)
  positions)        half-day/holiday)     − advances)
 
-EOD ENTRY ──────► EXPENSE LEDGER ◄────── VENDOR BILLS
-(income + float    (one shared table,      (source = vendor)
- + billing/ops)     source = eod|vendor)
+POS / BILLING ──► EOD ENTRY ─────────► EXPENSE LEDGER ◄────── VENDOR BILLS
+(tables, KOTs,    (income + float       (one shared table,      (source = vendor)
+ bills, payments)  + billing/ops)        source = eod|vendor)
 
-MENU (global catalog + per-branch price/availability overrides)
+MENU (global catalog + per-branch price/availability overrides) ──► POS (stations)
 
 INVENTORY ──────► DASHBOARD alerts (low stock)
 
@@ -52,7 +58,7 @@ REPORTS ◄──────── EOD + EXPENSES + PAYROLL (+ attendance, staf
 DASHBOARD ◄────── everything (read-only snapshot + pending actions)
 ```
 
-Menu categories are reused as **chef specialties** in Staff. Module visibility is controlled by `config.json` toggles.
+Menu categories are reused as **chef specialties** in Staff. Module visibility is controlled by `config` table toggles.
 
 ---
 
@@ -60,25 +66,28 @@ Menu categories are reused as **chef specialties** in Staff. Module visibility i
 
 ### Income
 ```
-Cash/UPI taken during the day
-      │  (entered manually each evening)
+POS Orders (dine-in / takeaway)
+      │
       ▼
-Day-End Entry (dine-in cash/UPI, takeaway cash/UPI, + optional billing)
+Bill Settlement (cash / UPI / split payments)
+      │
+      ▼  (automated prefill via getPosDataForEOD)
+Day-End Entry (dine-in cash/UPI, takeaway cash/UPI, GST, covers)
       ▼
 Dashboard "Today's Collection"  and  Reports revenue/P&L
 ```
-There is no POS auto-feed — income is entered by the operator.
+Live POS settlements automatically feed Day-End income and billing fields, eliminating manual end-of-day re-entry.
 
 ### Expenses
 ```
 Day-End expense chips (source: eod)     Vendor bills (source: vendor)
         └───────────────┬──────────────────────┘
                         ▼
-              Shared Expense Ledger (expenses.json)
+            Shared Expense Ledger (expenses table)
                         ▼
         Reports (category breakdown, net profit)
 ```
-EOD-sourced expenses for a day are replaced wholesale on each EOD save; vendor expenses are independent. Editing/deleting ledger rows is owner/admin-only.
+EOD-sourced expenses for a day are replaced wholesale inside an atomic database transaction (`withDbTransaction`) on each EOD save; vendor expenses are independent. Editing/deleting ledger rows is owner/admin-only.
 
 ### Payroll
 ```
@@ -102,7 +111,7 @@ Day-End screen              Vendor screen
         │                          │
         └────────────┬─────────────┘
                      ▼
-        expenses.json (one shared collection)
+        expenses table (one shared collection)
                      │
      ┌───────────────┼───────────────┐
      ▼               ▼               ▼
@@ -116,12 +125,15 @@ Day-End screen              Vendor screen
 ## The menu model (global + overrides)
 
 ```
-menu.json (items)         menu_categories.json (categories)
+menu_items table (items)    menu_categories table (categories)
         │                          │
         └────────────┬─────────────┘   global catalog (admin/owner managed)
                      ▼
-   branch_menu_items.json / branch_categories.json
+   branch_menu_items / branch_categories tables
    (per-branch price + availability; managers manage own branch)
+                     │
+                     ▼
+   POS Order Stations (/pos, /pos/order, /pos/billing)
 ```
 
 ---
@@ -131,15 +143,16 @@ menu.json (items)         menu_categories.json (categories)
 ```
 BRANCH A                         BRANCH B
  staff, attendance, payroll,      staff, attendance, payroll,
- EOD, expenses, menu overrides,   EOD, expenses, menu overrides,
+ POS, EOD, expenses, menu,        POS, EOD, expenses, menu,
  inventory, vendors               inventory, vendors
         │                                 │
         └────────────────┬────────────────┘
                          ▼
      Admin / Owner / Read-only  →  see all branches
      Manager                    →  own branch only
+     Waiter / Kitchen / Billing →  own branch only (page-locked)
 ```
-Enforced in both the Server Action (`requireBranchAccess`) and each page loader.
+Enforced in both the Server Action (`requireBranchAccess`) and each page loader / proxy route guard.
 
 ---
 
@@ -164,10 +177,9 @@ Writes: nothing
 
 | Not present | Why |
 |-------------|-----|
-| POS / order taking | Out of scope in this build; day-end billing is entered manually. |
-| Staff logins | Management-only tool; staff are managed, not users. |
-| Delivery aggregator integration | Not in scope. |
+| Auto stock deduction | No sales pipeline recipe mapping feeds inventory; adjustments remain manual. |
+| Staff self-service | Management-only tool; staff are managed, not users. |
+| Delivery aggregator integration | Not in scope (Swiggy / Zomato). |
 | Accounting-software sync | The CSV export serves the accountant. |
 | SMS/WhatsApp/email alerts | In-app pending actions only. |
-| PDF/Excel export | Reports export CSV only. |
-| Auto stock deduction | No sales pipeline feeds inventory. |
+| PDF/Excel export | Reports and POS history export CSV only. |

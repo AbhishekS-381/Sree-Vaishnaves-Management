@@ -1,4 +1,13 @@
-import { readJSON, DB_FILES } from '@/lib/db'
+import {
+  db,
+  roles as rolesTable,
+  departments as departmentsTable,
+  categories as categoriesTable,
+  users as usersTable,
+  branches as branchesTable,
+  config as configTable,
+} from '@/lib/db'
+import { eq, and, isNull } from 'drizzle-orm'
 import SettingsClientPage from './SettingsClientPage'
 import { getSession } from '@/app/actions/auth'
 import { redirect } from 'next/navigation'
@@ -9,19 +18,14 @@ export default async function SettingsPage() {
     redirect('/management')
   }
 
-  let [[roles, depts, categories, rawUsers, branches], configList] = await Promise.all([
-    Promise.all([
-      readJSON<any>(DB_FILES.ROLES),
-      readJSON<any>(DB_FILES.DEPARTMENTS),
-      readJSON<any>(DB_FILES.CATEGORIES).catch(() => []),
-      readJSON<any>(DB_FILES.USERS).catch(() => []),
-      readJSON<any>(DB_FILES.BRANCHES).catch(() => [])
-    ]),
-    readJSON<any>(DB_FILES.CONFIG).catch(() => [])
-  ]);
-
-  roles = roles.filter((r: any) => r.isActive !== false)
-  depts = depts.filter((d: any) => d.isActive !== false)
+  const [roles, depts, categories, rawUsers, branches, configList] = await Promise.all([
+    db.select().from(rolesTable).where(eq(rolesTable.isActive, true)).catch(() => []),
+    db.select().from(departmentsTable).where(eq(departmentsTable.isActive, true)).catch(() => []),
+    db.select().from(categoriesTable).catch(() => []),
+    db.select().from(usersTable).where(eq(usersTable.isActive, true)).catch(() => []),
+    db.select().from(branchesTable).where(and(eq(branchesTable.isActive, true), isNull(branchesTable.deletedAt))).catch(() => []),
+    db.select().from(configTable).limit(1).catch(() => []),
+  ])
 
   // Sanitize users to avoid leaking passwords to the client
   const users = rawUsers
@@ -36,11 +40,21 @@ export default async function SettingsPage() {
     menu: true,
     reports: true,
     pos: false,
-    posDefaultGstPercent: 0
+    posDefaultGstPercent: 0,
+    posDefaultParcelPercent: 0,
+    posDefaultAcPercent: 0,
+    posPricingMode: 'percentage',
   }
 
-
   return (
-    <SettingsClientPage roles={roles} departments={depts} categories={categories} config={config} users={users} sessionRole={session.role as string} branches={branches} />
+    <SettingsClientPage
+      roles={roles}
+      departments={depts}
+      categories={categories}
+      config={config}
+      users={users}
+      sessionRole={session.role as string}
+      branches={branches}
+    />
   )
 }

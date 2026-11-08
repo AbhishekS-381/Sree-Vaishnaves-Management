@@ -1,16 +1,34 @@
-import { readJSON, DB_FILES } from '@/lib/db'
+import {
+  db,
+  branches as branchesTable,
+  inventory as inventoryTable,
+} from '@/lib/db'
+import { eq, and, isNull } from 'drizzle-orm'
 import InventoryClientPage from './InventoryClientPage'
 import { getSession } from '@/app/actions/auth'
 
 export default async function InventoryPage() {
-  const session = await getSession();
-  let branches = await readJSON<any>(DB_FILES.BRANCHES)
-  let items = await readJSON<any>(DB_FILES.INVENTORY).catch(() => [])
+  const session = await getSession()
+  const isGlobal = session?.isGlobalAdmin || session?.role === 'readonly'
+  const branchId = session?.branchId
 
-  if (!session?.isGlobalAdmin && session?.role !== 'readonly') {
-    branches = branches.filter((b: any) => b.id === session?.branchId)
-    items = items.filter((i: any) => i.branchId === session?.branchId)
-  }
+  const [branches, items] = await Promise.all([
+    db
+      .select()
+      .from(branchesTable)
+      .where(
+        and(
+          !isGlobal && branchId ? eq(branchesTable.id, branchId) : undefined,
+          eq(branchesTable.isActive, true),
+          isNull(branchesTable.deletedAt)
+        )
+      )
+      .catch(() => []),
+    (!isGlobal && branchId
+      ? db.select().from(inventoryTable).where(eq(inventoryTable.branchId, branchId))
+      : db.select().from(inventoryTable)
+    ).catch(() => []),
+  ])
 
   return (
     <InventoryClientPage branches={branches} inventory={items} />

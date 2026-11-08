@@ -1,7 +1,41 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { login, logout, getSession, getSessionRole } from '@/app/actions/auth'
-import * as db from '@/lib/db'
 import * as jwt from '@/lib/jwt'
+
+const { mockDb } = vi.hoisted(() => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const queryBuilder: any = {
+    where: vi.fn(),
+    limit: vi.fn(),
+  }
+  queryBuilder.where.mockReturnValue(queryBuilder)
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const updateBuilder: any = {
+    set: vi.fn(),
+    where: vi.fn().mockResolvedValue([]),
+  }
+  updateBuilder.set.mockReturnValue(updateBuilder)
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const mock: any = {
+    _fromResult: [],
+    _limitResult: [],
+    select: vi.fn().mockReturnThis(),
+    from: vi.fn().mockReturnValue(queryBuilder),
+    update: vi.fn().mockReturnValue(updateBuilder),
+    _queryBuilder: queryBuilder,
+    _updateBuilder: updateBuilder,
+  }
+
+  queryBuilder.then = (resolve: any, reject: any) =>
+    Promise.resolve(mock._fromResult).then(resolve, reject)
+  queryBuilder.catch = (fn: any) =>
+    Promise.resolve(mock._fromResult).catch(fn)
+  queryBuilder.limit.mockImplementation(() => Promise.resolve(mock._limitResult))
+
+  return { mockDb: mock }
+})
 
 // Must use vi.fn() without using outer variables in vi.mock factory
 vi.mock('next/headers', () => ({
@@ -10,9 +44,15 @@ vi.mock('next/headers', () => ({
 }))
 vi.mock('next/navigation', () => ({ redirect: vi.fn() }))
 vi.mock('@/lib/db', () => ({
-  readJSON: vi.fn(),
-  writeJSON: vi.fn(),
-  DB_FILES: new Proxy({}, { get: () => 'mock.json' })
+  db: mockDb,
+  users: {
+    id: 'id',
+    name: 'name',
+    password: 'password',
+    role: 'role',
+    branchId: 'branchId',
+    isActive: 'isActive',
+  },
 }))
 vi.mock('@/lib/jwt', () => ({
   verifyToken: vi.fn(),
@@ -33,6 +73,16 @@ describe('Auth Actions', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks()
+    mockDb._fromResult = []
+    mockDb._limitResult = []
+    mockDb.select.mockReturnThis()
+    mockDb.from.mockReturnValue(mockDb._queryBuilder)
+    mockDb._queryBuilder.where.mockReturnValue(mockDb._queryBuilder)
+    mockDb._queryBuilder.limit.mockImplementation(() => Promise.resolve(mockDb._limitResult))
+    mockDb.update.mockReturnValue(mockDb._updateBuilder)
+    mockDb._updateBuilder.set.mockReturnValue(mockDb._updateBuilder)
+    mockDb._updateBuilder.where.mockResolvedValue([])
+
     mockCookieStore = {
       get: vi.fn().mockReturnValue({ value: 'mock-token' }),
       set: vi.fn(),
@@ -70,7 +120,7 @@ describe('Auth Actions', () => {
   it('login returns error for invalid credentials', async () => {
     const bcrypt = (await import('bcryptjs')).default
     vi.mocked(bcrypt.compare as any).mockResolvedValue(false)
-    vi.mocked(db.readJSON).mockResolvedValue([{ name: 'abhishek', password: '$2a$10$hash', role: 'owner' }])
+    mockDb._limitResult = [{ name: 'abhishek', password: '$2a$10$hash', role: 'owner' }]
     const fd = { get: (k: string) => k === 'name' ? 'abhishek' : 'StrongPass1!' } as any
     const res = await login({}, fd)
     expect(res).toEqual({ error: 'Invalid Credentials' })
@@ -80,7 +130,7 @@ describe('Auth Actions', () => {
     const bcrypt = (await import('bcryptjs')).default
     vi.mocked(bcrypt.compare as any).mockResolvedValue(true)
     const { redirect } = await import('next/navigation')
-    vi.mocked(db.readJSON).mockResolvedValue([{ name: 'abhishek', password: '$2a$10$hash', role: 'owner' }])
+    mockDb._limitResult = [{ name: 'abhishek', password: '$2a$10$hash', role: 'owner' }]
     const fd = { get: (k: string) => k === 'name' ? 'abhishek' : 'StrongPass123' } as any
     await login({}, fd)
     expect(redirect).toHaveBeenCalledWith('/management')
@@ -89,7 +139,7 @@ describe('Auth Actions', () => {
   it('login fails with plain password (fallback removed)', async () => {
     const bcrypt = (await import('bcryptjs')).default
     vi.mocked(bcrypt.compare as any).mockResolvedValue(false)
-    vi.mocked(db.readJSON).mockResolvedValue([{ name: 'test', password: 'plain', role: 'owner' }])
+    mockDb._limitResult = [{ name: 'test', password: 'plain', role: 'owner' }]
     const fd = { get: (k: string) => k === 'name' ? 'test' : 'plain' } as any
     const res = await login({}, fd)
     expect(res).toEqual({ error: 'Invalid Credentials' })
@@ -103,7 +153,7 @@ describe('Auth Actions', () => {
     const bcrypt = (await import('bcryptjs')).default
     vi.mocked(bcrypt.compare as any).mockResolvedValue(true)
     const { redirect } = await import('next/navigation')
-    vi.mocked(db.readJSON).mockResolvedValue([{ name: 'test', password: '$2a$10$hash', role: 'owner' }])
+    mockDb._limitResult = [{ name: 'test', password: '$2a$10$hash', role: 'owner' }]
     const fd = { get: (k: string) => k === 'name' ? 'test' : 'password' } as any
     
     // Prevent redirect throwing
@@ -116,7 +166,7 @@ describe('Auth Actions', () => {
   })
 
   it('login handles db read failure gracefully', async () => {
-    vi.mocked(db.readJSON).mockRejectedValue(new Error('DB error'))
+    mockDb._queryBuilder.limit.mockRejectedValueOnce(new Error('DB error'))
     const fd = { get: (k: string) => k === 'name' ? 'abhishek' : 'StrongPass1!' } as any
     const res = await login({}, fd)
     expect(res).toEqual({ error: 'Invalid Credentials' })
@@ -198,7 +248,7 @@ describe('Auth Actions', () => {
     const { migratePasswordsToHash } = await import('@/app/actions/auth')
     mockCookieStore.get.mockReturnValue({ value: 'mock' })
     vi.mocked(jwt.verifyToken).mockResolvedValueOnce({ role: 'admin' } as any)
-    vi.mocked(db.readJSON).mockResolvedValue([{ name: 'test', password: '$2a$10$hash' }])
+    mockDb._fromResult = [{ id: 'u1', name: 'test', password: '$2a$10$hash' }]
     const res = await migratePasswordsToHash()
     expect(res).toEqual({ success: true, message: 'No passwords needed migration' })
   })
@@ -208,10 +258,10 @@ describe('Auth Actions', () => {
     const bcrypt = (await import('bcryptjs')).default
     mockCookieStore.get.mockReturnValue({ value: 'mock' })
     vi.mocked(jwt.verifyToken).mockResolvedValue({ role: 'admin' } as any)
-    vi.mocked(db.readJSON).mockResolvedValue([{ name: 'test', password: 'plain' }])
+    mockDb._fromResult = [{ id: 'u1', name: 'test', password: 'plain' }]
     vi.mocked(bcrypt.hash).mockResolvedValue('$2a$10$newhash' as never)
     const res = await migratePasswordsToHash()
     expect(res).toEqual({ success: true, message: 'Passwords migrated successfully' })
-    expect(db.writeJSON).toHaveBeenCalled()
+    expect(mockDb.update).toHaveBeenCalled()
   })
 })

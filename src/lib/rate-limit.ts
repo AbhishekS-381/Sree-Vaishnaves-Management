@@ -55,7 +55,8 @@ async function atomicUpsert(
       RETURNING attempts, window_start, blocked_until
     `);
 
-    const row = result.rows[0] as {
+    const rawRows = 'rows' in result ? (result as { rows: unknown[] }).rows : (result as unknown[]);
+    const row = rawRows[0] as {
       attempts: number;
       window_start: number;
       blocked_until: number;

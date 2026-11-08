@@ -1068,7 +1068,7 @@ describe('BillingClientPage Component Tests', () => {
       expect(logout).toHaveBeenCalled()
     })
 
-    it('renders POS and Dashboard link when session is admin/owner', () => {
+    it('renders POS link when session is admin/owner and does not render Dashboard link', () => {
       const adminSession = {
         userId: 'u-admin',
         name: 'Manager Bob',
@@ -1093,9 +1093,56 @@ describe('BillingClientPage Component Tests', () => {
       expect(posLink).toBeDefined()
       expect(posLink.getAttribute('href')).toContain('/management/pos')
 
-      const dashboardLink = screen.getByRole('link', { name: /Dashboard/i })
-      expect(dashboardLink).toBeDefined()
-      expect(dashboardLink.getAttribute('href')).toBe('/management')
+      const dashboardLink = screen.queryByRole('link', { name: /Dashboard/i })
+      expect(dashboardLink).toBeNull()
+    })
+
+    it('calculates suggested parcel and AC charges correctly for mixed dine-in table orders', () => {
+      const mixedOrder: PosOrder = {
+        id: 'ord-mixed-open',
+        branchId: 'br-1',
+        tableId: 'tbl-1',
+        orderType: 'dine-in',
+        status: 'open',
+        items: [
+          { id: 'i1', menuItemId: 'm1', nameSnapshot: 'Masala Dosa', quantity: 1, unitPrice: 100, isParcel: false },
+          { id: 'i2', menuItemId: 'm2', nameSnapshot: 'Paneer Butter Masala', quantity: 1, unitPrice: 200, isParcel: true },
+        ],
+        kotCount: 1,
+        date: '2026-10-19',
+        openedBy: 'u1',
+        createdAt: '2026-10-19T00:00:00Z',
+        updatedAt: '2026-10-19T00:00:00Z',
+      }
+
+      render(
+        <BillingClientPage
+          branches={branches}
+          activeBranchId="br-1"
+          billedOrders={[]}
+          paidOrders={[]}
+          openOrders={[mixedOrder]}
+          tableMap={{ 'tbl-1': 'Table 1' }}
+          tableAcMap={{ 'tbl-1': true }}
+          session={cashierSession}
+          posDefaultGstPercent={5}
+          posDefaultParcelPercent={10}
+          posDefaultAcPercent={15}
+          posPricingMode="percentage"
+        />
+      )
+
+      fireEvent.click(screen.getByText('Bill an Open Order (1)'))
+      // Dine-in: 100 * 15% = 15 AC charges
+      // Parcel: 200 * 10% = 20 Parcel charges
+      // Subtotal = 300
+      // GST: 300 * 5% = 15
+      // Total = 300 + 15 (AC) + 20 (Parcel) + 15 (GST) = 350
+      const parcelInput = screen.getByLabelText(/Parcel Charges \(₹\)/i) as HTMLInputElement
+      const acInput = screen.getByLabelText(/AC Charges \(₹\)/i) as HTMLInputElement
+      expect(parcelInput.value).toBe('20')
+      expect(acInput.value).toBe('15')
+      expect(screen.getByText('₹350')).toBeDefined()
     })
   })
 })

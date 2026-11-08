@@ -11,27 +11,32 @@ export const POS_DEDICATED_ROLES = ['billing', 'kitchen', 'waiter'] as const
 export const BRANCH_SCOPED_ROLES = ['manager', 'billing', 'kitchen', 'waiter'] as const
 
 /** Can create orders and add/edit items (Req 8.4, 8.5). */
-export function canCreateOrder(role: string): boolean {
+export function canCreateOrder(role?: string | null): boolean {
+  if (!role) return false
   return ['manager', 'owner', 'admin', 'waiter'].includes(role)
 }
 
 /** Can fire KOTs to the kitchen (Req 8.4, 8.5). */
-export function canFireKot(role: string): boolean {
+export function canFireKot(role?: string | null): boolean {
+  if (!role) return false
   return ['manager', 'owner', 'admin', 'waiter'].includes(role)
 }
 
 /** Can generate a bill from an open/billed order (Req 8.6). */
-export function canGenerateBill(role: string): boolean {
+export function canGenerateBill(role?: string | null): boolean {
+  if (!role) return false
   return ['manager', 'owner', 'admin', 'billing'].includes(role)
 }
 
 /** Can record payment on a billed order (Req 8.6). */
-export function canRecordPayment(role: string): boolean {
+export function canRecordPayment(role?: string | null): boolean {
+  if (!role) return false
   return ['manager', 'owner', 'admin', 'billing'].includes(role)
 }
 
 /** Can advance KOT status in the kitchen (Req 8.7). */
-export function canAdvanceKot(role: string): boolean {
+export function canAdvanceKot(role?: string | null): boolean {
+  if (!role) return false
   return ['manager', 'owner', 'admin', 'kitchen'].includes(role)
 }
 
@@ -40,13 +45,15 @@ export function canAdvanceKot(role: string): boolean {
  * - `paid` orders: owner or admin only
  * - `open` orders: manager, owner, or admin (not waiter/billing/kitchen)
  */
-export function canVoidOrder(role: string, status: 'open' | 'paid'): boolean {
+export function canVoidOrder(role?: string | null, status: 'open' | 'paid' = 'open'): boolean {
+  if (!role) return false
   if (status === 'paid') return ['owner', 'admin'].includes(role)
   return ['manager', 'owner', 'admin'].includes(role)
 }
 
 /** Can access the order history view (Req 7.1 — owner/admin only). */
-export function canViewHistory(role: string): boolean {
+export function canViewHistory(role?: string | null): boolean {
+  if (!role) return false
   return ['owner', 'admin'].includes(role)
 }
 
@@ -59,7 +66,41 @@ export function isWaiterOwnOrder(role: string, openedBy: string, sessionUserId: 
   return openedBy === sessionUserId
 }
 
-import type { PosOrder, PosEodData } from '@/app/actions/posTypes'
+import type { PosOrder, PosEodData, CatalogItem } from '@/app/actions/posTypes'
+
+/**
+ * Resolves the unit price and name snapshot for an ordered catalog item based on
+ * the order type (takeaway vs dine-in), table AC status, and POS pricing mode.
+ *
+ * If mode is 'item_price':
+ * - Takeaway: uses item.parcelPrice (if set > 0), prefixes item name with "Parcel " (e.g. "Parcel Masala Dosa")
+ * - AC Dine-in: uses item.acPrice (if set > 0), prefixes item name with "AC " (e.g. "AC Masala Dosa")
+ * - Non-AC Dine-in: uses base effective price and standard name.
+ *
+ * If mode is 'percentage' (default):
+ * - Always uses base effectivePrice and standard item name (charges are applied as percentage surcharges on the bill).
+ */
+export function resolveItemPriceAndName(
+  item: CatalogItem,
+  order: { orderType: 'dine-in' | 'takeaway'; tableId?: string },
+  isTableAc: boolean,
+  posPricingMode: 'percentage' | 'item_price' = 'percentage',
+  isItemParcel?: boolean
+): { unitPrice: number; nameSnapshot: string } {
+  if (posPricingMode === 'item_price') {
+    if (order.orderType === 'takeaway' || isItemParcel) {
+      const unitPrice = item.parcelPrice && item.parcelPrice > 0 ? item.parcelPrice : item.effectivePrice
+      const nameSnapshot = item.name.startsWith('Parcel ') ? item.name : `Parcel ${item.name}`
+      return { unitPrice, nameSnapshot }
+    }
+    if (order.orderType === 'dine-in' && isTableAc) {
+      const unitPrice = item.acPrice && item.acPrice > 0 ? item.acPrice : item.effectivePrice
+      const nameSnapshot = item.name.startsWith('AC ') ? item.name : `AC ${item.name}`
+      return { unitPrice, nameSnapshot }
+    }
+  }
+  return { unitPrice: item.effectivePrice, nameSnapshot: item.name }
+}
 
 /**
  * Computes the EOD pre-fill data from a filtered array of PosOrders.

@@ -1,16 +1,18 @@
 'use server'
 
-import { withTransaction, DB_FILES } from '@/lib/db'
+import { db, menuCategories, branchCategories, withDbTransaction } from '@/lib/db'
+import { eq, and, ilike, ne, isNull } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'crypto'
 import { getSession, requireBranchAccess } from '@/app/actions/auth'
 import { logAction } from '@/lib/audit'
 
-type MenuCategory = {
+export type MenuCategory = {
   id: string
   name: string
   sortOrder?: number
   isActive?: boolean
+  deletedAt?: Date | null
 }
 
 export type BranchMenuCategory = {
@@ -26,6 +28,7 @@ function revalidateCategoryConsumers() {
   revalidatePath('/management/staff') // categories double as chef specialties
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function addMenuCategory(prevState: any, formData: FormData) {
   const session = await getSession()
   if (!session?.isGlobalAdmin) return { error: 'Forbidden: Admin or Owner access required' }
@@ -35,26 +38,41 @@ export async function addMenuCategory(prevState: any, formData: FormData) {
   if (!name) return { error: 'Name is required' }
   if (name.length > 100) return { error: 'Name too long' }
 
-  let alreadyExists = false
-  let newId = ''
-  const success = await withTransaction<MenuCategory>(DB_FILES.MENU_CATEGORIES, (cats) => {
-    if (cats.some(c => c.name.toLowerCase() === name.toLowerCase() && c.isActive !== false)) {
-      alreadyExists = true
-      return cats
+  try {
+    const existing = await db
+      .select({ id: menuCategories.id })
+      .from(menuCategories)
+      .where(
+        and(
+          ilike(menuCategories.name, name),
+          eq(menuCategories.isActive, true),
+          isNull(menuCategories.deletedAt)
+        )
+      )
+      .limit(1)
+
+    if (existing.length > 0) {
+      return { error: 'Category name already exists' }
     }
-    newId = `mcat_${randomUUID()}`
-    cats.push({ id: newId, name, sortOrder, isActive: true })
-    return cats
-  })
 
-  if (alreadyExists) return { error: 'Category name already exists' }
-  if (!success) return { error: 'Failed to add menu category' }
+    const newId = randomUUID()
+    await db.insert(menuCategories).values({
+      id: newId,
+      name,
+      sortOrder,
+      isActive: true,
+    })
 
-  await logAction('CREATE_MENU_CATEGORY', 'MENU_CATEGORY', JSON.stringify({ name }), newId)
-  revalidateCategoryConsumers()
-  return { success: true }
+    await logAction('CREATE_MENU_CATEGORY', 'MENU_CATEGORY', JSON.stringify({ name }), newId)
+    revalidateCategoryConsumers()
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to add menu category:', error)
+    return { error: 'Failed to add menu category' }
+  }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function updateMenuCategory(prevState: any, formData: FormData) {
   const session = await getSession()
   if (!session?.isGlobalAdmin) return { error: 'Forbidden: Admin or Owner access required' }
@@ -66,71 +84,102 @@ export async function updateMenuCategory(prevState: any, formData: FormData) {
   if (!id || !name) return { error: 'Invalid data' }
   if (name.length > 100) return { error: 'Name too long' }
 
-  let notFound = false
-  let alreadyExists = false
-  const success = await withTransaction<MenuCategory>(DB_FILES.MENU_CATEGORIES, (cats) => {
-    const idx = cats.findIndex(c => c.id === id)
-    if (idx === -1) { notFound = true; return cats }
-    if (cats.some(c => c.name.toLowerCase() === name.toLowerCase() && c.id !== id && c.isActive !== false)) {
-      alreadyExists = true
-      return cats
+  try {
+    const target = await db
+      .select()
+      .from(menuCategories)
+      .where(and(eq(menuCategories.id, id), isNull(menuCategories.deletedAt)))
+      .limit(1)
+
+    if (target.length === 0) return { error: 'Category not found' }
+
+    const duplicate = await db
+      .select({ id: menuCategories.id })
+      .from(menuCategories)
+      .where(
+        and(
+          ilike(menuCategories.name, name),
+          eq(menuCategories.isActive, true),
+          isNull(menuCategories.deletedAt),
+          ne(menuCategories.id, id)
+        )
+      )
+      .limit(1)
+
+    if (duplicate.length > 0) {
+      return { error: 'Category name already exists' }
     }
-    cats[idx].name = name
-    if (sortOrderStr) cats[idx].sortOrder = Number(sortOrderStr)
-    return cats
-  })
 
-  if (notFound) return { error: 'Category not found' }
-  if (alreadyExists) return { error: 'Category name already exists' }
-  if (!success) return { error: 'Transaction failed' }
+    await db
+      .update(menuCategories)
+      .set({
+        name,
+        ...(sortOrderStr ? { sortOrder: Number(sortOrderStr) } : {}),
+      })
+      .where(eq(menuCategories.id, id))
 
-  await logAction('UPDATE_MENU_CATEGORY', 'MENU_CATEGORY', JSON.stringify({ name }), id)
-  revalidateCategoryConsumers()
-  return { success: true }
+    await logAction('UPDATE_MENU_CATEGORY', 'MENU_CATEGORY', JSON.stringify({ name }), id)
+    revalidateCategoryConsumers()
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to update menu category:', error)
+    return { error: 'Transaction failed' }
+  }
 }
 
-/**
- * Persist an explicit category order in ONE atomic write.
- * Replaces the previous two-call sortOrder swap, which could corrupt the order
- * if the second call failed.
- */
 export async function reorderMenuCategories(orderedIds: string[]) {
   const session = await getSession()
   if (!session?.isGlobalAdmin) return { error: 'Forbidden: Admin or Owner access required' }
   if (!Array.isArray(orderedIds) || orderedIds.length === 0) return { error: 'Nothing to reorder' }
 
-  const success = await withTransaction<MenuCategory>(DB_FILES.MENU_CATEGORIES, (cats) => {
-    orderedIds.forEach((id, index) => {
-      const cat = cats.find(c => c.id === id)
-      if (cat) cat.sortOrder = index
+  try {
+    await withDbTransaction(async (tx) => {
+      for (let index = 0; index < orderedIds.length; index++) {
+        const id = orderedIds[index]
+        await tx
+          .update(menuCategories)
+          .set({ sortOrder: index })
+          .where(eq(menuCategories.id, id))
+      }
     })
-    return cats
-  })
 
-  if (!success) return { error: 'Transaction failed' }
-  await logAction('REORDER_MENU_CATEGORIES', 'MENU_CATEGORY', JSON.stringify({ count: orderedIds.length }))
-  revalidateCategoryConsumers()
-  return { success: true }
+    await logAction('REORDER_MENU_CATEGORIES', 'MENU_CATEGORY', JSON.stringify({ count: orderedIds.length }))
+    revalidateCategoryConsumers()
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to reorder menu categories:', error)
+    return { error: 'Transaction failed' }
+  }
 }
 
 export async function deleteMenuCategory(id: string) {
   const session = await getSession()
   if (!session?.isGlobalAdmin) return { error: 'Forbidden: Admin or Owner access required' }
 
-  let notFound = false
-  const success = await withTransaction<MenuCategory>(DB_FILES.MENU_CATEGORIES, (list) => {
-    const cat = list.find(c => c.id === id)
-    if (!cat) { notFound = true; return list }
-    cat.isActive = false
-    return list
-  })
+  try {
+    const target = await db
+      .select({ id: menuCategories.id })
+      .from(menuCategories)
+      .where(and(eq(menuCategories.id, id), isNull(menuCategories.deletedAt)))
+      .limit(1)
 
-  if (notFound) return { error: 'Category not found' }
-  if (!success) return { error: 'Failed to delete menu category' }
+    if (target.length === 0) return { error: 'Category not found' }
 
-  await logAction('DELETE_MENU_CATEGORY', 'MENU_CATEGORY', 'Archived category', id)
-  revalidateCategoryConsumers()
-  return { success: true }
+    await db
+      .update(menuCategories)
+      .set({
+        isActive: false,
+        deletedAt: new Date(),
+      })
+      .where(eq(menuCategories.id, id))
+
+    await logAction('DELETE_MENU_CATEGORY', 'MENU_CATEGORY', 'Archived category', id)
+    revalidateCategoryConsumers()
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to delete menu category:', error)
+    return { error: 'Failed to delete menu category' }
+  }
 }
 
 export async function setBranchCategoryAvailability(
@@ -144,30 +193,48 @@ export async function setBranchCategoryAvailability(
   let enforcedBranch: string
   try {
     enforcedBranch = await requireBranchAccess(branchId)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (e: any) {
     return { error: e?.message || 'Forbidden' }
   }
   if (!enforcedBranch) return { error: 'Branch is required' }
 
-  const success = await withTransaction<BranchMenuCategory>(DB_FILES.BRANCH_CATEGORIES, (cats) => {
-    const cat = cats.find(c => c.branchId === enforcedBranch && c.categoryId === categoryId)
-    if (cat) {
-      cat.isAvailable = isAvailable
+  try {
+    const existing = await db
+      .select({ id: branchCategories.id })
+      .from(branchCategories)
+      .where(
+        and(
+          eq(branchCategories.branchId, enforcedBranch),
+          eq(branchCategories.categoryId, categoryId)
+        )
+      )
+      .limit(1)
+
+    if (existing.length > 0) {
+      await db
+        .update(branchCategories)
+        .set({ isAvailable })
+        .where(eq(branchCategories.id, existing[0].id))
     } else {
-      cats.push({
-        id: `bcat_${randomUUID()}`,
+      await db.insert(branchCategories).values({
+        id: randomUUID(),
         branchId: enforcedBranch,
         categoryId,
         isAvailable,
       })
     }
-    return cats
-  })
 
-  if (!success) return { error: 'Failed to update category availability' }
-  await logAction(
-    'SET_CATEGORY_AVAILABILITY', 'BRANCH_MENU_CATEGORY',
-    JSON.stringify({ branchId: enforcedBranch, categoryId, isAvailable }), categoryId
-  )
-  return { success: true }
+    await logAction(
+      'SET_CATEGORY_AVAILABILITY',
+      'BRANCH_MENU_CATEGORY',
+      JSON.stringify({ branchId: enforcedBranch, categoryId, isAvailable }),
+      categoryId
+    )
+    revalidateCategoryConsumers()
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to set category availability:', error)
+    return { error: 'Failed to update category availability' }
+  }
 }

@@ -12,7 +12,6 @@ import {
   AlertTriangle,
   Tag,
   LogOut,
-  LayoutDashboard,
 } from 'lucide-react'
 import { logout } from '@/app/actions/auth'
 import { useToast, ToastStack } from '@/components/Toast'
@@ -20,15 +19,18 @@ import type {
   PosTable,
   PosOrder,
   PosKot,
+  OrderItem,
   CatalogItem,
 } from '@/app/actions/posTypes'
 import {
   createOrder,
   addOrUpdateOrderItem,
+  toggleOrderItemParcel,
   removeOrderItem,
   updateOrderNote,
   fireKot,
 } from '@/app/actions/pos'
+import { resolveItemPriceAndName } from '@/lib/posUtils'
 
 type PosInitialData = {
   tables: PosTable[]
@@ -46,6 +48,7 @@ export default function WaiterOrderClientPage({
   staleOrders,
   session,
   categoryMap = {},
+  posPricingMode = 'percentage',
 }: {
   branches?: { id: string; name: string }[]
   activeBranchId: string
@@ -53,6 +56,7 @@ export default function WaiterOrderClientPage({
   staleOrders: StaleOrder[]
   session: { userId: string; name: string; role: string; isGlobalAdmin?: boolean }
   categoryMap?: Record<string, string>
+  posPricingMode?: 'percentage' | 'item_price'
 }) {
   const router = useRouter()
   const { messages, dismiss, success, error } = useToast()
@@ -74,6 +78,7 @@ export default function WaiterOrderClientPage({
   // Catalog search / Filter
   const [searchCatalogQuery, setSearchCatalogQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
+  const [packAsParcel, setPackAsParcel] = useState(false)
 
   const tables = initialData.tables
   const orders = initialData.orders
@@ -205,62 +210,130 @@ export default function WaiterOrderClientPage({
 
   const handleAddItem = (item: CatalogItem) => {
     if (!selectedOrder || selectedOrder.status !== 'open') return
+    const isItemParcel = selectedOrder.orderType === 'takeaway' || packAsParcel
+    const isTableAc =
+      selectedOrder.orderType === 'dine-in' &&
+      Boolean(tables.find(t => t.id === selectedOrder.tableId)?.isAc)
+
+    const { unitPrice, nameSnapshot } = resolveItemPriceAndName(
+      item,
+      selectedOrder,
+      isTableAc,
+      posPricingMode,
+      isItemParcel
+    )
+
     const existing = selectedOrder.items.find(
-      i => i.menuItemId === item.menuItemId && (i.variantId ?? undefined) === (item.variantId ?? undefined)
+      i =>
+        i.menuItemId === item.menuItemId &&
+        (i.variantId ?? undefined) === (item.variantId ?? undefined) &&
+        Boolean(i.isParcel) === isItemParcel
     )
     const newQty = (existing?.quantity ?? 0) + 1
     if (newQty > 99) return
 
     startTransition(async () => {
-      const res = await addOrUpdateOrderItem(
+      const args: any[] = [
         selectedOrder.id,
         item.menuItemId,
         newQty,
-        item.effectivePrice,
-        item.name,
+        existing ? existing.unitPrice : unitPrice,
+        existing ? existing.nameSnapshot : nameSnapshot,
         item.variantId,
-        existing?.note
-      )
+        existing?.note,
+      ]
+      if (isItemParcel) {
+        args.push(true)
+      }
+      const res = await addOrUpdateOrderItem(...(args as [string, string, number, number, string, string?, string?, boolean?]))
       if (res?.error) error(res.error)
       else router.refresh()
     })
   }
 
   const handleUpdateQty = (
-    menuItemId: string,
-    variantId: string | undefined,
-    currentQty: number,
-    delta: number,
-    unitPrice: number,
-    nameSnapshot: string
+    itemOrId: string,
+    variantIdOrDelta?: string | number,
+    currentQty?: number,
+    delta?: number,
+    unitPrice?: number,
+    nameSnapshot?: string
   ) => {
     if (!selectedOrder || selectedOrder.status !== 'open') return
-    const newQty = currentQty + delta
-    if (newQty <= 0) {
-      const item = selectedOrder.items.find(
-        i => i.menuItemId === menuItemId && (i.variantId ?? undefined) === (variantId ?? undefined)
+    let item: OrderItem | undefined
+    let deltaQty = 0
+
+    if (typeof variantIdOrDelta === 'number') {
+      item = selectedOrder.items.find(i => i.id === itemOrId)
+      deltaQty = variantIdOrDelta
+    } else {
+      item = selectedOrder.items.find(
+        i => i.menuItemId === itemOrId && (i.variantId ?? undefined) === (variantIdOrDelta ?? undefined)
       )
-      if (item) {
-        startTransition(async () => {
-          const res = await removeOrderItem(selectedOrder.id, item.id)
-          if (res?.error) error(res.error)
-          else router.refresh()
-        })
-      }
+      deltaQty = delta ?? 0
+    }
+
+    if (!item) return
+    const newQty = item.quantity + deltaQty
+    if (newQty <= 0) {
+      startTransition(async () => {
+        const res = await removeOrderItem(selectedOrder.id, item!.id)
+        if (res?.error) error(res.error)
+        else router.refresh()
+      })
       return
     }
 
     startTransition(async () => {
-      const res = await addOrUpdateOrderItem(
+      const args: any[] = [
         selectedOrder.id,
-        menuItemId,
+        item!.menuItemId,
         newQty,
-        unitPrice,
-        nameSnapshot,
-        variantId
-      )
+        item!.unitPrice,
+        item!.nameSnapshot,
+        item!.variantId,
+      ]
+      if (item!.isParcel) {
+        args.push(undefined, true)
+      }
+      const res = await addOrUpdateOrderItem(...(args as [string, string, number, number, string, string?, string?, boolean?]))
       if (res?.error) error(res.error)
       else router.refresh()
+    })
+  }
+
+  const handleToggleItemParcel = (item: OrderItem) => {
+    if (!selectedOrder || selectedOrder.status !== 'open') return
+    const newParcelState = !Boolean(item.isParcel)
+    const catalogItem = catalog.find(
+      c => c.menuItemId === item.menuItemId && (c.variantId ?? undefined) === (item.variantId ?? undefined)
+    )
+    const isTableAc =
+      selectedOrder.orderType === 'dine-in' &&
+      Boolean(tables.find(t => t.id === selectedOrder.tableId)?.isAc)
+
+    let newUnitPrice = item.unitPrice
+    let newNameSnapshot = item.nameSnapshot
+    if (catalogItem) {
+      const resolved = resolveItemPriceAndName(
+        catalogItem,
+        selectedOrder,
+        isTableAc,
+        posPricingMode,
+        newParcelState
+      )
+      newUnitPrice = resolved.unitPrice
+      newNameSnapshot = resolved.nameSnapshot
+    }
+
+    startTransition(async () => {
+      const res = await toggleOrderItemParcel(selectedOrder.id, item.id, newUnitPrice, newNameSnapshot)
+      if (res?.error) {
+        error(res.error)
+      } else {
+        success(newParcelState ? 'Item marked as Parcel' : 'Item marked as Dine-In')
+        router.refresh()
+      }
     })
   }
 
@@ -269,15 +342,19 @@ export default function WaiterOrderClientPage({
     const item = selectedOrder.items.find(i => i.id === orderItemId)
     if (!item) return
     startTransition(async () => {
-      const res = await addOrUpdateOrderItem(
+      const args: any[] = [
         selectedOrder.id,
         item.menuItemId,
         item.quantity,
         item.unitPrice,
         item.nameSnapshot,
         item.variantId,
-        noteText
-      )
+        noteText,
+      ]
+      if (item.isParcel) {
+        args.push(true)
+      }
+      const res = await addOrUpdateOrderItem(...(args as [string, string, number, number, string, string?, string?, boolean?]))
       if (res?.error) error(res.error)
       else {
         success('Item note saved')
@@ -323,26 +400,14 @@ export default function WaiterOrderClientPage({
 
         <div className="flex flex-wrap items-center gap-2">
           {session.role !== 'waiter' && (
-            <>
-              <Link
-                href={activeBranchId ? `/management/pos?branch=${activeBranchId}` : '/management/pos'}
-                className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-sm font-semibold rounded-xl transition-all"
-                title="POS Register"
-              >
-                <UtensilsCrossed className="w-4 h-4 text-amber-400" />
-                <span>POS</span>
-              </Link>
-              {Boolean(session.isGlobalAdmin || session.role === 'admin' || session.role === 'owner') && (
-                <Link
-                  href="/management"
-                  className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-sm font-semibold rounded-xl transition-all"
-                  title="Back to Management Portal"
-                >
-                  <LayoutDashboard className="w-4 h-4 text-indigo-400" />
-                  <span className="hidden lg:inline">Dashboard</span>
-                </Link>
-              )}
-            </>
+            <Link
+              href={activeBranchId ? `/management/pos?branch=${activeBranchId}` : '/management/pos'}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-sm font-semibold rounded-xl transition-all"
+              title="POS Register"
+            >
+              <UtensilsCrossed className="w-4 h-4 text-amber-400" />
+              <span>POS</span>
+            </Link>
           )}
 
           <button
@@ -472,7 +537,14 @@ export default function WaiterOrderClientPage({
                     }`}
                   >
                     <div className="flex items-start justify-between">
-                      <span className="font-bold text-base text-white">{table.name}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-base text-white">{table.name}</span>
+                        {table.isAc && (
+                          <span className="text-[10px] px-1 py-0.2 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30 uppercase font-bold">
+                            AC
+                          </span>
+                        )}
+                      </div>
                       <span
                         className={`w-2.5 h-2.5 rounded-full ${
                           isMyOrder ? 'bg-amber-500 animate-pulse' : isOtherServerOrder ? 'bg-slate-600' : 'bg-emerald-500'
@@ -551,8 +623,23 @@ export default function WaiterOrderClientPage({
                       className="flex items-center justify-between p-2.5 bg-slate-950/60 rounded-xl border border-slate-800/80 text-sm"
                     >
                       <div className="flex-1 min-w-0 pr-2">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <p className="font-semibold text-slate-200 truncate">{item.nameSnapshot}</p>
+                          {selectedOrder.orderType === 'dine-in' && (
+                            <button
+                              type="button"
+                              onClick={() => handleToggleItemParcel(item)}
+                              disabled={selectedOrder.status !== 'open' || isPending}
+                              className={`text-[10px] font-bold px-1.5 py-0.5 rounded border transition-colors ${
+                                item.isParcel
+                                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/30 hover:bg-amber-500/30'
+                                  : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200'
+                              }`}
+                              title={item.isParcel ? 'Click to change to Dine-In' : 'Click to pack as Parcel'}
+                            >
+                              {item.isParcel ? '📦 Parcel' : '🍽️ Dine-In'}
+                            </button>
+                          )}
                           <button
                             onClick={() => setEditingNoteItem({ id: item.id, name: item.nameSnapshot, note: item.note || '' })}
                             className="text-slate-500 hover:text-amber-400 p-0.5 rounded transition-colors"
@@ -575,16 +662,7 @@ export default function WaiterOrderClientPage({
 
                       <div className="flex items-center gap-1 bg-slate-800 rounded-lg p-0.5 border border-slate-700 shrink-0">
                         <button
-                          onClick={() =>
-                            handleUpdateQty(
-                              item.menuItemId,
-                              item.variantId,
-                              item.quantity,
-                              -1,
-                              item.unitPrice,
-                              item.nameSnapshot
-                            )
-                          }
+                          onClick={() => handleUpdateQty(item.id, -1)}
                           className="w-6 h-6 flex items-center justify-center text-slate-300 hover:text-white hover:bg-slate-700 rounded font-bold"
                         >
                           -
@@ -593,16 +671,7 @@ export default function WaiterOrderClientPage({
                           {item.quantity}
                         </span>
                         <button
-                          onClick={() =>
-                            handleUpdateQty(
-                              item.menuItemId,
-                              item.variantId,
-                              item.quantity,
-                              1,
-                              item.unitPrice,
-                              item.nameSnapshot
-                            )
-                          }
+                          onClick={() => handleUpdateQty(item.id, 1)}
                           className="w-6 h-6 flex items-center justify-center text-slate-300 hover:text-white hover:bg-slate-700 rounded font-bold"
                         >
                           +
@@ -663,7 +732,22 @@ export default function WaiterOrderClientPage({
 
               {/* Menu Catalog Search & Quick Add */}
               <div className="pt-3 border-t border-slate-800 flex flex-col gap-2">
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Select Items to Add</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Select Items to Add</h3>
+                  {selectedOrder.orderType === 'dine-in' && (
+                    <label className="flex items-center gap-1.5 cursor-pointer text-xs font-semibold select-none">
+                      <input
+                        type="checkbox"
+                        checked={packAsParcel}
+                        onChange={e => setPackAsParcel(e.target.checked)}
+                        className="w-3.5 h-3.5 rounded bg-slate-950 border-slate-700 text-amber-500 focus:ring-amber-500"
+                      />
+                      <span className={packAsParcel ? 'text-amber-400 font-bold' : 'text-slate-400'}>
+                        📦 Pack as Parcel
+                      </span>
+                    </label>
+                  )}
+                </div>
                 <div className="flex gap-2">
                   <input
                     type="text"

@@ -1,25 +1,53 @@
-import { readJSON, DB_FILES } from '@/lib/db'
+import {
+  db,
+  staff as staffTable,
+  roles as rolesTable,
+  departments as departmentsTable,
+  branches as branchesTable,
+  staffRequirements as staffRequirementsTable,
+  menuCategories as menuCategoriesTable,
+} from '@/lib/db'
+import { eq, and, isNull } from 'drizzle-orm'
 import StaffClientPage from './StaffClientPage'
 import { getSession } from '@/app/actions/auth'
 
 export default async function StaffPage() {
-  const session = await getSession();
-  let [staff, roles, depts, branches, requirements, menuCategories] = await Promise.all([
-    readJSON<any>(DB_FILES.STAFF),
-    readJSON<any>(DB_FILES.ROLES),
-    readJSON<any>(DB_FILES.DEPARTMENTS),
-    readJSON<any>(DB_FILES.BRANCHES),
-    readJSON<any>(DB_FILES.STAFF_REQUIREMENTS),
-    readJSON<any>(DB_FILES.MENU_CATEGORIES).catch(() => [])
-  ]);
-  if (!session?.isGlobalAdmin && session?.role !== 'readonly') {
-    staff = staff.filter((s: any) => s.branchId === session?.branchId)
-    requirements = requirements.filter((r: any) => r.branchId === session?.branchId)
+  const session = await getSession()
+  const isGlobal = session?.isGlobalAdmin || session?.role === 'readonly'
+  const branchId = session?.branchId
+
+  let staffQuery = db
+    .select()
+    .from(staffTable)
+    .where(isNull(staffTable.deletedAt))
+
+  let requirementsQuery = db
+    .select()
+    .from(staffRequirementsTable)
+    .where(eq(staffRequirementsTable.isActive, true))
+
+  if (!isGlobal && branchId) {
+    staffQuery = db
+      .select()
+      .from(staffTable)
+      .where(and(eq(staffTable.branchId, branchId), isNull(staffTable.deletedAt)))
+
+    requirementsQuery = db
+      .select()
+      .from(staffRequirementsTable)
+      .where(and(eq(staffRequirementsTable.branchId, branchId), eq(staffRequirementsTable.isActive, true)))
   }
 
-  // Normalize legacy records (undefined -> true) and remove deleted
-  staff = staff.map((s: any) => ({ ...s, isActive: s.isActive !== false })).filter((s: any) => !s.deletedAt)
-  requirements = requirements.filter((r: any) => r.isActive !== false)
+  const [staffRaw, roles, depts, branches, requirements, menuCategories] = await Promise.all([
+    staffQuery.catch(() => []),
+    db.select().from(rolesTable).catch(() => []),
+    db.select().from(departmentsTable).catch(() => []),
+    db.select().from(branchesTable).where(and(eq(branchesTable.isActive, true), isNull(branchesTable.deletedAt))).catch(() => []),
+    requirementsQuery.catch(() => []),
+    db.select().from(menuCategoriesTable).where(isNull(menuCategoriesTable.deletedAt)).catch(() => []),
+  ])
+
+  const staff = staffRaw.map((s: any) => ({ ...s, isActive: s.isActive !== false }))
 
   return (
     <StaffClientPage

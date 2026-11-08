@@ -1,6 +1,13 @@
 import { getSession } from '@/app/actions/auth'
 import { redirect } from 'next/navigation'
-import { readJSON, DB_FILES } from '@/lib/db'
+import {
+  db,
+  config as configTable,
+  branches as branchesTable,
+  posTables as posTablesTable,
+  users as usersTable,
+} from '@/lib/db'
+import { eq, and, isNull } from 'drizzle-orm'
 import PosHistoryClientPage from './PosHistoryClientPage'
 
 export default async function PosHistoryPage() {
@@ -12,19 +19,29 @@ export default async function PosHistoryPage() {
     redirect('/management')
   }
 
-  const configList = await readJSON<{ pos?: boolean }>(DB_FILES.CONFIG).catch(() => [])
+  const configList = await db.select().from(configTable).limit(1).catch(() => [])
   const config = configList[0]
   if (!config?.pos) {
     redirect('/management')
   }
 
   const [allBranches, allTables, allUsers] = await Promise.all([
-    readJSON<{ id: string; name: string; isActive?: boolean }>(DB_FILES.BRANCHES).catch(() => []),
-    readJSON<{ id: string; name: string }>(DB_FILES.POS_TABLES).catch(() => []),
-    readJSON<{ id: string; name: string }>(DB_FILES.USERS).catch(() => []),
+    db
+      .select({ id: branchesTable.id, name: branchesTable.name, isActive: branchesTable.isActive })
+      .from(branchesTable)
+      .where(and(eq(branchesTable.isActive, true), isNull(branchesTable.deletedAt)))
+      .catch(() => []),
+    db
+      .select({ id: posTablesTable.id, name: posTablesTable.name })
+      .from(posTablesTable)
+      .where(isNull(posTablesTable.deletedAt))
+      .catch(() => []),
+    db
+      .select({ id: usersTable.id, name: usersTable.name })
+      .from(usersTable)
+      .where(eq(usersTable.isActive, true))
+      .catch(() => []),
   ])
-
-  const activeBranches = allBranches.filter(b => b.isActive !== false)
 
   const tableMap: Record<string, string> = {}
   for (const t of allTables) {
@@ -38,7 +55,7 @@ export default async function PosHistoryPage() {
 
   return (
     <PosHistoryClientPage
-      branches={activeBranches}
+      branches={allBranches}
       tableMap={tableMap}
       userMap={userMap}
       session={session}

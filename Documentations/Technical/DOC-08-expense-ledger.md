@@ -1,15 +1,15 @@
 # DOC-08 · Expense Ledger
-**Version:** v2.0
-**Last updated:** 2026-09-30
+**Version:** v3.0
+**Last updated:** 2026-11-02
 **Depends on:** DOC-01, DOC-02, DOC-03, DOC-04, DOC-07, DOC-11
 
 ---
 
 ## Overview
 
-A single shared collection `expenses.json` is the source of truth for all expenses. Rows are created from two places and distinguished by a `source` field:
+A single shared relational table `expenses` in PostgreSQL is the source of truth for all expenses. Rows are created from two places and distinguished by a `source` field:
 
-- **EOD entry** (`source: 'eod'`) — written by `saveEODEntry` (DOC-07). Insert/replace only from the EOD screen.
+- **EOD entry** (`source: 'eod'`) — written by `saveEODEntry` (DOC-07). Insert/replace only from the EOD screen within an atomic database transaction.
 - **Vendor bills** (`source: 'vendor'`) — written by `addVendorBill` (DOC-11).
 
 Direct ledger management (edit/delete) lives in `src/app/actions/expenses.ts` and is surfaced on `/management/expenses` (`ExpensesClientPage.tsx`).
@@ -30,13 +30,13 @@ There is no dedicated `addExpense` action on the expenses screen — expenses ar
 
 ---
 
-## Expense shape (see DOC-03)
+## Expense shape (see DOC-03 → `expenses` table)
 ```ts
 type Expense = {
   id: string;            // exp_<uuid> (eod) | venexp_<uuid> (vendor)
   branchId: string;
   amount: number;        // integer
-  categoryId: string;    // -> categories.json (ExpenseCategory)
+  categoryId: string;    // -> categories table (ExpenseCategory)
   source: 'eod' | 'vendor';
   date: string;          // YYYY-MM-DD
   notes?: string;        // vendor bills embed "Vendor: <name> | Invoice: <ref>"
@@ -44,7 +44,7 @@ type Expense = {
   isPaid?: boolean;      // vendor bills only
 }
 ```
-Expenses reference a **category id**, not an embedded category object. There is no `dailyEntryId`, no `vendorName`/`invoiceRef` column, and no soft-delete flag — deletes are hard array removals.
+Expenses reference a foreign `categoryId`. Deletions permanently remove the row via SQL `DELETE`.
 
 ---
 
@@ -53,31 +53,32 @@ Expenses reference a **category id**, not an embedded category object. There is 
 - Rejects non-global-admins with `Only admin and owner can edit ledger expenses.`
 - Validates the patch with Zod: `amount` (int ≥ 0), `notes` (≤500), `date` (`YYYY-MM-DD`), `category` (≤100) — all optional.
 - Preserves `id` and `branchId` (branch cannot be reassigned).
-- Audit-logs `UPDATE_EXPENSE` with before/after amounts and revalidates `/management/expenses` and `/management/reports`.
+- Executes Drizzle `update(expenses)` query.
+- Audit-logs `UPDATE_EXPENSE` to `audit_logs` table with before/after amounts and revalidates `/management/expenses` and `/management/reports`.
 
 ## `deleteExpense` (admins/owners only)
 
-- Splices the expense out of the array (hard delete).
-- Audit-logs `DELETE_EXPENSE` and revalidates expenses + reports.
+- Deletes the row via Drizzle `delete(expenses)`.
+- Audit-logs `DELETE_EXPENSE` to `audit_logs` table and revalidates expenses + reports.
 
 ---
 
 ## Permissions matrix
 
-| Action | admin | owner | manager | readonly |
-|--------|:---:|:---:|:---:|:---:|
-| Create via EOD | ✓ | ✓ | ✓ (own branch) | ✗ |
-| Create via vendor bill | ✓ | ✓ | ✓ (own branch) | ✗ |
-| Mark vendor bill paid | ✓ | ✓ | ✓ (own branch) | ✗ |
-| Edit ledger expense | ✓ | ✓ | ✗ | ✗ |
-| Delete ledger expense | ✓ | ✓ | ✗ | ✗ |
-| View ledger | ✓ | ✓ | ✓ (own branch) | ✓ |
+| Action | admin | owner | manager | readonly | waiter | kitchen | billing |
+|--------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Create via EOD | ✓ | ✓ | ✓ (own branch) | ✗ | ✗ | ✗ | ✗ |
+| Create via vendor bill | ✓ | ✓ | ✓ (own branch) | ✗ | ✗ | ✗ | ✗ |
+| Mark vendor bill paid | ✓ | ✓ | ✓ (own branch) | ✗ | ✗ | ✗ | ✗ |
+| Edit ledger expense | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| Delete ledger expense | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| View ledger | ✓ | ✓ | ✓ (own branch) | ✓ | ✗ | ✗ | ✗ |
 
-The EOD screen never edits or deletes expenses — it rewrites its own day's `source:'eod'` rows on save (DOC-07). Corrections to individual expenses happen on the Expenses screen (global admins) or, for vendor bills, via the Vendors screen.
+The EOD screen never edits or deletes expenses directly — it replaces its own day's `source:'eod'` rows atomically on save (DOC-07). Corrections to individual expenses happen on the Expenses screen (global admins) or, for vendor bills, via the Vendors screen.
 
 ---
 
-## Expense categories (`categories.json`, `src/app/actions/categories.ts`)
+## Expense categories (`categories` table, `src/app/actions/categories.ts`)
 
 Categories are **global** (not branch-scoped). Managed by global admins (`addCategory`, `updateCategory`, `deleteCategory` all check `isGlobalAdmin`).
 
@@ -85,20 +86,20 @@ Categories are **global** (not branch-scoped). Managed by global admins (`addCat
 type ExpenseCategory = { id: string; name: string; color?: string }  // cat_<uuid>, default color #64748b
 ```
 
-Seeded defaults: **Maintenance, Raw materials, Packaging, Gas / fuel, Rent, Electricity** (each with a color). Categories are hard-deleted; because expenses store only `categoryId`, deleting a category leaves historical expense rows pointing at a missing id (the UI shows the id/"Unknown" if unresolved).
+Seeded defaults: **Maintenance, Raw materials, Packaging, Gas / fuel, Rent, Electricity** (each with a color).
 
 ---
 
 ## Client behaviour (`ExpensesClientPage.tsx`)
 - Branch filter (managers pinned), date filter, and a running `totalFiltered` sum.
-- Category names/colors resolved from `categories`.
+- Category names/colors resolved from `categories` table.
 - Edit/delete controls render only for global admins (`isGlobalAdmin`).
 
 ---
 
 ## Business rules summary
 1. One shared ledger, two sources (`eod`, `vendor`).
-2. EOD expenses for a day are replaced wholesale on EOD save; vendor expenses are independent.
+2. EOD expenses for a day are replaced wholesale on EOD save inside `withDbTransaction`; vendor expenses are independent.
 3. Only global admins edit/delete ledger rows; deletes are permanent.
 4. Categories are global and referenced by id.
 5. All amounts are integers.

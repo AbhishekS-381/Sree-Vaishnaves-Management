@@ -100,8 +100,11 @@ export function formatThermalReceipt(order: PosOrder, options: ReceiptOptions = 
 
   // Items List
   for (const item of order.items) {
+    const displayName = order.orderType === 'dine-in' && item.isParcel && !item.nameSnapshot.toLowerCase().includes('parcel')
+      ? `${item.nameSnapshot} (Parcel)`
+      : item.nameSnapshot
     const qtyPrice = `${item.quantity}  ₹${item.quantity * item.unitPrice}`
-    lines.push(justifyText(item.nameSnapshot, qtyPrice, width))
+    lines.push(justifyText(displayName, qtyPrice, width))
     if (item.note) {
       lines.push(`  * ${item.note.slice(0, width - 4)}`)
     }
@@ -115,6 +118,14 @@ export function formatThermalReceipt(order: PosOrder, options: ReceiptOptions = 
 
   if (order.bill?.discount && order.bill.discount > 0) {
     lines.push(justifyText('Discount:', `-₹${order.bill.discount}`, width))
+  }
+
+  if (order.bill?.parcelCharges && order.bill.parcelCharges > 0) {
+    lines.push(justifyText('Parcel Charges:', `+₹${order.bill.parcelCharges}`, width))
+  }
+
+  if (order.bill?.acCharges && order.bill.acCharges > 0) {
+    lines.push(justifyText('AC Charges:', `+₹${order.bill.acCharges}`, width))
   }
 
   if (order.bill?.gst && order.bill.gst > 0) {
@@ -163,7 +174,10 @@ export function formatKotSlip(kot: PosKot, orderIdentifier: string, widthType: R
   lines.push(divider('-', width))
 
   for (const item of kot.items) {
-    lines.push(justifyText(item.nameSnapshot, `x${item.quantity}`, width))
+    const displayName = item.isParcel && !item.nameSnapshot.toLowerCase().includes('parcel')
+      ? `[PARCEL] ${item.nameSnapshot}`
+      : item.nameSnapshot
+    lines.push(justifyText(displayName, `x${item.quantity}`, width))
     if (item.note) {
       lines.push(`  NOTE: ${item.note}`)
     }

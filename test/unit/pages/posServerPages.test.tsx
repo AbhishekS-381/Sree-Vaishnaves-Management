@@ -4,24 +4,99 @@ import WaiterOrderPage from '@/app/management/pos/order/page'
 import BillingPage from '@/app/management/pos/billing/page'
 import KitchenPage from '@/app/management/pos/kitchen/page'
 import PosHistoryPage from '@/app/management/pos/history/page'
-import { DB_FILES } from '@/lib/db'
 
 // Mocks
-const { authMocks, navMocks, dbMocks, posActionMocks } = vi.hoisted(() => ({
-  authMocks: {
-    getSession: vi.fn(),
-  },
-  navMocks: {
-    redirect: vi.fn(),
-  },
-  dbMocks: {
-    readJSON: vi.fn(),
-  },
-  posActionMocks: {
-    getTodayPosData: vi.fn(),
-    getKitchenKots: vi.fn(),
-  },
-}))
+const { authMocks, navMocks, posActionMocks, mockDb } = vi.hoisted(() => {
+  const state: any = {
+    config: [] as any[],
+    branches: [] as any[],
+    tables: [] as any[],
+    orders: [] as any[],
+    kots: [] as any[],
+    users: [] as any[],
+    categories: [] as any[],
+  }
+
+  const getCollection = (tableName: string) => {
+    if (tableName === 'config') return state.config
+    if (tableName === 'branches') return state.branches
+    if (tableName === 'pos_tables') return state.tables
+    if (tableName === 'pos_orders') return state.orders
+    if (tableName === 'pos_kots') return state.kots
+    if (tableName === 'users') return state.users
+    if (tableName === 'menu_categories') return state.categories
+    return []
+  }
+
+  const mock: any = {
+    state,
+    select: vi.fn((_fields?: any) => ({
+      from: vi.fn((table: any) => {
+        const tableName = table?.tableName || ''
+        const collection = getCollection(tableName)
+        let filtered = collection
+
+        const builder: any = {
+          where: vi.fn((cond?: any) => {
+            if (cond) {
+              const str = JSON.stringify(cond)
+              filtered = collection.filter((item: any) => {
+                if (tableName === 'branches') {
+                  if (str.includes('"is_active"') && !item.isActive) return false
+                  if (str.includes('"deleted_at"') && item.deletedAt) return false
+                  return true
+                }
+                if (tableName === 'pos_orders') {
+                  if (str.includes('"br-1"') && item.branchId !== 'br-1') return false
+                  if (str.includes('"br-2"') && item.branchId !== 'br-2') return false
+                  if (str.includes('"open"') && item.status !== 'open') return false
+                  const todayIST = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+                  if (str.includes(`"${todayIST}"`)) {
+                    if (str.includes('<') || str.includes('lt')) {
+                      if (item.date >= todayIST) return false
+                    } else {
+                      if (item.date !== todayIST) return false
+                    }
+                  }
+                  return true
+                }
+                if (tableName === 'pos_tables') {
+                  if (str.includes('"br-1"') && item.branchId !== 'br-1') return false
+                  if (str.includes('"br-2"') && item.branchId !== 'br-2') return false
+                  if (str.includes('"deleted_at"') && item.deletedAt) return false
+                  return true
+                }
+                if (tableName === 'pos_kots') {
+                  if (str.includes('"br-1"') && item.branchId !== 'br-1') return false
+                  if (str.includes('"served"') && item.status !== 'served') return false
+                  return true
+                }
+                if (tableName === 'users') {
+                  if (str.includes('"is_active"') && !item.isActive) return false
+                  return true
+                }
+                return true
+              })
+            }
+            return builder
+          }),
+          orderBy: vi.fn(() => builder),
+          limit: vi.fn((count?: number) => Promise.resolve(count !== undefined ? filtered.slice(0, count) : filtered)),
+          catch: (cb: any) => Promise.resolve(filtered).catch(cb),
+          then: (res: any, rej: any) => Promise.resolve(filtered).then(res, rej),
+        }
+        return builder
+      }),
+    })),
+  }
+
+  return {
+    authMocks: { getSession: vi.fn() },
+    navMocks: { redirect: vi.fn() },
+    posActionMocks: { getTodayPosData: vi.fn(), getKitchenKots: vi.fn() },
+    mockDb: mock,
+  }
+})
 
 vi.mock('@/app/actions/auth', () => ({
   getSession: authMocks.getSession,
@@ -32,15 +107,14 @@ vi.mock('next/navigation', () => ({
 }))
 
 vi.mock('@/lib/db', () => ({
-  readJSON: dbMocks.readJSON,
-  DB_FILES: {
-    CONFIG: 'config.json',
-    BRANCHES: 'branches.json',
-    POS_TABLES: 'pos_tables.json',
-    POS_ORDERS: 'pos_orders.json',
-    POS_KOTS: 'pos_kots.json',
-    USERS: 'users.json',
-  },
+  db: mockDb,
+  config: { tableName: 'config', id: { name: 'id' } },
+  branches: { tableName: 'branches', id: { name: 'id' }, name: { name: 'name' }, address: { name: 'address' }, phone: { name: 'phone' }, isActive: { name: 'is_active' }, deletedAt: { name: 'deleted_at' } },
+  posTables: { tableName: 'pos_tables', id: { name: 'id' }, branchId: { name: 'branch_id' }, name: { name: 'name' }, deletedAt: { name: 'deleted_at' } },
+  posOrders: { tableName: 'pos_orders', id: { name: 'id' }, branchId: { name: 'branch_id' }, date: { name: 'date' }, status: { name: 'status' } },
+  posKots: { tableName: 'pos_kots', id: { name: 'id' }, branchId: { name: 'branch_id' }, orderId: { name: 'order_id' }, status: { name: 'status' }, updatedAt: { name: 'updated_at' } },
+  users: { tableName: 'users', id: { name: 'id' }, name: { name: 'name' }, isActive: { name: 'is_active' } },
+  menuCategories: { tableName: 'menu_categories', id: { name: 'id' }, name: { name: 'name' }, deletedAt: { name: 'deleted_at' } },
 }))
 
 vi.mock('@/app/actions/pos', () => ({
@@ -71,16 +145,16 @@ vi.mock('@/app/management/pos/history/PosHistoryClientPage', () => ({
 
 describe('POS Server Pages - posServerPages.test.tsx', () => {
   const sampleBranches = [
-    { id: 'br-1', name: 'Main Branch', isActive: true },
-    { id: 'br-2', name: 'Airport Branch', isActive: true },
-    { id: 'br-inactive', name: 'Closed Branch', isActive: false },
+    { id: 'br-1', name: 'Main Branch', isActive: true, deletedAt: null },
+    { id: 'br-2', name: 'Airport Branch', isActive: true, deletedAt: null },
+    { id: 'br-inactive', name: 'Closed Branch', isActive: false, deletedAt: null },
   ]
 
   const sampleConfig = [{ pos: true, posDefaultGstPercent: 5 }]
 
   const sampleTables = [
-    { id: 'tbl-1', branchId: 'br-1', name: 'Table 1', capacity: 4, isActive: true },
-    { id: 'tbl-2', branchId: 'br-1', name: 'Table 2', capacity: 2, isActive: true },
+    { id: 'tbl-1', branchId: 'br-1', name: 'Table 1', capacity: 4, isActive: true, deletedAt: null },
+    { id: 'tbl-2', branchId: 'br-1', name: 'Table 2', capacity: 2, isActive: true, deletedAt: null },
   ]
 
   const todayIST = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
@@ -151,23 +225,21 @@ describe('POS Server Pages - posServerPages.test.tsx', () => {
   ]
 
   const sampleUsers = [
-    { id: 'usr-1', name: 'Abhishek Admin' },
-    { id: 'usr-2', name: 'Ravi Cashier' },
+    { id: 'usr-1', name: 'Abhishek Admin', isActive: true },
+    { id: 'usr-2', name: 'Ravi Cashier', isActive: true },
   ]
 
   beforeEach(() => {
     vi.clearAllMocks()
 
     // Default db responses
-    dbMocks.readJSON.mockImplementation(async (file: string) => {
-      if (file === DB_FILES.CONFIG) return sampleConfig
-      if (file === DB_FILES.BRANCHES) return sampleBranches
-      if (file === DB_FILES.POS_TABLES) return sampleTables
-      if (file === DB_FILES.POS_ORDERS) return sampleOrders
-      if (file === DB_FILES.POS_KOTS) return sampleKots
-      if (file === DB_FILES.USERS) return sampleUsers
-      return []
-    })
+    mockDb.state.config = [...sampleConfig]
+    mockDb.state.branches = [...sampleBranches]
+    mockDb.state.tables = [...sampleTables]
+    mockDb.state.orders = [...sampleOrders]
+    mockDb.state.kots = [...sampleKots]
+    mockDb.state.users = [...sampleUsers]
+    mockDb.state.categories = []
 
     posActionMocks.getTodayPosData.mockResolvedValue({
       tables: sampleTables,
@@ -225,19 +297,13 @@ describe('POS Server Pages - posServerPages.test.tsx', () => {
 
     it('redirects to /management if pos is disabled in config', async () => {
       authMocks.getSession.mockResolvedValue({ role: 'admin', isGlobalAdmin: true })
-      dbMocks.readJSON.mockImplementation(async (file: string) => {
-        if (file === DB_FILES.CONFIG) return [{ pos: false }]
-        return []
-      })
+      mockDb.state.config = [{ pos: false }]
       await expect(PosDashboardPage({})).rejects.toThrow('NEXT_REDIRECT: /management')
     })
 
     it('redirects to /management if config list is empty', async () => {
       authMocks.getSession.mockResolvedValue({ role: 'admin', isGlobalAdmin: true })
-      dbMocks.readJSON.mockImplementation(async (file: string) => {
-        if (file === DB_FILES.CONFIG) return []
-        return []
-      })
+      mockDb.state.config = []
       await expect(PosDashboardPage({})).rejects.toThrow('NEXT_REDIRECT: /management')
     })
 
@@ -277,11 +343,7 @@ describe('POS Server Pages - posServerPages.test.tsx', () => {
 
     it('redirects to /management if no active branch can be determined', async () => {
       authMocks.getSession.mockResolvedValue({ role: 'admin', isGlobalAdmin: true })
-      dbMocks.readJSON.mockImplementation(async (file: string) => {
-        if (file === DB_FILES.CONFIG) return sampleConfig
-        if (file === DB_FILES.BRANCHES) return [] // No branches
-        return []
-      })
+      mockDb.state.branches = []
       await expect(PosDashboardPage({})).rejects.toThrow('NEXT_REDIRECT: /management')
     })
 
@@ -356,10 +418,7 @@ describe('POS Server Pages - posServerPages.test.tsx', () => {
 
     it('redirects to /management if pos config is disabled', async () => {
       authMocks.getSession.mockResolvedValue({ role: 'waiter', branchId: 'br-1' })
-      dbMocks.readJSON.mockImplementation(async (file: string) => {
-        if (file === DB_FILES.CONFIG) return [{ pos: false }]
-        return []
-      })
+      mockDb.state.config = [{ pos: false }]
       await expect(WaiterOrderPage({})).rejects.toThrow('NEXT_REDIRECT: /management')
     })
 
@@ -412,10 +471,7 @@ describe('POS Server Pages - posServerPages.test.tsx', () => {
 
     it('redirects to /management if pos config is disabled', async () => {
       authMocks.getSession.mockResolvedValue({ role: 'billing', branchId: 'br-1' })
-      dbMocks.readJSON.mockImplementation(async (file: string) => {
-        if (file === DB_FILES.CONFIG) return [{ pos: false }]
-        return []
-      })
+      mockDb.state.config = [{ pos: false }]
       await expect(BillingPage({})).rejects.toThrow('NEXT_REDIRECT: /management')
     })
 
@@ -467,10 +523,7 @@ describe('POS Server Pages - posServerPages.test.tsx', () => {
 
     it('redirects to /management if pos config is disabled', async () => {
       authMocks.getSession.mockResolvedValue({ role: 'kitchen', branchId: 'br-1' })
-      dbMocks.readJSON.mockImplementation(async (file: string) => {
-        if (file === DB_FILES.CONFIG) return [{ pos: false }]
-        return []
-      })
+      mockDb.state.config = [{ pos: false }]
       await expect(KitchenPage({})).rejects.toThrow('NEXT_REDIRECT: /management')
     })
 
@@ -531,10 +584,7 @@ describe('POS Server Pages - posServerPages.test.tsx', () => {
 
     it('redirects to /management if pos config is disabled', async () => {
       authMocks.getSession.mockResolvedValue({ role: 'admin', isGlobalAdmin: true })
-      dbMocks.readJSON.mockImplementation(async (file: string) => {
-        if (file === DB_FILES.CONFIG) return [{ pos: false }]
-        return []
-      })
+      mockDb.state.config = [{ pos: false }]
       await expect(PosHistoryPage()).rejects.toThrow('NEXT_REDIRECT: /management')
     })
 

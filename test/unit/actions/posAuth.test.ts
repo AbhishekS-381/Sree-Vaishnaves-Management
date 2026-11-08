@@ -6,7 +6,44 @@ import { addUser, updateUser } from '@/app/actions/users'
 import { proxy } from '@/proxy'
 
 // Mock db
+const { mockDb, insertedUsers } = vi.hoisted(() => {
+  const usersList: any[] = []
+  const mock: any = {
+    select: vi.fn(() => ({
+      from: vi.fn(() => ({
+        where: vi.fn(() => ({
+          limit: vi.fn().mockResolvedValue([]),
+          then: (res: any) => Promise.resolve([]).then(res),
+        })),
+        then: (res: any) => Promise.resolve([]).then(res),
+      })),
+    })),
+    insert: vi.fn(() => ({
+      values: vi.fn((vals: any) => {
+        usersList.push(vals)
+        return Promise.resolve([vals])
+      }),
+    })),
+    update: vi.fn(() => ({
+      set: vi.fn(() => ({
+        where: vi.fn().mockResolvedValue([]),
+      })),
+    })),
+  }
+  return { mockDb: mock, insertedUsers: usersList }
+})
+
 vi.mock('@/lib/db', () => ({
+  db: mockDb,
+  users: {
+    tableName: 'users',
+    id: { name: 'id' },
+    name: { name: 'name' },
+    role: { name: 'role' },
+    branchId: { name: 'branch_id' },
+    isActive: { name: 'is_active' },
+    deletedAt: { name: 'deleted_at' },
+  },
   withTransaction: vi.fn(),
   readJSON: vi.fn(),
   DB_FILES: new Proxy({}, { get: () => 'mock.json' }),
@@ -105,13 +142,7 @@ describe('POS Auth & Proxy Extension (Task 2.5)', () => {
       })
 
       it(`addUser succeeds for ${role} when branchId is provided`, async () => {
-        let insertedUser: any = null
-        vi.mocked(db.withTransaction).mockImplementation(async (_file, cb) => {
-          const list: any[] = []
-          const updated = await cb(list)
-          insertedUser = updated[0]
-          return true
-        })
+        insertedUsers.length = 0
 
         const formData = new FormData()
         formData.set('name', `${role}_user`)
@@ -121,6 +152,7 @@ describe('POS Auth & Proxy Extension (Task 2.5)', () => {
 
         const res = await addUser({}, formData)
         expect(res).toEqual({ success: true })
+        const insertedUser = insertedUsers[0]
         expect(insertedUser).toBeDefined()
         expect(insertedUser.role).toBe(role)
         expect(insertedUser.branchId).toBe('b_main')

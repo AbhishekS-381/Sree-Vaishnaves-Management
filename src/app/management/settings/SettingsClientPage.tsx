@@ -30,6 +30,9 @@ export default function SettingsClientPage({ roles, departments, categories, con
   const [confirmAction, setConfirmAction] = useState<{ label: string, fn: () => Promise<void> } | null>(null)
   const [confirming, setConfirming] = useState(false)
   const [posGst, setPosGst] = useState<number>(config?.posDefaultGstPercent ?? 0)
+  const [posParcel, setPosParcel] = useState<number>(config?.posDefaultParcelPercent ?? 0)
+  const [posAc, setPosAc] = useState<number>(config?.posDefaultAcPercent ?? 0)
+  const [posPricingMode, setPosPricingMode] = useState<'percentage' | 'item_price'>(config?.posPricingMode ?? 'percentage')
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
@@ -266,28 +269,108 @@ export default function SettingsClientPage({ roles, departments, categories, con
                      </div>
 
                      {mod.id === 'pos' && isActive && (
-                        <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between">
+                        <div className="mt-3 pt-3 border-t border-white/5 space-y-4">
                            <div>
-                              <label htmlFor="posDefaultGstPercent" className="text-xs font-medium text-slate-300">Default GST Rate</label>
-                              <p className="text-[11px] text-slate-500">Suggested on bills (0–28%)</p>
-                           </div>
-                           <div className="flex items-center gap-2">
-                              <input
-                                 id="posDefaultGstPercent"
-                                 type="number"
-                                 min={0}
-                                 max={28}
-                                 value={posGst}
-                                 onChange={(e) => setPosGst(Number(e.target.value))}
-                                 onBlur={async () => {
+                              <label htmlFor="posPricingMode" className="text-xs font-semibold text-slate-300 block mb-1">
+                                 AC & Parcel Pricing Method
+                              </label>
+                              <select
+                                 id="posPricingMode"
+                                 value={posPricingMode}
+                                 onChange={async (e) => {
+                                    const val = e.target.value as 'percentage' | 'item_price'
+                                    setPosPricingMode(val)
                                     const fd = new FormData()
-                                    fd.set('posDefaultGstPercent', String(posGst))
+                                    fd.set('posPricingMode', val)
                                     await updatePosGstRate({}, fd)
                                  }}
-                                 className="w-16 px-2 py-1 bg-[#1c1829] border border-white/10 rounded text-right text-sm text-white focus:outline-none focus:border-primary"
-                              />
-                              <span className="text-xs text-slate-400">%</span>
+                                 className="w-full px-3 py-1.5 bg-[#1c1829] border border-white/10 rounded-lg text-sm text-white focus:outline-none focus:border-primary"
+                              >
+                                 <option value="percentage">Percentage Based (Surcharges calculated on bill)</option>
+                                 <option value="item_price">Static Item Pricing (Base / AC / Parcel prices configured on Menu)</option>
+                              </select>
+                              <p className="text-[11px] text-slate-500 mt-1">
+                                 {posPricingMode === 'percentage'
+                                    ? 'Parcel and AC charges will be calculated as percentages on the bill subtotal (split like GST).'
+                                    : 'Items will use their specific Base, AC, or Parcel price and display prefixes (e.g., "AC Masala Dosa", "Parcel Masala Dosa").'}
+                              </p>
                            </div>
+
+                           <div className="flex items-center justify-between">
+                              <div>
+                                 <label htmlFor="posDefaultGstPercent" className="text-xs font-medium text-slate-300">Default GST Rate</label>
+                                 <p className="text-[11px] text-slate-500">Suggested on bills (0–28%)</p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                 <input
+                                    id="posDefaultGstPercent"
+                                    type="number"
+                                    min={0}
+                                    max={28}
+                                    value={posGst}
+                                    onChange={(e) => setPosGst(Number(e.target.value))}
+                                    onBlur={async () => {
+                                       const fd = new FormData()
+                                       fd.set('posDefaultGstPercent', String(posGst))
+                                       await updatePosGstRate({}, fd)
+                                    }}
+                                    className="w-16 px-2 py-1 bg-[#1c1829] border border-white/10 rounded text-right text-sm text-white focus:outline-none focus:border-primary"
+                                 />
+                                 <span className="text-xs text-slate-400">%</span>
+                              </div>
+                           </div>
+
+                           {posPricingMode === 'percentage' && (
+                              <>
+                                 <div className="flex items-center justify-between">
+                                    <div>
+                                       <label htmlFor="posDefaultParcelPercent" className="text-xs font-medium text-slate-300">Default Parcel Charge Rate</label>
+                                       <p className="text-[11px] text-slate-500">Suggested on takeaway bills (0–50%)</p>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                       <input
+                                          id="posDefaultParcelPercent"
+                                          type="number"
+                                          min={0}
+                                          max={50}
+                                          value={posParcel}
+                                          onChange={(e) => setPosParcel(Number(e.target.value))}
+                                          onBlur={async () => {
+                                             const fd = new FormData()
+                                             fd.set('posDefaultParcelPercent', String(posParcel))
+                                             await updatePosGstRate({}, fd)
+                                          }}
+                                          className="w-16 px-2 py-1 bg-[#1c1829] border border-white/10 rounded text-right text-sm text-white focus:outline-none focus:border-primary"
+                                       />
+                                       <span className="text-xs text-slate-400">%</span>
+                                    </div>
+                                 </div>
+
+                                 <div className="flex items-center justify-between">
+                                    <div>
+                                       <label htmlFor="posDefaultAcPercent" className="text-xs font-medium text-slate-300">Default AC Table Rate</label>
+                                       <p className="text-[11px] text-slate-500">Suggested on AC dine-in bills (0–50%)</p>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                       <input
+                                          id="posDefaultAcPercent"
+                                          type="number"
+                                          min={0}
+                                          max={50}
+                                          value={posAc}
+                                          onChange={(e) => setPosAc(Number(e.target.value))}
+                                          onBlur={async () => {
+                                             const fd = new FormData()
+                                             fd.set('posDefaultAcPercent', String(posAc))
+                                             await updatePosGstRate({}, fd)
+                                          }}
+                                          className="w-16 px-2 py-1 bg-[#1c1829] border border-white/10 rounded text-right text-sm text-white focus:outline-none focus:border-primary"
+                                       />
+                                       <span className="text-xs text-slate-400">%</span>
+                                    </div>
+                                 </div>
+                              </>
+                           )}
                         </div>
                      )}
                   </div>

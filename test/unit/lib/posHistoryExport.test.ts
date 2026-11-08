@@ -35,6 +35,9 @@ describe('POS History Filtering, Metrics & CSV Export - posHistoryExport.test.ts
       bill: { subtotal: 520, discount: 20, gst: 25, totalPayable: 525, generatedAt: '2026-10-15T11:00:00Z' },
       payment: { method: 'cash', cashAmount: 525, upiAmount: 0, paidAt: '2026-10-15T11:15:00Z' },
       note: 'VIP Guest, Window seat',
+      kotCount: 1,
+      createdAt: '',
+      updatedAt: '',
     },
     {
       id: 'ord-002',
@@ -49,6 +52,9 @@ describe('POS History Filtering, Metrics & CSV Export - posHistoryExport.test.ts
       ],
       bill: { subtotal: 180, discount: 0, gst: 9, totalPayable: 189, generatedAt: '2026-10-16T12:00:00Z' },
       payment: { method: 'upi', cashAmount: 0, upiAmount: 189, paidAt: '2026-10-16T12:10:00Z' },
+      kotCount: 1,
+      createdAt: '',
+      updatedAt: '',
     },
     {
       id: 'ord-003',
@@ -62,6 +68,9 @@ describe('POS History Filtering, Metrics & CSV Export - posHistoryExport.test.ts
         { id: 'i-4', menuItemId: 'm4', nameSnapshot: 'Masala Dosa', quantity: 2, unitPrice: 80 },
       ],
       bill: { subtotal: 160, discount: 10, gst: 7.5, totalPayable: 157.5, generatedAt: '2026-10-17T09:00:00Z' },
+      kotCount: 1,
+      createdAt: '',
+      updatedAt: '',
     },
     {
       id: 'ord-004',
@@ -75,6 +84,9 @@ describe('POS History Filtering, Metrics & CSV Export - posHistoryExport.test.ts
         { id: 'i-5', menuItemId: 'm1', nameSnapshot: 'Paneer Butter Masala', quantity: 1, unitPrice: 200 },
       ],
       void: { reason: 'Guest had emergency and left', voidedBy: 'usr-1', voidedAt: '2026-10-17T13:00:00Z' },
+      kotCount: 1,
+      createdAt: '',
+      updatedAt: '',
     },
     {
       id: 'ord-005',
@@ -89,6 +101,9 @@ describe('POS History Filtering, Metrics & CSV Export - posHistoryExport.test.ts
       ],
       bill: { subtotal: 500, discount: 0, gst: 25, totalPayable: 525, generatedAt: '2026-10-18T14:00:00Z' },
       payment: { method: 'split', cashAmount: 300, upiAmount: 225, paidAt: '2026-10-18T14:20:00Z' },
+      kotCount: 1,
+      createdAt: '',
+      updatedAt: '',
     },
     {
       id: 'ord-006',
@@ -101,6 +116,9 @@ describe('POS History Filtering, Metrics & CSV Export - posHistoryExport.test.ts
       items: [
         { id: 'i-7', menuItemId: 'm6', nameSnapshot: 'Filter Coffee', quantity: 2, unitPrice: 30 },
       ],
+      kotCount: 1,
+      createdAt: '',
+      updatedAt: '',
     },
   ]
 

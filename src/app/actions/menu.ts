@@ -1,13 +1,15 @@
 'use server'
 
 import {
-  withTransaction,
-  readJSON,
-  writeJSON,
-  DB_FILES,
-  readBranchMenuItems,
-  withBranchMenuTransaction,
+  db,
+  menuItems,
+  branchMenuItems,
+  menuItemVariants,
+  menuPriceHistory,
+  branches,
+  withDbTransaction,
 } from '@/lib/db'
+import { eq, and, ilike, ne, isNull, inArray, sql, asc } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'crypto'
 import { getSession, requireBranchAccess } from './auth'
@@ -61,6 +63,7 @@ export type MenuItemVariant = {
   basePrice: number
   sortOrder: number
   isActive: boolean
+  deletedAt?: string
 }
 
 export type MenuPriceChange = {
@@ -101,6 +104,8 @@ const addMenuItemSchema = z.object({
   name: z.string().min(1, 'Item name is required').max(150, 'Name too long').trim(),
   categoryId: z.string().min(1, 'Category is required'),
   basePrice: z.number().int('Price must be a whole number').min(0, 'Price cannot be negative'),
+  acPrice: z.number().int('AC price must be a whole number').min(0, 'AC price cannot be negative').optional().nullable(),
+  parcelPrice: z.number().int('Parcel price must be a whole number').min(0, 'Parcel price cannot be negative').optional().nullable(),
   ...metadataSchema,
 })
 
@@ -137,11 +142,10 @@ function parseMetadata(formData: FormData) {
     prepTimeMins: num('prepTimeMins'),
     availStart: str('availStart'),
     availEnd: str('availEnd'),
-    availDays: formData.getAll('availDays').map(Number).filter(n => Number.isFinite(n)),
+    availDays: formData.getAll('availDays').map(Number).filter((n) => Number.isFinite(n)),
   }
 }
 
-/** Build the optional availability window, or undefined when nothing is set. */
 function buildWindow(meta: ReturnType<typeof parseMetadata>): AvailabilityWindow | undefined {
   const days = meta.availDays && meta.availDays.length > 0 ? meta.availDays : undefined
   const startTime = meta.availStart || undefined
@@ -150,32 +154,38 @@ function buildWindow(meta: ReturnType<typeof parseMetadata>): AvailabilityWindow
   return { ...(days ? { days } : {}), ...(startTime ? { startTime } : {}), ...(endTime ? { endTime } : {}) }
 }
 
-/** Strip empty-string / undefined so we never persist noise. */
-function applyMetadata(target: MenuItem, meta: ReturnType<typeof parseMetadata>) {
-  target.description = meta.description
-  target.imageUrl = meta.imageUrl || undefined
-  target.costPrice = meta.costPrice
-  target.dietary = meta.dietary
-  target.spiceLevel = meta.spiceLevel
-  target.allergens = meta.allergens
-  target.isSignature = meta.isSignature || undefined
-  target.prepTimeMins = meta.prepTimeMins
-  target.availability = buildWindow(meta)
-}
-
 async function recordPriceChange(entry: Omit<MenuPriceChange, 'id' | 'changedAt' | 'changedBy' | 'changedByName'>) {
   try {
     const session = await getSession().catch(() => null)
-    await withTransaction<MenuPriceChange>(DB_FILES.MENU_PRICE_HISTORY, (list) => {
-      list.push({
-        ...entry,
-        id: `mph_${randomUUID()}`,
-        changedBy: session?.userId ?? 'system',
-        changedByName: session?.name ?? 'system',
-        changedAt: new Date().toISOString(),
-      })
-      return list.length > MAX_PRICE_HISTORY ? list.slice(list.length - MAX_PRICE_HISTORY) : list
+    await db.insert(menuPriceHistory).values({
+      id: randomUUID(),
+      menuItemId: entry.menuItemId,
+      variantId: entry.variantId || null,
+      branchId: entry.branchId || null,
+      scope: entry.scope,
+      oldPrice: entry.oldPrice ?? null,
+      newPrice: entry.newPrice ?? null,
+      changedBy: session?.userId ?? 'system',
+      changedByName: session?.name ?? 'system',
+      changedAt: new Date(),
     })
+
+    // Trimming outside any transaction using pk surrogate key (Req 8.5)
+    const countResult = await db.select({ count: sql<number>`count(*)::int` }).from(menuPriceHistory)
+    const currentCount = Number(countResult[0]?.count ?? 0)
+    if (currentCount > MAX_PRICE_HISTORY) {
+      const deleteCount = currentCount - MAX_PRICE_HISTORY
+      const oldest = await db
+        .select({ pk: menuPriceHistory.pk })
+        .from(menuPriceHistory)
+        .orderBy(asc(menuPriceHistory.pk))
+        .limit(deleteCount)
+
+      if (oldest.length > 0) {
+        const pksToDelete = oldest.map((r) => r.pk)
+        await db.delete(menuPriceHistory).where(inArray(menuPriceHistory.pk, pksToDelete))
+      }
+    }
   } catch {
     // Price history must never break the price change itself.
   }
@@ -183,6 +193,7 @@ async function recordPriceChange(entry: Omit<MenuPriceChange, 'id' | 'changedAt'
 
 // ── catalog: create / update / delete / restore ───────────────────────────────
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function addMenuItem(prevState: any, formData: FormData) {
   const session = await getSession()
   if (!session?.isGlobalAdmin) return { error: 'Forbidden: Admin or Owner access required' }
@@ -190,60 +201,90 @@ export async function addMenuItem(prevState: any, formData: FormData) {
   const name = formData.get('name') as string
   const categoryId = formData.get('categoryId') as string
   const basePrice = Number(formData.get('basePrice')) || 0
+  const acPriceRaw = formData.get('acPrice')
+  const acPrice = acPriceRaw !== null && acPriceRaw !== '' ? Number(acPriceRaw) : null
+  const parcelPriceRaw = formData.get('parcelPrice')
+  const parcelPrice = parcelPriceRaw !== null && parcelPriceRaw !== '' ? Number(parcelPriceRaw) : null
   const isAvailableGlobally = formData.get('isAvailableGlobally') !== 'false'
   const meta = parseMetadata(formData)
 
-  const parsed = addMenuItemSchema.safeParse({ name, categoryId, basePrice, ...meta })
+  const parsed = addMenuItemSchema.safeParse({ name, categoryId, basePrice, acPrice, parcelPrice, ...meta })
   if (!parsed.success) return { error: parsed.error.issues[0].message }
 
-  const now = new Date().toISOString()
-  const newItem: MenuItem = {
-    id: `mn_${randomUUID()}`,
-    name,
-    categoryId,
-    basePrice,
-    sortOrder: Date.now(),
-    isActive: true,
-    createdAt: now,
-    updatedAt: now,
-  }
-  applyMetadata(newItem, meta)
+  try {
+    const existing = await db
+      .select({ id: menuItems.id })
+      .from(menuItems)
+      .where(
+        and(
+          ilike(menuItems.name, name),
+          eq(menuItems.categoryId, categoryId),
+          eq(menuItems.isActive, true),
+          isNull(menuItems.deletedAt)
+        )
+      )
+      .limit(1)
 
-  let alreadyExists = false
-  const success = await withTransaction<MenuItem>(DB_FILES.MENU, (menu) => {
-    if (menu.some(m => m.name.toLowerCase() === name.toLowerCase() && m.categoryId === categoryId && m.isActive !== false)) {
-      alreadyExists = true
-      return menu
+    if (existing.length > 0) {
+      return { error: 'A menu item with this name already exists in this category' }
     }
-    menu.push(newItem)
-    return menu
-  })
 
-  if (alreadyExists) return { error: 'A menu item with this name already exists in this category' }
-  if (!success) return { error: 'Failed to add menu item' }
+    const newItemId = randomUUID()
+    const now = new Date()
+    const availWindow = buildWindow(meta)
 
-  // Seed a branch mapping per active branch, written to that branch's own shard.
-  const branches = await readJSON<any>(DB_FILES.BRANCHES)
-  const activeBranches = branches.filter((b: any) => b.isActive !== false)
-
-  for (const branch of activeBranches) {
-    await withBranchMenuTransaction<BranchMenuItem>(branch.id, (items) => {
-      items.push({
-        id: `bmi_${randomUUID()}`,
-        branchId: branch.id,
-        menuItemId: newItem.id,
-        price: null,
-        isAvailable: isAvailableGlobally,
+    // Atomic transaction: menu item + bulk branch_menu_items for all active branches (Req 8.1, 15.5)
+    await withDbTransaction(async (tx) => {
+      await tx.insert(menuItems).values({
+        id: newItemId,
+        name,
+        categoryId,
+        basePrice,
+        acPrice: parsed.data.acPrice ?? null,
+        parcelPrice: parsed.data.parcelPrice ?? null,
+        sortOrder: Date.now(),
+        isActive: true,
+        description: meta.description || null,
+        imageUrl: meta.imageUrl || null,
+        costPrice: meta.costPrice || null,
+        dietary: meta.dietary || null,
+        spiceLevel: meta.spiceLevel ?? null,
+        allergens: meta.allergens || null,
+        isSignature: meta.isSignature || null,
+        prepTimeMins: meta.prepTimeMins || null,
+        availability: availWindow || null,
+        createdAt: now,
+        updatedAt: now,
       })
-      return items
-    })
-  }
 
-  await logAction('CREATE_MENU_ITEM', 'MENU_ITEM', JSON.stringify({ name, categoryId, basePrice }), newItem.id)
-  revalidatePath('/management/menu')
-  return { success: true }
+      const activeBranches = await tx
+        .select({ id: branches.id })
+        .from(branches)
+        .where(and(eq(branches.isActive, true), isNull(branches.deletedAt)))
+
+      if (activeBranches.length > 0) {
+        await tx.insert(branchMenuItems).values(
+          activeBranches.map((b) => ({
+            id: randomUUID(),
+            branchId: b.id,
+            menuItemId: newItemId,
+            price: null,
+            isAvailable: isAvailableGlobally,
+          }))
+        )
+      }
+    })
+
+    await logAction('CREATE_MENU_ITEM', 'MENU_ITEM', JSON.stringify({ name, categoryId, basePrice }), newItemId)
+    revalidatePath('/management/menu')
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to add menu item:', error)
+    return { error: 'Failed to add menu item' }
+  }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function updateMenuItem(prevState: any, formData: FormData) {
   const session = await getSession()
   if (!session?.isGlobalAdmin) return { error: 'Forbidden: Admin or Owner access required' }
@@ -252,123 +293,177 @@ export async function updateMenuItem(prevState: any, formData: FormData) {
   const name = formData.get('name') as string
   const categoryId = formData.get('categoryId') as string
   const basePrice = Number(formData.get('basePrice')) || 0
+  const acPriceRaw = formData.get('acPrice')
+  const acPrice = acPriceRaw !== null && acPriceRaw !== '' ? Number(acPriceRaw) : null
+  const parcelPriceRaw = formData.get('parcelPrice')
+  const parcelPrice = parcelPriceRaw !== null && parcelPriceRaw !== '' ? Number(parcelPriceRaw) : null
   const meta = parseMetadata(formData)
 
-  const parsed = updateMenuItemSchema.safeParse({ id, name, categoryId, basePrice, ...meta })
+  const parsed = updateMenuItemSchema.safeParse({ id, name, categoryId, basePrice, acPrice, parcelPrice, ...meta })
   if (!parsed.success) return { error: parsed.error.issues[0].message }
 
-  let notFound = false
-  let alreadyExists = false
-  let oldBasePrice: number | null = null
-  let categoryChanged = false
+  try {
+    const existing = await db
+      .select()
+      .from(menuItems)
+      .where(and(eq(menuItems.id, id), isNull(menuItems.deletedAt)))
+      .limit(1)
 
-  const success = await withTransaction<MenuItem>(DB_FILES.MENU, (menu) => {
-    const index = menu.findIndex(m => m.id === id)
-    if (index === -1) { notFound = true; return menu }
+    if (existing.length === 0) return { error: 'Menu item not found' }
 
-    if (menu.some(m => m.id !== id && m.isActive !== false
-        && m.name.toLowerCase() === name.toLowerCase() && m.categoryId === categoryId)) {
-      alreadyExists = true
-      return menu
+    const item = existing[0]
+
+    const duplicate = await db
+      .select({ id: menuItems.id })
+      .from(menuItems)
+      .where(
+        and(
+          ilike(menuItems.name, name),
+          eq(menuItems.categoryId, categoryId),
+          eq(menuItems.isActive, true),
+          isNull(menuItems.deletedAt),
+          ne(menuItems.id, id)
+        )
+      )
+      .limit(1)
+
+    if (duplicate.length > 0) {
+      return { error: 'A menu item with this name already exists in this category' }
     }
 
-    oldBasePrice = menu[index].basePrice ?? null
-    categoryChanged = menu[index].categoryId !== categoryId
+    const oldBasePrice = item.basePrice
+    const categoryChanged = item.categoryId !== categoryId
+    const availWindow = buildWindow(meta)
+    const now = new Date()
 
-    menu[index] = {
-      ...menu[index],
-      name,
-      categoryId,
-      basePrice,
-      updatedAt: new Date().toISOString(),
+    await db
+      .update(menuItems)
+      .set({
+        name,
+        categoryId,
+        basePrice,
+        acPrice: parsed.data.acPrice ?? null,
+        parcelPrice: parsed.data.parcelPrice ?? null,
+        description: meta.description || null,
+        imageUrl: meta.imageUrl || null,
+        costPrice: meta.costPrice || null,
+        dietary: meta.dietary || null,
+        spiceLevel: meta.spiceLevel ?? null,
+        allergens: meta.allergens || null,
+        isSignature: meta.isSignature || null,
+        prepTimeMins: meta.prepTimeMins || null,
+        availability: availWindow || null,
+        updatedAt: now,
+      })
+      .where(eq(menuItems.id, id))
+
+    if (oldBasePrice !== basePrice) {
+      await recordPriceChange({ menuItemId: id, scope: 'base', oldPrice: oldBasePrice, newPrice: basePrice })
     }
-    applyMetadata(menu[index], meta)
-    return menu
-  })
 
-  if (notFound) return { error: 'Menu item not found' }
-  if (alreadyExists) return { error: 'A menu item with this name already exists in this category' }
-  if (!success) return { error: 'Transaction failed' }
+    await logAction('UPDATE_MENU_ITEM', 'MENU_ITEM', JSON.stringify({ name, categoryId, basePrice, categoryChanged }), id)
+    revalidatePath('/management/menu')
+    revalidatePath('/management/staff')
 
-  if (oldBasePrice !== basePrice) {
-    await recordPriceChange({ menuItemId: id, scope: 'base', oldPrice: oldBasePrice, newPrice: basePrice })
+    return categoryChanged
+      ? { success: true, warning: 'Category changed — verify any chef specialty mapped to this item.' }
+      : { success: true }
+  } catch (error) {
+    console.error('Failed to update menu item:', error)
+    return { error: 'Transaction failed' }
   }
-
-  await logAction('UPDATE_MENU_ITEM', 'MENU_ITEM', JSON.stringify({ name, categoryId, basePrice, categoryChanged }), id)
-  revalidatePath('/management/menu')
-  revalidatePath('/management/staff') // categories double as chef specialties
-
-  return categoryChanged
-    ? { success: true, warning: 'Category changed — verify any chef specialty mapped to this item.' }
-    : { success: true }
 }
 
 export async function deleteMenuItem(id: string) {
   const session = await getSession()
   if (!session?.isGlobalAdmin) return { error: 'Forbidden: Admin or Owner access required' }
 
-  let notFound = false
-  const success = await withTransaction<MenuItem>(DB_FILES.MENU, (menu) => {
-    const item = menu.find(m => m.id === id)
-    if (!item) { notFound = true; return menu }
-    item.isActive = false
-    item.deletedAt = new Date().toISOString()
-    item.updatedAt = new Date().toISOString()
-    return menu
-  })
+  try {
+    const existing = await db
+      .select({ id: menuItems.id })
+      .from(menuItems)
+      .where(and(eq(menuItems.id, id), isNull(menuItems.deletedAt)))
+      .limit(1)
 
-  if (notFound) return { error: 'Menu item not found' }
-  if (!success) return { error: 'Transaction failed' }
+    if (existing.length === 0) return { error: 'Menu item not found' }
 
-  // Branch mappings are intentionally preserved for historical accuracy.
-  await logAction('DELETE_MENU_ITEM', 'MENU_ITEM', 'Archived menu item', id)
-  revalidatePath('/management/menu')
-  return { success: true }
+    const now = new Date()
+    await db
+      .update(menuItems)
+      .set({
+        isActive: false,
+        deletedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(menuItems.id, id))
+
+    await logAction('DELETE_MENU_ITEM', 'MENU_ITEM', 'Archived menu item', id)
+    revalidatePath('/management/menu')
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to delete menu item:', error)
+    return { error: 'Transaction failed' }
+  }
 }
 
 export async function restoreMenuItem(id: string) {
   const session = await getSession()
   if (!session?.isGlobalAdmin) return { error: 'Forbidden: Admin or Owner access required' }
 
-  let notFound = false
-  const success = await withTransaction<MenuItem>(DB_FILES.MENU, (menu) => {
-    const item = menu.find(m => m.id === id)
-    if (!item) { notFound = true; return menu }
-    item.isActive = true
-    item.deletedAt = undefined
-    item.updatedAt = new Date().toISOString()
-    return menu
-  })
+  try {
+    const existing = await db
+      .select({ id: menuItems.id })
+      .from(menuItems)
+      .where(eq(menuItems.id, id))
+      .limit(1)
 
-  if (notFound) return { error: 'Menu item not found' }
-  if (!success) return { error: 'Transaction failed' }
+    if (existing.length === 0) return { error: 'Menu item not found' }
 
-  await logAction('RESTORE_MENU_ITEM', 'MENU_ITEM', 'Restored menu item', id)
-  revalidatePath('/management/menu')
-  return { success: true }
+    const now = new Date()
+    await db
+      .update(menuItems)
+      .set({
+        isActive: true,
+        deletedAt: null,
+        updatedAt: now,
+      })
+      .where(eq(menuItems.id, id))
+
+    await logAction('RESTORE_MENU_ITEM', 'MENU_ITEM', 'Restored menu item', id)
+    revalidatePath('/management/menu')
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to restore menu item:', error)
+    return { error: 'Transaction failed' }
+  }
 }
 
-/** Persist an explicit item order within a category — one atomic write. */
 export async function reorderMenuItems(categoryId: string, orderedIds: string[]) {
   const session = await getSession()
   if (!session?.isGlobalAdmin) return { error: 'Forbidden: Admin or Owner access required' }
   if (!Array.isArray(orderedIds) || orderedIds.length === 0) return { error: 'Nothing to reorder' }
 
-  const success = await withTransaction<MenuItem>(DB_FILES.MENU, (menu) => {
-    orderedIds.forEach((itemId, index) => {
-      const item = menu.find(m => m.id === itemId && m.categoryId === categoryId)
-      if (item) item.sortOrder = index
+  try {
+    await withDbTransaction(async (tx) => {
+      for (let index = 0; index < orderedIds.length; index++) {
+        const itemId = orderedIds[index]
+        await tx
+          .update(menuItems)
+          .set({ sortOrder: index })
+          .where(and(eq(menuItems.id, itemId), eq(menuItems.categoryId, categoryId)))
+      }
     })
-    return menu
-  })
 
-  if (!success) return { error: 'Transaction failed' }
-  await logAction('REORDER_MENU_ITEMS', 'MENU_ITEM', JSON.stringify({ categoryId, count: orderedIds.length }))
-  revalidatePath('/management/menu')
-  return { success: true }
+    await logAction('REORDER_MENU_ITEMS', 'MENU_ITEM', JSON.stringify({ categoryId, count: orderedIds.length }))
+    revalidatePath('/management/menu')
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to reorder menu items:', error)
+    return { error: 'Transaction failed' }
+  }
 }
 
-// ── variants (optional feature) ──────────────────────────────────────────────
+// ── variants ─────────────────────────────────────────────────────────────────
 
 const variantSchema = z.object({
   menuItemId: z.string().min(1),
@@ -383,29 +478,45 @@ export async function addVariant(menuItemId: string, name: string, basePrice: nu
   const parsed = variantSchema.safeParse({ menuItemId, name, basePrice })
   if (!parsed.success) return { error: parsed.error.issues[0].message }
 
-  let duplicate = false
-  const success = await withTransaction<MenuItemVariant>(DB_FILES.MENU_ITEM_VARIANTS, (list) => {
-    if (list.some(v => v.menuItemId === menuItemId && v.isActive !== false
-        && v.name.toLowerCase() === name.trim().toLowerCase())) {
-      duplicate = true
-      return list
+  try {
+    const existing = await db
+      .select({ id: menuItemVariants.id })
+      .from(menuItemVariants)
+      .where(
+        and(
+          eq(menuItemVariants.menuItemId, menuItemId),
+          ilike(menuItemVariants.name, name.trim()),
+          eq(menuItemVariants.isActive, true),
+          isNull(menuItemVariants.deletedAt)
+        )
+      )
+      .limit(1)
+
+    if (existing.length > 0) {
+      return { error: 'This item already has a variant with that name' }
     }
-    list.push({
-      id: `mv_${randomUUID()}`,
+
+    const currentVariants = await db
+      .select({ id: menuItemVariants.id })
+      .from(menuItemVariants)
+      .where(eq(menuItemVariants.menuItemId, menuItemId))
+
+    await db.insert(menuItemVariants).values({
+      id: randomUUID(),
       menuItemId,
       name: name.trim(),
       basePrice,
-      sortOrder: list.filter(v => v.menuItemId === menuItemId).length,
+      sortOrder: currentVariants.length,
       isActive: true,
     })
-    return list
-  })
 
-  if (duplicate) return { error: 'This item already has a variant with that name' }
-  if (!success) return { error: 'Transaction failed' }
-  await logAction('CREATE_MENU_VARIANT', 'MENU_VARIANT', JSON.stringify({ menuItemId, name, basePrice }))
-  revalidatePath('/management/menu')
-  return { success: true }
+    await logAction('CREATE_MENU_VARIANT', 'MENU_VARIANT', JSON.stringify({ menuItemId, name, basePrice }))
+    revalidatePath('/management/menu')
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to add variant:', error)
+    return { error: 'Transaction failed' }
+  }
 }
 
 export async function updateVariant(id: string, name: string, basePrice: number) {
@@ -415,51 +526,70 @@ export async function updateVariant(id: string, name: string, basePrice: number)
   if (!name || name.trim().length === 0) return { error: 'Variant name is required' }
   if (!Number.isInteger(basePrice) || basePrice < 0) return { error: 'Price must be a whole number' }
 
-  let notFound = false
-  let oldPrice: number | null = null
-  let menuItemId = ''
+  try {
+    const existing = await db
+      .select()
+      .from(menuItemVariants)
+      .where(and(eq(menuItemVariants.id, id), isNull(menuItemVariants.deletedAt)))
+      .limit(1)
 
-  const success = await withTransaction<MenuItemVariant>(DB_FILES.MENU_ITEM_VARIANTS, (list) => {
-    const v = list.find(x => x.id === id)
-    if (!v) { notFound = true; return list }
-    oldPrice = v.basePrice
-    menuItemId = v.menuItemId
-    v.name = name.trim()
-    v.basePrice = basePrice
-    return list
-  })
+    if (existing.length === 0) return { error: 'Variant not found' }
 
-  if (notFound) return { error: 'Variant not found' }
-  if (!success) return { error: 'Transaction failed' }
+    const v = existing[0]
+    const oldPrice = v.basePrice
 
-  if (oldPrice !== basePrice) {
-    await recordPriceChange({ menuItemId, variantId: id, scope: 'base', oldPrice, newPrice: basePrice })
+    await db
+      .update(menuItemVariants)
+      .set({
+        name: name.trim(),
+        basePrice,
+      })
+      .where(eq(menuItemVariants.id, id))
+
+    if (oldPrice !== basePrice) {
+      await recordPriceChange({ menuItemId: v.menuItemId, variantId: id, scope: 'base', oldPrice, newPrice: basePrice })
+    }
+
+    await logAction('UPDATE_MENU_VARIANT', 'MENU_VARIANT', JSON.stringify({ name, basePrice }), id)
+    revalidatePath('/management/menu')
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to update variant:', error)
+    return { error: 'Transaction failed' }
   }
-  await logAction('UPDATE_MENU_VARIANT', 'MENU_VARIANT', JSON.stringify({ name, basePrice }), id)
-  revalidatePath('/management/menu')
-  return { success: true }
 }
 
 export async function deleteVariant(id: string) {
   const session = await getSession()
   if (!session?.isGlobalAdmin) return { error: 'Forbidden: Admin or Owner access required' }
 
-  let notFound = false
-  const success = await withTransaction<MenuItemVariant>(DB_FILES.MENU_ITEM_VARIANTS, (list) => {
-    const v = list.find(x => x.id === id)
-    if (!v) { notFound = true; return list }
-    v.isActive = false
-    return list
-  })
+  try {
+    const existing = await db
+      .select({ id: menuItemVariants.id })
+      .from(menuItemVariants)
+      .where(and(eq(menuItemVariants.id, id), isNull(menuItemVariants.deletedAt)))
+      .limit(1)
 
-  if (notFound) return { error: 'Variant not found' }
-  if (!success) return { error: 'Transaction failed' }
-  await logAction('DELETE_MENU_VARIANT', 'MENU_VARIANT', 'Archived variant', id)
-  revalidatePath('/management/menu')
-  return { success: true }
+    if (existing.length === 0) return { error: 'Variant not found' }
+
+    await db
+      .update(menuItemVariants)
+      .set({
+        isActive: false,
+        deletedAt: new Date(),
+      })
+      .where(eq(menuItemVariants.id, id))
+
+    await logAction('DELETE_MENU_VARIANT', 'MENU_VARIANT', 'Archived variant', id)
+    revalidatePath('/management/menu')
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to delete variant:', error)
+    return { error: 'Transaction failed' }
+  }
 }
 
-// ── branch config: availability & price (managers allowed) ────────────────────
+// ── branch config: availability & price ──────────────────────────────────────
 
 export async function setBranchItemAvailability(
   branchId: string,
@@ -473,34 +603,56 @@ export async function setBranchItemAvailability(
   let enforcedBranch: string
   try {
     enforcedBranch = await requireBranchAccess(branchId)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (e: any) {
     return { error: e?.message || 'Forbidden' }
   }
   if (!enforcedBranch) return { error: 'Branch is required' }
 
-  const success = await withBranchMenuTransaction<BranchMenuItem>(enforcedBranch, (items) => {
-    const row = items.find(m => m.menuItemId === menuItemId && (m.variantId ?? undefined) === variantId)
-    if (row) {
-      row.isAvailable = isAvailable
+  try {
+    const conditions = [
+      eq(branchMenuItems.branchId, enforcedBranch),
+      eq(branchMenuItems.menuItemId, menuItemId),
+    ]
+    if (variantId) {
+      conditions.push(eq(branchMenuItems.variantId, variantId))
     } else {
-      items.push({
-        id: `bmi_${randomUUID()}`,
+      conditions.push(isNull(branchMenuItems.variantId))
+    }
+
+    const existing = await db
+      .select({ id: branchMenuItems.id })
+      .from(branchMenuItems)
+      .where(and(...conditions))
+      .limit(1)
+
+    if (existing.length > 0) {
+      await db
+        .update(branchMenuItems)
+        .set({ isAvailable })
+        .where(eq(branchMenuItems.id, existing[0].id))
+    } else {
+      await db.insert(branchMenuItems).values({
+        id: randomUUID(),
         branchId: enforcedBranch,
         menuItemId,
-        variantId,
+        variantId: variantId || null,
         price: null,
         isAvailable,
       })
     }
-    return items
-  })
 
-  if (!success) return { error: 'Failed to update availability' }
-  await logAction(
-    'SET_MENU_AVAILABILITY', 'BRANCH_MENU_ITEM',
-    JSON.stringify({ branchId: enforcedBranch, menuItemId, variantId, isAvailable }), menuItemId
-  )
-  return { success: true }
+    await logAction(
+      'SET_MENU_AVAILABILITY',
+      'BRANCH_MENU_ITEM',
+      JSON.stringify({ branchId: enforcedBranch, menuItemId, variantId, isAvailable }),
+      menuItemId
+    )
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to update branch item availability:', error)
+    return { error: 'Failed to update availability' }
+  }
 }
 
 export async function updateBranchMenuItemPrice(
@@ -518,40 +670,67 @@ export async function updateBranchMenuItemPrice(
   let enforcedBranch: string
   try {
     enforcedBranch = await requireBranchAccess(branchId)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (e: any) {
     return { error: e?.message || 'Forbidden' }
   }
   if (!enforcedBranch) return { error: 'Branch is required' }
 
-  let oldPrice: number | null = null
-  const success = await withBranchMenuTransaction<BranchMenuItem>(enforcedBranch, (items) => {
-    const row = items.find(m => m.menuItemId === menuItemId && (m.variantId ?? undefined) === variantId)
-    if (row) {
-      oldPrice = row.price
-      row.price = price
+  try {
+    const conditions = [
+      eq(branchMenuItems.branchId, enforcedBranch),
+      eq(branchMenuItems.menuItemId, menuItemId),
+    ]
+    if (variantId) {
+      conditions.push(eq(branchMenuItems.variantId, variantId))
     } else {
-      items.push({
-        id: `bmi_${randomUUID()}`,
+      conditions.push(isNull(branchMenuItems.variantId))
+    }
+
+    const existing = await db
+      .select()
+      .from(branchMenuItems)
+      .where(and(...conditions))
+      .limit(1)
+
+    let oldPrice: number | null = null
+    if (existing.length > 0) {
+      oldPrice = existing[0].price
+      await db
+        .update(branchMenuItems)
+        .set({ price })
+        .where(eq(branchMenuItems.id, existing[0].id))
+    } else {
+      await db.insert(branchMenuItems).values({
+        id: randomUUID(),
         branchId: enforcedBranch,
         menuItemId,
-        variantId,
+        variantId: variantId || null,
         price,
         isAvailable: true,
       })
     }
-    return items
-  })
 
-  if (!success) return { error: 'Failed to update price' }
+    await recordPriceChange({
+      menuItemId,
+      variantId,
+      branchId: enforcedBranch,
+      scope: 'branch',
+      oldPrice,
+      newPrice: price,
+    })
 
-  await recordPriceChange({
-    menuItemId, variantId, branchId: enforcedBranch, scope: 'branch', oldPrice, newPrice: price,
-  })
-  await logAction(
-    'UPDATE_BRANCH_PRICE', 'BRANCH_MENU_ITEM',
-    JSON.stringify({ branchId: enforcedBranch, menuItemId, variantId, oldPrice, newPrice: price }), menuItemId
-  )
-  return { success: true }
+    await logAction(
+      'UPDATE_BRANCH_PRICE',
+      'BRANCH_MENU_ITEM',
+      JSON.stringify({ branchId: enforcedBranch, menuItemId, variantId, oldPrice, newPrice: price }),
+      menuItemId
+    )
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to update branch item price:', error)
+    return { error: 'Failed to update price' }
+  }
 }
 
 // ── bulk operations ──────────────────────────────────────────────────────────
@@ -568,38 +747,57 @@ export async function bulkSetBranchAvailability(
   let enforcedBranch: string
   try {
     enforcedBranch = await requireBranchAccess(branchId)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (e: any) {
     return { error: e?.message || 'Forbidden' }
   }
 
   let changed = 0
-  const success = await withBranchMenuTransaction<BranchMenuItem>(enforcedBranch, (items) => {
-    for (const menuItemId of menuItemIds) {
-      const row = items.find(m => m.menuItemId === menuItemId && !m.variantId)
-      if (row) {
-        if (row.isAvailable !== isAvailable) changed++
-        row.isAvailable = isAvailable
-      } else {
-        items.push({
-          id: `bmi_${randomUUID()}`,
-          branchId: enforcedBranch,
-          menuItemId,
-          price: null,
-          isAvailable,
-        })
-        changed++
-      }
-    }
-    return items
-  })
+  try {
+    await withDbTransaction(async (tx) => {
+      for (const menuItemId of menuItemIds) {
+        const existing = await tx
+          .select()
+          .from(branchMenuItems)
+          .where(
+            and(
+              eq(branchMenuItems.branchId, enforcedBranch),
+              eq(branchMenuItems.menuItemId, menuItemId),
+              isNull(branchMenuItems.variantId)
+            )
+          )
+          .limit(1)
 
-  if (!success) return { error: 'Bulk availability update failed' }
-  await logAction(
-    'BULK_SET_MENU_AVAILABILITY', 'BRANCH_MENU_ITEM',
-    JSON.stringify({ branchId: enforcedBranch, count: menuItemIds.length, changed, isAvailable })
-  )
-  revalidatePath('/management/menu')
-  return { success: true, changed }
+        if (existing.length > 0) {
+          if (existing[0].isAvailable !== isAvailable) changed++
+          await tx
+            .update(branchMenuItems)
+            .set({ isAvailable })
+            .where(eq(branchMenuItems.id, existing[0].id))
+        } else {
+          await tx.insert(branchMenuItems).values({
+            id: randomUUID(),
+            branchId: enforcedBranch,
+            menuItemId,
+            price: null,
+            isAvailable,
+          })
+          changed++
+        }
+      }
+    })
+
+    await logAction(
+      'BULK_SET_MENU_AVAILABILITY',
+      'BRANCH_MENU_ITEM',
+      JSON.stringify({ branchId: enforcedBranch, count: menuItemIds.length, changed, isAvailable })
+    )
+    revalidatePath('/management/menu')
+    return { success: true, changed }
+  } catch (error) {
+    console.error('Failed to bulk set availability:', error)
+    return { error: 'Bulk availability update failed' }
+  }
 }
 
 export async function bulkUpdateBranchPrices(
@@ -618,57 +816,79 @@ export async function bulkUpdateBranchPrices(
   let enforcedBranch: string
   try {
     enforcedBranch = await requireBranchAccess(branchId)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (e: any) {
     return { error: e?.message || 'Forbidden' }
   }
 
-  const menu = await readJSON<MenuItem>(DB_FILES.MENU)
-  const changes: { menuItemId: string; oldPrice: number | null; newPrice: number }[] = []
+  try {
+    const items = await db.select().from(menuItems).where(inArray(menuItems.id, menuItemIds))
+    const changes: { menuItemId: string; oldPrice: number | null; newPrice: number }[] = []
 
-  const success = await withBranchMenuTransaction<BranchMenuItem>(enforcedBranch, (items) => {
-    for (const menuItemId of menuItemIds) {
-      const item = menu.find(m => m.id === menuItemId)
-      if (!item) continue
+    await withDbTransaction(async (tx) => {
+      for (const item of items) {
+        const existing = await tx
+          .select()
+          .from(branchMenuItems)
+          .where(
+            and(
+              eq(branchMenuItems.branchId, enforcedBranch),
+              eq(branchMenuItems.menuItemId, item.id),
+              isNull(branchMenuItems.variantId)
+            )
+          )
+          .limit(1)
 
-      const row = items.find(m => m.menuItemId === menuItemId && !m.variantId)
-      const base = resolveEffectiveBasePrice(item)
-      const current = row?.price ?? base
-      const next = applyPriceChange(current, mode, value)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const base = resolveEffectiveBasePrice(item as any)
+        const current = existing[0]?.price ?? base
+        const next = applyPriceChange(current, mode, value)
 
-      if (row) {
-        if (row.price !== next) changes.push({ menuItemId, oldPrice: row.price, newPrice: next })
-        row.price = next
-      } else {
-        changes.push({ menuItemId, oldPrice: null, newPrice: next })
-        items.push({
-          id: `bmi_${randomUUID()}`,
-          branchId: enforcedBranch,
-          menuItemId,
-          price: next,
-          isAvailable: true,
-        })
+        if (existing.length > 0) {
+          if (existing[0].price !== next) {
+            changes.push({ menuItemId: item.id, oldPrice: existing[0].price, newPrice: next })
+          }
+          await tx
+            .update(branchMenuItems)
+            .set({ price: next })
+            .where(eq(branchMenuItems.id, existing[0].id))
+        } else {
+          changes.push({ menuItemId: item.id, oldPrice: null, newPrice: next })
+          await tx.insert(branchMenuItems).values({
+            id: randomUUID(),
+            branchId: enforcedBranch,
+            menuItemId: item.id,
+            price: next,
+            isAvailable: true,
+          })
+        }
       }
-    }
-    return items
-  })
-
-  if (!success) return { error: 'Bulk price update failed' }
-
-  for (const c of changes) {
-    await recordPriceChange({
-      menuItemId: c.menuItemId, branchId: enforcedBranch, scope: 'branch',
-      oldPrice: c.oldPrice, newPrice: c.newPrice,
     })
+
+    for (const c of changes) {
+      await recordPriceChange({
+        menuItemId: c.menuItemId,
+        branchId: enforcedBranch,
+        scope: 'branch',
+        oldPrice: c.oldPrice,
+        newPrice: c.newPrice,
+      })
+    }
+
+    await logAction(
+      'BULK_UPDATE_BRANCH_PRICES',
+      'BRANCH_MENU_ITEM',
+      JSON.stringify({ branchId: enforcedBranch, mode, value, changed: changes.length })
+    )
+    revalidatePath('/management/menu')
+    return { success: true, changed: changes.length }
+  } catch (error) {
+    console.error('Failed to bulk update branch prices:', error)
+    return { error: 'Bulk price update failed' }
   }
-  await logAction(
-    'BULK_UPDATE_BRANCH_PRICES', 'BRANCH_MENU_ITEM',
-    JSON.stringify({ branchId: enforcedBranch, mode, value, changed: changes.length })
-  )
-  revalidatePath('/management/menu')
-  return { success: true, changed: changes.length }
 }
 
-// ── clone one branch's configuration onto another ─────────────────────────────
+// ── clone branch menu configuration ───────────────────────────────────────────
 
 export async function cloneBranchMenuConfig(
   fromBranchId: string,
@@ -681,46 +901,62 @@ export async function cloneBranchMenuConfig(
   if (fromBranchId === toBranchId) return { error: 'Source and target branches must differ' }
   if (!options.prices && !options.availability) return { error: 'Select at least prices or availability to copy' }
 
-  // The writer must have access to the TARGET branch.
   let enforcedTarget: string
   try {
     enforcedTarget = await requireBranchAccess(toBranchId)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (e: any) {
     return { error: e?.message || 'Forbidden' }
   }
 
-  const source = await readBranchMenuItems<BranchMenuItem>(fromBranchId)
-  if (source.length === 0) return { error: 'Source branch has no menu configuration to copy' }
+  try {
+    const source = await db.select().from(branchMenuItems).where(eq(branchMenuItems.branchId, fromBranchId))
+    if (source.length === 0) return { error: 'Source branch has no menu configuration to copy' }
 
-  let applied = 0
-  const success = await withBranchMenuTransaction<BranchMenuItem>(enforcedTarget, (items) => {
-    for (const src of source) {
-      const row = items.find(
-        m => m.menuItemId === src.menuItemId && (m.variantId ?? undefined) === (src.variantId ?? undefined)
-      )
-      if (row) {
-        if (options.prices) row.price = src.price
-        if (options.availability) row.isAvailable = src.isAvailable
-      } else {
-        items.push({
-          id: `bmi_${randomUUID()}`,
-          branchId: enforcedTarget,
-          menuItemId: src.menuItemId,
-          variantId: src.variantId,
-          price: options.prices ? src.price : null,
-          isAvailable: options.availability ? src.isAvailable : true,
-        })
+    let applied = 0
+    await withDbTransaction(async (tx) => {
+      for (const src of source) {
+        const conds = [
+          eq(branchMenuItems.branchId, enforcedTarget),
+          eq(branchMenuItems.menuItemId, src.menuItemId),
+        ]
+        if (src.variantId) {
+          conds.push(eq(branchMenuItems.variantId, src.variantId))
+        } else {
+          conds.push(isNull(branchMenuItems.variantId))
+        }
+
+        const existing = await tx.select().from(branchMenuItems).where(and(...conds)).limit(1)
+
+        if (existing.length > 0) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const updateData: Record<string, any> = {}
+          if (options.prices) updateData.price = src.price
+          if (options.availability) updateData.isAvailable = src.isAvailable
+          await tx.update(branchMenuItems).set(updateData).where(eq(branchMenuItems.id, existing[0].id))
+        } else {
+          await tx.insert(branchMenuItems).values({
+            id: randomUUID(),
+            branchId: enforcedTarget,
+            menuItemId: src.menuItemId,
+            variantId: src.variantId,
+            price: options.prices ? src.price : null,
+            isAvailable: options.availability ? src.isAvailable : true,
+          })
+        }
+        applied++
       }
-      applied++
-    }
-    return items
-  })
+    })
 
-  if (!success) return { error: 'Clone failed' }
-  await logAction(
-    'CLONE_BRANCH_MENU_CONFIG', 'BRANCH_MENU_ITEM',
-    JSON.stringify({ from: fromBranchId, to: enforcedTarget, applied, options })
-  )
-  revalidatePath('/management/menu')
-  return { success: true, applied }
+    await logAction(
+      'CLONE_BRANCH_MENU_CONFIG',
+      'BRANCH_MENU_ITEM',
+      JSON.stringify({ from: fromBranchId, to: enforcedTarget, applied, options })
+    )
+    revalidatePath('/management/menu')
+    return { success: true, applied }
+  } catch (error) {
+    console.error('Failed to clone branch menu config:', error)
+    return { error: 'Clone failed' }
+  }
 }

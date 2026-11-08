@@ -1,26 +1,46 @@
-import { readJSON, DB_FILES } from '@/lib/db'
+import {
+  db,
+  staff as staffTable,
+  branches as branchesTable,
+  roles as rolesTable,
+} from '@/lib/db'
 import { getSessionRole, getSession } from '@/app/actions/auth'
 import AttendanceClientPage from './AttendanceClientPage'
+import { eq, and, isNull } from 'drizzle-orm'
 
 export default async function AttendancePage() {
-  const session = await getSession();
-  let [[staff, branches, roles], userRole] = await Promise.all([
-    Promise.all([
-      readJSON<any>(DB_FILES.STAFF),
-      readJSON<any>(DB_FILES.BRANCHES),
-      readJSON<any>(DB_FILES.ROLES)
-    ]),
-    getSessionRole()
-  ]);
+  const session = await getSession()
+  const isGlobal = session?.isGlobalAdmin || session?.role === 'readonly'
+  const branchId = session?.branchId
 
-  if (!session?.isGlobalAdmin && session?.role !== 'readonly') {
-    staff = staff.filter((s: any) => s.branchId === session?.branchId)
-    branches = branches.filter((b: any) => b.id === session?.branchId)
+  let staffQuery = db
+    .select()
+    .from(staffTable)
+    .where(and(eq(staffTable.isActive, true), isNull(staffTable.deletedAt)))
+
+  let branchesQuery = db
+    .select()
+    .from(branchesTable)
+    .where(and(eq(branchesTable.isActive, true), isNull(branchesTable.deletedAt)))
+
+  if (!isGlobal && branchId) {
+    staffQuery = db
+      .select()
+      .from(staffTable)
+      .where(and(eq(staffTable.branchId, branchId), eq(staffTable.isActive, true), isNull(staffTable.deletedAt)))
+
+    branchesQuery = db
+      .select()
+      .from(branchesTable)
+      .where(and(eq(branchesTable.id, branchId), eq(branchesTable.isActive, true), isNull(branchesTable.deletedAt)))
   }
 
-  staff = staff.filter((s: any) => s.isActive === true)
-  branches = branches.filter((b: any) => b.isActive !== false)
-  roles = roles.filter((r: any) => r.isActive !== false)
+  const [staff, branches, roles, userRole] = await Promise.all([
+    staffQuery.catch(() => []),
+    branchesQuery.catch(() => []),
+    db.select().from(rolesTable).where(eq(rolesTable.isActive, true)).catch(() => []),
+    getSessionRole(),
+  ])
 
   return (
     <AttendanceClientPage

@@ -1,36 +1,29 @@
-import { drizzle as drizzleNeon } from "drizzle-orm/neon-http";
-import * as schema from "./schema";
+import postgres from 'postgres';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import * as schema from './schema';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let db: any;
+const DATABASE_URL = process.env.AIVEN_DATABASE_URL || process.env.DATABASE_URL;
+const AIVEN_CA_CERT = process.env.AIVEN_CA_CERT;
 
-function getDbUrl(): string {
-  if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
-  if (process.env.NETLIFY_DB_URL) return process.env.NETLIFY_DB_URL;
-  if (typeof (globalThis as any).Netlify !== "undefined" && (globalThis as any).Netlify?.env?.get) {
-    const u = (globalThis as any).Netlify.env.get("DATABASE_URL") || (globalThis as any).Netlify.env.get("NETLIFY_DB_URL");
-    if (u) return u;
-  }
-  if (typeof (globalThis as any).Deno !== "undefined" && (globalThis as any).Deno?.env?.get) {
-    const u = (globalThis as any).Deno.env.get("DATABASE_URL") || (globalThis as any).Deno.env.get("NETLIFY_DB_URL");
-    if (u) return u;
-  }
-  return "";
+if (!DATABASE_URL) {
+  throw new Error(
+    '[db] DATABASE_URL is not set. Set DATABASE_URL to your Aiven (or local) PostgreSQL connection string.'
+  );
 }
 
-const dbUrl = getDbUrl();
-
-if (process.env.NETLIFY === "true" && process.env.NEXT_RUNTIME !== "edge") {
-  // Use the native Netlify Database connection in production Node.js runtime.
-  // Dynamically require so edge/middleware bundles don't statically trace 'pg'.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { drizzle: drizzleNetlify } = require("drizzle-orm/netlify-db");
-  db = drizzleNetlify({ schema });
-} else if (dbUrl.length > 0) {
-  db = drizzleNeon(dbUrl, { schema });
-} else {
-  // Local/build fallback when no live database credentials are provided
-  db = drizzleNeon("postgresql://mockuser:mockpass@mock.neon.tech/mockdb", { schema });
+if (process.env.AIVEN_DATABASE_URL && !AIVEN_CA_CERT) {
+  throw new Error('[db] AIVEN_CA_CERT is required when AIVEN_DATABASE_URL is set.');
 }
 
-export { db };
+const sql = postgres(DATABASE_URL, {
+  ssl: AIVEN_CA_CERT
+    ? { rejectUnauthorized: true, ca: AIVEN_CA_CERT }
+    : undefined,
+  max: 2,
+  idle_timeout: 20,
+  max_lifetime: 1800,
+  connect_timeout: 10,
+  onnotice: () => {},
+});
+
+export const db = drizzle({ client: sql, schema });

@@ -17,6 +17,7 @@ vi.mock('next/navigation', () => ({
 vi.mock('@/app/actions/pos', () => ({
   createOrder: vi.fn(),
   addOrUpdateOrderItem: vi.fn(),
+  toggleOrderItemParcel: vi.fn(),
   removeOrderItem: vi.fn(),
   updateOrderNote: vi.fn(),
   fireKot: vi.fn(),

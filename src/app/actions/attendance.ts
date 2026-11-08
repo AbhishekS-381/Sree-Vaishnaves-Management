@@ -1,6 +1,7 @@
-"use server"
+'use server'
 
-import { withTransaction, readJSON, DB_FILES } from '@/lib/db'
+import { db, attendance, withDbTransaction } from '@/lib/db'
+import { eq, and } from 'drizzle-orm'
 import { randomUUID } from 'crypto'
 import { revalidatePath } from 'next/cache'
 import { getSession, requireBranchAccess } from '@/app/actions/auth'
@@ -10,7 +11,7 @@ export type AttendanceStatus = 'present' | 'absent' | 'half-day' | 'holiday' | '
 
 export interface AttendanceLog {
   id: string
-  date: string 
+  date: string
   staffId: string
   branchId: string
   status: AttendanceStatus
@@ -19,81 +20,102 @@ export interface AttendanceLog {
 }
 
 export async function getAttendanceByDate(date: string, branchId?: string) {
-  const logs = await readJSON<AttendanceLog>(DB_FILES.ATTENDANCE)
-  return logs.filter(l => l.date === date && (!branchId || l.branchId === branchId))
+  try {
+    const conditions = [eq(attendance.date, date)]
+    if (branchId) {
+      conditions.push(eq(attendance.branchId, branchId))
+    }
+    const rows = await db
+      .select()
+      .from(attendance)
+      .where(and(...conditions))
+
+    return rows.map((l) => ({
+      id: l.id,
+      date: l.date,
+      staffId: l.staffId,
+      branchId: l.branchId,
+      status: l.status as AttendanceStatus,
+      shiftsWorked: (l.shiftsWorked as string[]) || undefined,
+      updatedAt: l.updatedAt instanceof Date ? l.updatedAt.toISOString() : String(l.updatedAt),
+    }))
+  } catch (error) {
+    console.error('Failed to get attendance by date:', error)
+    return []
+  }
 }
 
 export async function saveAttendance(newLogs: Partial<AttendanceLog>[]) {
   const session = await getSession()
-  const userRole = session?.role || ''
-  
-  const now = new Date().toISOString()
+
+  const now = new Date()
   const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-  
+
   if (newLogs.length > 0) {
     try {
-      const enforcedBranch = await requireBranchAccess(newLogs[0].branchId);
-      newLogs.forEach(l => l.branchId = enforcedBranch);
-    } catch (e) {
+      const enforcedBranch = await requireBranchAccess(newLogs[0].branchId)
+      newLogs.forEach((l) => (l.branchId = enforcedBranch))
+    } catch {
       return { error: 'Forbidden: Branch access denied.' }
     }
   }
-  
-  let timeLockError = false;
-  let futureDateError = false;
 
-  const success = await withTransaction<AttendanceLog>(DB_FILES.ATTENDANCE, (allLogs) => {
-    for (const newLog of newLogs) {
-      if (!newLog.date || !newLog.staffId) continue
+  // Pre-write date validations (Requirement 4.4, 4.5)
+  for (const newLog of newLogs) {
+    if (!newLog.date || !newLog.staffId) continue
 
-      if (newLog.date > todayStr) {
-        futureDateError = true;
-        return allLogs; 
-      }
-
-      // Time-lock validation
-      const diffTime = Math.abs(new Date(now).getTime() - new Date(newLog.date).getTime())
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-      if (diffDays > 7 && !session?.isGlobalAdmin) {
-          timeLockError = true;
-          return allLogs;
-      }
-      
-      const existingIndex = allLogs.findIndex(l => l.date === newLog.date && l.staffId === newLog.staffId)
-      
-      if (existingIndex >= 0) {
-        allLogs[existingIndex] = {
-          ...allLogs[existingIndex],
-          ...newLog,
-          updatedAt: now
-        } as AttendanceLog
-      } else {
-        allLogs.push({
-          id: newLog.id || randomUUID(),
-          date: newLog.date,
-          staffId: newLog.staffId,
-          branchId: newLog.branchId || '',
-          status: newLog.status || 'present',
-          shiftsWorked: newLog.shiftsWorked || [],
-          updatedAt: now
-        })
-      }
+    if (newLog.date > todayStr) {
+      return { error: 'Cannot mark attendance for future dates' }
     }
-    return allLogs
-  })
 
-  if (futureDateError) {
-     return { error: 'Cannot mark attendance for future dates' }
+    // Time-lock validation: 7-day limit for non-global-admin
+    const diffTime = Math.abs(now.getTime() - new Date(newLog.date).getTime())
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    if (diffDays > 7 && !session?.isGlobalAdmin) {
+      return { error: 'Cannot save attendance older than 7 days without Owner privileges.' }
+    }
   }
-  if (timeLockError) {
-    return { error: 'Cannot save attendance older than 7 days without Owner privileges.' }
-  }
-  
-  if (!success) return { error: 'Transaction failed' }
-  
-  await logAction('UPDATE_ATTENDANCE', 'ATTENDANCE', `Updated attendance for ${newLogs.length} staff members. Dates: ${[...new Set(newLogs.map(n => n.date))].join(',')}`);
 
-  revalidatePath('/management/attendance')
-  revalidatePath('/')
-  return { success: true }
+  try {
+    await withDbTransaction(async (tx) => {
+      for (const newLog of newLogs) {
+        if (!newLog.date || !newLog.staffId) continue
+
+        const effectiveDate = new Date()
+        await tx
+          .insert(attendance)
+          .values({
+            id: newLog.id || randomUUID(),
+            date: newLog.date,
+            staffId: newLog.staffId,
+            branchId: newLog.branchId || '',
+            status: newLog.status || 'present',
+            shiftsWorked: newLog.shiftsWorked || [],
+            createdAt: effectiveDate,
+            updatedAt: effectiveDate,
+          })
+          .onConflictDoUpdate({
+            target: [attendance.date, attendance.staffId],
+            set: {
+              status: newLog.status || 'present',
+              shiftsWorked: newLog.shiftsWorked || [],
+              updatedAt: effectiveDate,
+            },
+          })
+      }
+    })
+
+    await logAction(
+      'UPDATE_ATTENDANCE',
+      'ATTENDANCE',
+      `Updated attendance for ${newLogs.length} staff members. Dates: ${[...new Set(newLogs.map((n) => n.date))].join(',')}`
+    )
+
+    revalidatePath('/management/attendance')
+    revalidatePath('/')
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to save attendance:', error)
+    return { error: 'Transaction failed' }
+  }
 }

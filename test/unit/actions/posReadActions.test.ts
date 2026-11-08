@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import * as db from '@/lib/db'
 import * as auth from '@/app/actions/auth'
 import * as audit from '@/lib/audit'
 import {
@@ -10,14 +9,108 @@ import {
 } from '@/app/actions/pos'
 import type { PosOrder, PosKot, PosTable } from '@/app/actions/posTypes'
 
+const { mockDb } = vi.hoisted(() => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const state: any = {
+    tables: [] as any[],
+    orders: [] as any[],
+    kots: [] as any[],
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const getCollection = (tableName?: string): any[] => {
+    if (tableName === 'pos_tables') return state.tables
+    if (tableName === 'pos_orders') return state.orders
+    if (tableName === 'pos_kots') return state.kots
+    return []
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const filterItem = (tableName: string, item: any, str: string): boolean => {
+    if (tableName === 'pos_orders') {
+      if (str.includes('"2026-10-14"') && str.includes('"2026-10-15"')) {
+        return item.date >= '2026-10-14' && item.date <= '2026-10-15'
+      }
+      if (str.includes('"2026-10-15"') && item.date !== '2026-10-15') return false
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+      if (str.includes(`"${today}"`) && item.date !== today) return false
+      return true
+    }
+    if (tableName === 'pos_kots') {
+      if (str.includes('"pending"') && !['pending', 'preparing', 'ready'].includes(item.status)) return false
+      return true
+    }
+    return true
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const mock: any = {
+    state,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    select: vi.fn((_fields?: any) => ({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      from: vi.fn((table: any) => {
+        const tableName = table?.tableName || ''
+        const collection = getCollection(tableName)
+        let filtered = collection
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const builder: any = {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          where: vi.fn((cond?: any) => {
+            if (cond) {
+              const str = JSON.stringify(cond)
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              filtered = collection.filter((item: any) => filterItem(tableName, item, str))
+            }
+            return builder
+          }),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          orderBy: vi.fn((_col: any) => {
+            if (tableName === 'pos_kots') {
+              filtered = [...filtered].sort((a: any, b: any) => (a.firedAt || '').localeCompare(b.firedAt || ''))
+            }
+            return builder
+          }),
+          limit: vi.fn((count?: number) => {
+            return Promise.resolve(count !== undefined ? filtered.slice(0, count) : filtered)
+          }),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          then: (resolve: any) => Promise.resolve(filtered).then(resolve),
+        }
+        return builder
+      }),
+    })),
+  }
+
+  return { mockDb: mock }
+})
+
 vi.mock('@/lib/db', () => ({
-  readJSON: vi.fn(),
-  withTransaction: vi.fn(),
-  readBranchMenuItems: vi.fn(),
-  DB_FILES: {
-    POS_TABLES: 'pos_tables.json',
-    POS_ORDERS: 'pos_orders.json',
-    POS_KOTS: 'pos_kots.json',
+  db: mockDb,
+  withDbTransaction: vi.fn(),
+  posTables: {
+    tableName: 'pos_tables',
+    id: { name: 'id' },
+    name: { name: 'name' },
+    branchId: { name: 'branch_id' },
+  },
+  posOrders: {
+    tableName: 'pos_orders',
+    id: { name: 'id' },
+    tableId: { name: 'table_id' },
+    takeawayNumber: { name: 'takeaway_number' },
+    orderType: { name: 'order_type' },
+    branchId: { name: 'branch_id' },
+    date: { name: 'date' },
+  },
+  posKots: {
+    tableName: 'pos_kots',
+    id: { name: 'id' },
+    branchId: { name: 'branch_id' },
+    orderId: { name: 'order_id' },
+    status: { name: 'status' },
+    firedAt: { name: 'fired_at' },
   },
 }))
 
@@ -28,11 +121,16 @@ vi.mock('@/lib/audit', () => ({
 describe('POS Read Actions & Audit Guarantees (Tasks 7.1–7.5, Req 12.3)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockDb.state.tables = []
+    mockDb.state.orders = []
+    mockDb.state.kots = []
+
     vi.spyOn(auth, 'getSession').mockResolvedValue({
       userId: 'u_admin',
       role: 'admin',
       isGlobalAdmin: true,
       branchId: 'b_1',
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any)
     vi.spyOn(auth, 'requireBranchAccess').mockResolvedValue('b_1')
   })
@@ -40,11 +138,13 @@ describe('POS Read Actions & Audit Guarantees (Tasks 7.1–7.5, Req 12.3)', () =
   // ─── 7.1 getKitchenKots ───────────────────────────────────────────
   describe('getKitchenKots', () => {
     it('returns active KOTs in FIFO order with identifiers and strips financial data', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       vi.mocked(auth.getSession).mockResolvedValue({
         userId: 'u_chef',
         role: 'kitchen',
         isGlobalAdmin: false,
         branchId: 'b_1',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any)
 
       const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
@@ -67,12 +167,9 @@ describe('POS Read Actions & Audit Guarantees (Tasks 7.1–7.5, Req 12.3)', () =
         { id: 'k_served', branchId: 'b_1', orderId: 'o1', kotNumber: 2, items: [], status: 'served', firedBy: 'u1', firedAt: '2026-10-15T12:01:00Z', updatedAt: '' },
       ]
 
-      vi.mocked(db.readJSON).mockImplementation(async (file: string) => {
-        if (file === 'pos_orders.json') return orders
-        if (file === 'pos_tables.json') return tables
-        if (file === 'pos_kots.json') return kots
-        return []
-      })
+      mockDb.state.orders = orders
+      mockDb.state.tables = tables
+      mockDb.state.kots = kots
 
       const res = await getKitchenKots('b_1')
       expect('error' in res).toBe(false)
@@ -88,7 +185,9 @@ describe('POS Read Actions & Audit Guarantees (Tasks 7.1–7.5, Req 12.3)', () =
       // Check financial data stripped (items have NO unitPrice or amount)
       for (const kot of res.kots) {
         for (const item of kot.items) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           expect((item as any).unitPrice).toBeUndefined()
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           expect((item as any).price).toBeUndefined()
         }
       }
@@ -155,7 +254,7 @@ describe('POS Read Actions & Audit Guarantees (Tasks 7.1–7.5, Req 12.3)', () =
         },
       ]
 
-      vi.mocked(db.readJSON).mockImplementation(async () => orders)
+      mockDb.state.orders = orders
 
       const res = await getPosOrderHistory('b_1', '2026-10-14', '2026-10-15')
       expect('error' in res).toBe(false)
@@ -172,10 +271,12 @@ describe('POS Read Actions & Audit Guarantees (Tasks 7.1–7.5, Req 12.3)', () =
     })
 
     it('denies manager or waiter from accessing order history (Req 7.1)', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       vi.mocked(auth.getSession).mockResolvedValueOnce({
         role: 'manager',
         isGlobalAdmin: false,
         branchId: 'b_1',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any)
 
       const res = await getPosOrderHistory('b_1', '2026-10-14', '2026-10-15')
@@ -226,7 +327,7 @@ describe('POS Read Actions & Audit Guarantees (Tasks 7.1–7.5, Req 12.3)', () =
         },
       ]
 
-      vi.mocked(db.readJSON).mockImplementation(async () => orders)
+      mockDb.state.orders = orders
 
       const res = await getDailySummary('b_1', today)
       expect('error' in res).toBe(false)
@@ -240,10 +341,12 @@ describe('POS Read Actions & Audit Guarantees (Tasks 7.1–7.5, Req 12.3)', () =
     })
 
     it('forbids posRole accounts from accessing daily summary', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       vi.mocked(auth.getSession).mockResolvedValueOnce({
         role: 'billing',
         posRole: true,
         branchId: 'b_1',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any)
 
       const res = await getDailySummary('b_1', '2026-10-15')
@@ -272,7 +375,7 @@ describe('POS Read Actions & Audit Guarantees (Tasks 7.1–7.5, Req 12.3)', () =
         },
       ]
 
-      vi.mocked(db.readJSON).mockImplementation(async () => orders)
+      mockDb.state.orders = orders
 
       const res = await getPosDataForEOD(today, 'b_1')
       expect('error' in res).toBe(false)
@@ -282,6 +385,7 @@ describe('POS Read Actions & Audit Guarantees (Tasks 7.1–7.5, Req 12.3)', () =
       expect(res.data.billCount).toBe(1)
       expect(res.data.totalBillAmount).toBe(105)
       expect(res.data.cashCollectedAsBilled).toBe(105)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect((res as any).orders).toBeUndefined() // never leaks raw orders
     })
   })

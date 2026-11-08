@@ -1,88 +1,124 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { logAction } from '@/lib/audit'
-import * as db from '@/lib/db'
-import * as auth from '@/app/actions/auth'
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { logAction } from '@/lib/audit';
+import * as auth from '@/app/actions/auth';
+import { buildMockDb } from '../drizzleMock';
+
+const { mockDb } = vi.hoisted(() => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const mock: any = {
+    select: vi.fn().mockReturnThis(),
+    from: vi.fn().mockReturnThis(),
+    where: vi.fn().mockReturnThis(),
+    and: vi.fn().mockReturnThis(),
+    orderBy: vi.fn().mockReturnThis(),
+    groupBy: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockResolvedValue([]),
+    offset: vi.fn().mockReturnThis(),
+    insert: vi.fn().mockReturnThis(),
+    values: vi.fn().mockResolvedValue([]),
+    onConflictDoUpdate: vi.fn().mockResolvedValue([]),
+    onConflictDoNothing: vi.fn().mockResolvedValue([]),
+    update: vi.fn().mockReturnThis(),
+    set: vi.fn().mockReturnThis(),
+    delete: vi.fn().mockReturnThis(),
+    execute: vi.fn().mockResolvedValue([]),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    transaction: vi.fn().mockImplementation(async (cb: any) => cb(mock)),
+  };
+  return { mockDb: mock };
+});
 
 vi.mock('@/lib/db', () => ({
-  readJSON: vi.fn().mockResolvedValue([]),
-  writeJSON: vi.fn().mockResolvedValue(true),
-  DB_FILES: new Proxy({}, { get: () => 'mock.json' })
-}))
+  db: mockDb,
+  auditLogs: { timestamp: 'timestamp' },
+}));
+
 vi.mock('@/app/actions/auth', () => ({
-  getSession: vi.fn()
-}))
+  getSession: vi.fn(),
+}));
 
 describe('audit.ts - logAction', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
-  })
+    vi.clearAllMocks();
+    mockDb.select.mockReturnThis();
+    mockDb.from.mockReturnThis();
+    mockDb.insert.mockReturnThis();
+    mockDb.values.mockResolvedValue([]);
+    mockDb.execute.mockResolvedValue([]);
+    mockDb.from.mockResolvedValue([{ count: 10 }]);
+  });
 
   it('writes log with system user when no session', async () => {
-    vi.mocked(auth.getSession).mockResolvedValue(null as any)
-    vi.mocked(db.readJSON).mockResolvedValue([])
-    vi.mocked(db.writeJSON).mockResolvedValue(true)
-    await logAction('CREATE', 'STAFF', 'Added a staff member')
-    expect(db.writeJSON).toHaveBeenCalledTimes(1)
-    const writtenLogs = vi.mocked(db.writeJSON).mock.calls[0][1] as any[]
-    expect(writtenLogs[0]).toMatchObject({ action: 'CREATE', userId: 'system', userName: 'system' })
-  })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.mocked(auth.getSession).mockResolvedValue(null as any);
+    await logAction('CREATE', 'STAFF', 'Added a staff member');
+
+    expect(mockDb.insert).toHaveBeenCalledTimes(1);
+    expect(mockDb.values).toHaveBeenCalledTimes(1);
+    const inserted = mockDb.values.mock.calls[0][0];
+    expect(inserted).toMatchObject({ action: 'CREATE', userId: 'system', userName: 'system' });
+  });
 
   it('writes audit log with session', async () => {
-    vi.mocked(auth.getSession).mockResolvedValue({ userId: 'u1', name: 'Alice', role: 'owner' } as any)
-    vi.mocked(db.readJSON).mockResolvedValue([])
-    vi.mocked(db.writeJSON).mockResolvedValue(true)
-    await logAction('UPDATE', 'EXPENSE', 'Updated expense', 'e1')
-    expect(db.writeJSON).toHaveBeenCalledTimes(1)
-    const writtenLogs = vi.mocked(db.writeJSON).mock.calls[0][1] as any[]
-    expect(writtenLogs).toHaveLength(1)
-    expect(writtenLogs[0]).toMatchObject({ action: 'UPDATE', entityType: 'EXPENSE', entityId: 'e1', userId: 'u1', userName: 'Alice' })
-  })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.mocked(auth.getSession).mockResolvedValue({ userId: 'u1', name: 'Alice', role: 'owner' } as any);
+    await logAction('UPDATE', 'EXPENSE', 'Updated expense', 'e1');
 
-  it('handles read failure gracefully (uses empty array)', async () => {
-    vi.mocked(auth.getSession).mockResolvedValue({ userId: 'u1', name: 'Bob', role: 'owner' } as any)
-    vi.mocked(db.readJSON).mockRejectedValue(new Error('File not found'))
-    vi.mocked(db.writeJSON).mockResolvedValue(true)
-    await logAction('DELETE', 'VENDOR', 'Removed vendor')
-    expect(db.writeJSON).toHaveBeenCalledTimes(1)
-  })
+    expect(mockDb.insert).toHaveBeenCalledTimes(1);
+    const inserted = mockDb.values.mock.calls[0][0];
+    expect(inserted).toMatchObject({
+      action: 'UPDATE',
+      entityType: 'EXPENSE',
+      entityId: 'e1',
+      userId: 'u1',
+      userName: 'Alice',
+    });
+  });
 
   it('catches write errors without throwing', async () => {
-    vi.mocked(auth.getSession).mockResolvedValue({ userId: 'u1', name: 'Bob', role: 'owner' } as any)
-    vi.mocked(db.readJSON).mockResolvedValue([])
-    vi.mocked(db.writeJSON).mockRejectedValue(new Error('Disk full'))
-    // Should not throw
-    await expect(logAction('READ', 'REPORT', 'Viewed report')).resolves.toBeUndefined()
-  })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.mocked(auth.getSession).mockResolvedValue({ userId: 'u1', name: 'Bob', role: 'owner' } as any);
+    mockDb.values.mockRejectedValueOnce(new Error('Disk full'));
 
-  it('handles readJSON returning a non-array (e.g. object)', async () => {
-    vi.mocked(db.readJSON).mockResolvedValueOnce({} as any)
-    await logAction('TEST', 'Entity', 'Details')
-    expect(db.writeJSON).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.arrayContaining([
-        expect.objectContaining({ action: 'TEST' })
-      ])
-    )
-  })
+    // Should not throw
+    await expect(logAction('READ', 'REPORT', 'Viewed report')).resolves.toBeUndefined();
+  });
 
   it('falls back to system user when getSession throws', async () => {
-    vi.mocked(auth.getSession).mockRejectedValue(new Error('no cookie store'))
-    vi.mocked(db.readJSON).mockResolvedValue([])
-    vi.mocked(db.writeJSON).mockResolvedValue(true)
-    await logAction('CREATE', 'STAFF', 'x')
-    const writtenLogs = vi.mocked(db.writeJSON).mock.calls[0][1] as any[]
-    expect(writtenLogs[0]).toMatchObject({ userId: 'system', userName: 'system' })
-  })
+    vi.mocked(auth.getSession).mockRejectedValueOnce(new Error('no cookie store'));
+    await logAction('CREATE', 'STAFF', 'x');
 
-  it('trims to the most recent 3000 entries', async () => {
-    vi.mocked(auth.getSession).mockResolvedValue({ userId: 'u1', name: 'Alice' } as any)
-    const existing = Array.from({ length: 3000 }, (_, i) => ({ id: `old_${i}`, action: 'OLD' }))
-    vi.mocked(db.readJSON).mockResolvedValue(existing as any)
-    vi.mocked(db.writeJSON).mockResolvedValue(true)
-    await logAction('NEW', 'STAFF', 'newest')
-    const writtenLogs = vi.mocked(db.writeJSON).mock.calls[0][1] as any[]
-    expect(writtenLogs).toHaveLength(3000)                 // capped
-    expect(writtenLogs[writtenLogs.length - 1].action).toBe('NEW') // newest kept
-    expect(writtenLogs[0].id).toBe('old_1')                // oldest dropped
-  })
-})
+    const inserted = mockDb.values.mock.calls[0][0];
+    expect(inserted).toMatchObject({ userId: 'system', userName: 'system' });
+  });
+
+  it('trims to the most recent 3000 entries when count exceeds 3000', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.mocked(auth.getSession).mockResolvedValue({ userId: 'u1', name: 'Alice' } as any);
+    mockDb.from.mockResolvedValueOnce([{ count: 3005 }]);
+
+    await logAction('NEW', 'STAFF', 'newest');
+
+    expect(mockDb.execute).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not trim when count is <= 3000', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.mocked(auth.getSession).mockResolvedValue({ userId: 'u1', name: 'Alice' } as any);
+    mockDb.from.mockResolvedValueOnce([{ count: 2500 }]);
+
+    await logAction('NEW', 'STAFF', 'newest');
+
+    expect(mockDb.execute).not.toHaveBeenCalled();
+  });
+
+  it('handles empty count result gracefully', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.mocked(auth.getSession).mockResolvedValue({ userId: 'u1', name: 'Alice' } as any);
+    mockDb.from.mockResolvedValueOnce([]);
+
+    await logAction('NEW', 'STAFF', 'newest');
+
+    expect(mockDb.execute).not.toHaveBeenCalled();
+  });
+});

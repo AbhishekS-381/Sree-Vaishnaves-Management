@@ -34,6 +34,21 @@ describe('Rate Limit Utility', () => {
   })
 
   it('blocks IP if attempts exceed limit', async () => {
+  })
+
+  it('supports raw array return from driver', async () => {
+    vi.mocked(db.execute).mockResolvedValue([
+      {
+        attempts: 1,
+        window_start: Date.now(),
+        blocked_until: 0,
+      },
+    ] as any)
+    const res = await checkRateLimit('127.0.0.2')
+    expect(res.success).toBe(true)
+  })
+
+  it('blocks IP if attempts exceed limit', async () => {
     const now = Date.now();
     vi.mocked(db.execute).mockResolvedValue({
       rows: [

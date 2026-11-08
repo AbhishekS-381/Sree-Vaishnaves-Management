@@ -39,6 +39,12 @@
 
 
 Ideas:
-1. Can we integrate billing to this app?
 2. GST billing
 3. Enhanced authorization
+4. billing without table orders
+5. parcel orders
+6. Delivery tracking
+8. Place to tweak per day items availability.
+9. optimise the read and writes in the app.
+10. durable interactions to the db
+13. gstin is not visible in the bill print, check ss

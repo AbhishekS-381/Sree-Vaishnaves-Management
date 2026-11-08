@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import * as db from '@/lib/db'
 import * as auth from '@/app/actions/auth'
 
 // Import all data pages
@@ -14,21 +13,69 @@ import PayrollPage from '@/app/management/payroll/page'
 import ReportsPage from '@/app/management/reports/page'
 import VendorsPage from '@/app/management/vendors/page'
 
+const { mockDb } = vi.hoisted(() => {
+  const getMockData = () => [
+    { id: 'b1', branchId: 'b1', name: 'B1', status: 'active', isActive: true, deletedAt: null },
+    { id: 'b2', branchId: 'b2', name: 'B2', status: 'active', isActive: true, deletedAt: null },
+  ]
+
+  const mock: any = {
+    select: vi.fn(() => ({
+      from: vi.fn((_table?: any) => {
+        let filtered = getMockData()
+        const builder: any = {
+          where: vi.fn((cond?: any) => {
+            if (cond) {
+              const str = JSON.stringify(cond)
+              if (str.includes('"b1"')) {
+                filtered = filtered.filter((i: any) => i.id === 'b1' || i.branchId === 'b1')
+              } else if (str.includes('"b2"')) {
+                filtered = filtered.filter((i: any) => i.id === 'b2' || i.branchId === 'b2')
+              }
+            }
+            return builder
+          }),
+          limit: vi.fn((count?: number) => Promise.resolve(count !== undefined ? filtered.slice(0, count) : filtered)),
+          catch: (cb: any) => Promise.resolve(filtered).catch(cb),
+          then: (res: any, rej: any) => Promise.resolve(filtered).then(res, rej),
+        }
+        return builder
+      }),
+    })),
+  }
+  return { mockDb: mock }
+})
+
 vi.mock('@/lib/db', () => ({
-  readJSON: vi.fn().mockResolvedValue([]),
-  // MenuPage reads per-branch shards instead of one combined blob
-  readBranchMenuItems: vi.fn().mockResolvedValue([]),
-  branchMenuItemsFile: (b: string) => `branch_menu_items_${b}.json`,
-  DB_FILES: new Proxy({}, { get: (target, prop) => String(prop).toLowerCase() + '.json' })
+  db: mockDb,
+  branches: { tableName: 'branches', id: { name: 'id' }, isActive: { name: 'is_active' }, deletedAt: { name: 'deleted_at' } },
+  staff: { tableName: 'staff', id: { name: 'id' }, branchId: { name: 'branch_id' }, isActive: { name: 'is_active' }, deletedAt: { name: 'deleted_at' } },
+  roles: { tableName: 'roles', isActive: { name: 'is_active' } },
+  departments: { tableName: 'departments', isActive: { name: 'is_active' } },
+  staffRequirements: { tableName: 'staff_requirements', branchId: { name: 'branch_id' }, isActive: { name: 'is_active' } },
+  menuItems: { tableName: 'menu_items', deletedAt: { name: 'deleted_at' } },
+  menuCategories: { tableName: 'menu_categories', deletedAt: { name: 'deleted_at' } },
+  menuItemVariants: { tableName: 'menu_item_variants' },
+  branchCategories: { tableName: 'branch_categories' },
+  branchMenuItems: { tableName: 'branch_menu_items', branchId: { name: 'branch_id' } },
+  attendance: { tableName: 'attendance', branchId: { name: 'branch_id' }, date: { name: 'date' } },
+  eod: { tableName: 'eod', branchId: { name: 'branch_id' } },
+  expenses: { tableName: 'expenses', branchId: { name: 'branch_id' } },
+  inventory: { tableName: 'inventory', branchId: { name: 'branch_id' } },
+  payroll: { tableName: 'payroll', branchId: { name: 'branch_id' } },
+  categories: { tableName: 'categories' },
+  vendors: { tableName: 'vendors', branchId: { name: 'branch_id' } },
+  config: { tableName: 'config', id: { name: 'id' } },
+  posOrders: { tableName: 'pos_orders', branchId: { name: 'branch_id' }, date: { name: 'date' } },
 }))
 
 vi.mock('@/app/actions/auth', () => ({
   getSession: vi.fn(),
-  getSessionRole: vi.fn().mockResolvedValue('owner')
+  getSessionRole: vi.fn().mockResolvedValue('owner'),
 }))
 
 vi.mock('next/navigation', () => ({
-  redirect: vi.fn()
+  redirect: vi.fn(),
 }))
 
 // Mock all Client Components so they don't error out during render
@@ -57,17 +104,8 @@ const pagesToTest = [
 ]
 
 describe('Data Pages RBAC Filtering', () => {
-  const mockData = [
-    { id: 'b1', branchId: 'b1', status: 'active', isActive: true },
-    { id: 'b2', branchId: 'b2', status: 'active', isActive: true },
-  ]
-
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.readJSON).mockImplementation(async (file: string) => {
-      // Return a fresh copy to avoid mutation sharing between tests
-      return JSON.parse(JSON.stringify(mockData))
-    })
   })
 
   pagesToTest.forEach(({ name, component, dataProp }) => {
@@ -78,8 +116,6 @@ describe('Data Pages RBAC Filtering', () => {
         const result = await component() as any
         const data = result.props[dataProp]
         
-        // At least 2 items, because mockData has 2
-        // Some pages might filter by isActive, but we mocked isActive: true
         expect(data.length).toBe(2)
       })
 
@@ -94,7 +130,7 @@ describe('Data Pages RBAC Filtering', () => {
       it('Read-Only sees unfiltered data', async () => {
         vi.mocked(auth.getSession).mockResolvedValue({ role: 'readonly', isGlobalAdmin: false, isRootAdmin: false } as any)
         const result = await component() as any
-        if (name === 'EODPage') return; // Read-only cannot access EOD page
+        if (name === 'EODPage') return // Read-only cannot access EOD page
         const data = result.props[dataProp]
         
         expect(data.length).toBe(2)
@@ -109,9 +145,6 @@ describe('Data Pages RBAC Filtering', () => {
           // Menu items are global, so they aren't filtered by branch
           expect(data.length).toBe(2)
         } else {
-          // Only items with branchId === 'b1'
-          // EXCEPT branches page filters by branchId, which might be `b.id === branchId`. 
-          // Let's check the result length. It should be 1.
           expect(data.length).toBe(1)
           expect(data[0].branchId === 'b1' || data[0].id === 'b1').toBe(true)
         }

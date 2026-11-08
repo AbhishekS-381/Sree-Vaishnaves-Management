@@ -1,5 +1,14 @@
-import { readJSON, DB_FILES } from '@/lib/db'
-import { MapPin, Phone, Users, User } from 'lucide-react'
+import {
+  db,
+  branches as branchesTable,
+  staff as staffTable,
+  roles as rolesTable,
+  eod as eodTable,
+  expenses as expensesTable,
+  staffRequirements as staffRequirementsTable,
+} from '@/lib/db'
+import { eq, and, isNull } from 'drizzle-orm'
+import { MapPin, Phone, Users, User, FileText } from 'lucide-react'
 import { notFound, redirect } from 'next/navigation'
 import { getSession } from '@/app/actions/auth'
 
@@ -12,14 +21,16 @@ export default async function BranchDetailPage({ params }: { params: Promise<{ i
     redirect('/management')
   }
 
-  const branches = await readJSON<any>(DB_FILES.BRANCHES)
-  const staff = await readJSON<any>(DB_FILES.STAFF)
-  const roles = await readJSON<any>(DB_FILES.ROLES)
-  const eod = await readJSON<any>(DB_FILES.EOD).catch(() => [])
-  const expenses = await readJSON<any>(DB_FILES.EXPENSES).catch(() => [])
-  const requirements = await readJSON<any>(DB_FILES.STAFF_REQUIREMENTS).catch(() => [])
+  const [branches, staff, roles, eod, expenses, requirements] = await Promise.all([
+    db.select().from(branchesTable).where(eq(branchesTable.id, id)).limit(1).catch(() => []),
+    db.select().from(staffTable).where(and(eq(staffTable.branchId, id), isNull(staffTable.deletedAt))).catch(() => []),
+    db.select().from(rolesTable).catch(() => []),
+    db.select().from(eodTable).where(eq(eodTable.branchId, id)).catch(() => []),
+    db.select().from(expensesTable).where(eq(expensesTable.branchId, id)).catch(() => []),
+    db.select().from(staffRequirementsTable).where(eq(staffRequirementsTable.branchId, id)).catch(() => []),
+  ])
 
-  const branch = branches.find((b: any) => b.id === id)
+  const branch = branches[0]
 
   if (!branch) {
     notFound()
@@ -87,6 +98,17 @@ export default async function BranchDetailPage({ params }: { params: Promise<{ i
               <span className="font-medium">{branch.phone}</span>
             </div>
           </div>
+          {branch.gstin && (
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-amber-500/10 text-amber-400 rounded-lg border border-amber-500/20">
+                <FileText className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">GSTIN</p>
+                <span className="font-medium font-mono">{branch.gstin}</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

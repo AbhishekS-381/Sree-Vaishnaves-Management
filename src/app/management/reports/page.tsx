@@ -1,29 +1,63 @@
-import { readJSON, DB_FILES } from '@/lib/db'
+import {
+  db,
+  branches as branchesTable,
+  eod as eodTable,
+  expenses as expensesTable,
+  payroll as payrollTable,
+  attendance as attendanceTable,
+  staff as staffTable,
+  categories as categoriesTable,
+} from '@/lib/db'
+import { eq, and, isNull } from 'drizzle-orm'
 import ReportsClientPage from './ReportsClientPage'
 import { getSession } from '@/app/actions/auth'
 
 export default async function ReportsPage() {
-  const session = await getSession();
-  let [branches, eod, expenses, payroll, attendance, staff, categories] = await Promise.all([
-    readJSON<any>(DB_FILES.BRANCHES),
-    readJSON<any>(DB_FILES.EOD).catch(() => []),
-    readJSON<any>(DB_FILES.EXPENSES).catch(() => []),
-    readJSON<any>(DB_FILES.PAYROLL).catch(() => []),
-    readJSON<any>(DB_FILES.ATTENDANCE).catch(() => []),
-    readJSON<any>(DB_FILES.STAFF).catch(() => []),
-    readJSON<any>(DB_FILES.CATEGORIES).catch(() => [])
-  ]);
+  const session = await getSession()
+  const isGlobal = session?.isGlobalAdmin || session?.role === 'readonly'
+  const branchId = session?.branchId
 
-  if (!session?.isGlobalAdmin && session?.role !== 'readonly') {
-    branches = branches.filter((b: any) => b.id === session?.branchId)
-    eod = eod.filter((e: any) => e.branchId === session?.branchId)
-    expenses = expenses.filter((e: any) => e.branchId === session?.branchId)
-    payroll = payroll.filter((p: any) => p.branchId === session?.branchId)
-    attendance = attendance.filter((a: any) => a.branchId === session?.branchId)
-    staff = staff.filter((s: any) => s.branchId === session?.branchId)
-  }
+  const isScoped = !isGlobal && Boolean(branchId)
 
-  staff = staff.filter((s: any) => s.isActive === true)
+  const [branches, eod, expenses, payroll, attendance, staff, categories] = await Promise.all([
+    (isScoped
+      ? db
+          .select()
+          .from(branchesTable)
+          .where(and(eq(branchesTable.id, branchId!), eq(branchesTable.isActive, true), isNull(branchesTable.deletedAt)))
+      : db
+          .select()
+          .from(branchesTable)
+          .where(and(eq(branchesTable.isActive, true), isNull(branchesTable.deletedAt)))
+    ).catch(() => []),
+    (isScoped
+      ? db.select().from(eodTable).where(eq(eodTable.branchId, branchId!))
+      : db.select().from(eodTable)
+    ).catch(() => []),
+    (isScoped
+      ? db.select().from(expensesTable).where(eq(expensesTable.branchId, branchId!))
+      : db.select().from(expensesTable)
+    ).catch(() => []),
+    (isScoped
+      ? db.select().from(payrollTable).where(eq(payrollTable.branchId, branchId!))
+      : db.select().from(payrollTable)
+    ).catch(() => []),
+    (isScoped
+      ? db.select().from(attendanceTable).where(eq(attendanceTable.branchId, branchId!))
+      : db.select().from(attendanceTable)
+    ).catch(() => []),
+    (isScoped
+      ? db
+          .select()
+          .from(staffTable)
+          .where(and(eq(staffTable.branchId, branchId!), eq(staffTable.isActive, true), isNull(staffTable.deletedAt)))
+      : db
+          .select()
+          .from(staffTable)
+          .where(and(eq(staffTable.isActive, true), isNull(staffTable.deletedAt)))
+    ).catch(() => []),
+    db.select().from(categoriesTable).catch(() => []),
+  ])
 
   return (
     <ReportsClientPage 

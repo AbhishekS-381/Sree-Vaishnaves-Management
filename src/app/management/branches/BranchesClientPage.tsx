@@ -12,6 +12,7 @@ type Branch = {
   address: string; 
   phone: string; 
   status?: string;
+  gstin?: string | null;
   internalStartTime?: string;
   internalEndTime?: string;
   customerStartTime?: string;
@@ -78,6 +79,14 @@ export default function BranchesClientPage({ branches, isReadOnly = false }: { b
                   <Phone className="h-5 w-5 shrink-0 group-hover:text-accent transition-colors" />
                   <span className="text-sm">{branch.phone}</span>
                 </div>
+                {branch.gstin && (
+                  <div className="flex items-center gap-3 text-slate-400">
+                    <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-slate-850 text-slate-300 border border-slate-700">
+                      GSTIN
+                    </span>
+                    <span className="text-sm font-mono text-slate-300">{branch.gstin}</span>
+                  </div>
+                )}
               </div>
 
               <div className="mt-6 pt-4 border-t border-white/5 flex justify-between items-center">
@@ -122,6 +131,7 @@ export default function BranchesClientPage({ branches, isReadOnly = false }: { b
           { name: 'name', label: 'Branch Name', type: 'text', required: true, placeholder: 'e.g. Downtown Location' },
           { name: 'address', label: 'Address', type: 'text', required: true, placeholder: 'e.g. 123 Main St' },
           { name: 'phone', label: 'Phone Number', type: 'text', required: true, placeholder: 'e.g. 555-1234' },
+          { name: 'gstin', label: 'GSTIN (GST Number)', type: 'text', required: false, placeholder: 'e.g. 29ABCDE1234F1Z5' },
           { name: 'status', label: 'Operational Status', type: 'select', required: true, defaultValue: 'operational', options: [
              { label: 'Operational', value: 'operational' },
              { label: 'Closed', value: 'closed' },

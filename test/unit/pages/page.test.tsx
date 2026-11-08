@@ -1,37 +1,104 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import DashboardPage from '@/app/management/page'
-import * as db from '@/lib/db'
 import * as auth from '@/app/actions/auth'
 
+const { mockDb } = vi.hoisted(() => {
+  const state: any = {
+    branches: [] as any[],
+    staff: [] as any[],
+    eod: [] as any[],
+    expenses: [] as any[],
+    inventory: [] as any[],
+    attendance: [] as any[],
+    payroll: [] as any[],
+    config: [] as any[],
+  }
+
+  const getCollection = (tableName: string) => {
+    if (tableName === 'branches') return state.branches
+    if (tableName === 'staff') return state.staff
+    if (tableName === 'eod') return state.eod
+    if (tableName === 'expenses') return state.expenses
+    if (tableName === 'inventory') return state.inventory
+    if (tableName === 'attendance') return state.attendance
+    if (tableName === 'payroll') return state.payroll
+    if (tableName === 'config') return state.config
+    return []
+  }
+
+  const mock: any = {
+    state,
+    select: vi.fn((_fields?: any) => ({
+      from: vi.fn((table: any) => {
+        const tableName = table?.tableName || ''
+        const collection = getCollection(tableName)
+        let filtered = collection
+
+        const builder: any = {
+          where: vi.fn((cond?: any) => {
+            if (cond) {
+              const str = JSON.stringify(cond)
+              filtered = collection.filter((item: any) => {
+                if (str.includes('"b1"') && (item.id !== 'b1' && item.branchId !== 'b1')) return false
+                if (str.includes('"b2"') && (item.id !== 'b2' && item.branchId !== 'b2')) return false
+                return true
+              })
+            }
+            return builder
+          }),
+          limit: vi.fn((count?: number) => {
+            return Promise.resolve(count !== undefined ? filtered.slice(0, count) : filtered)
+          }),
+          catch: (errCb: any) => Promise.resolve(filtered).catch(errCb),
+          then: (resolve: any, reject: any) => Promise.resolve(filtered).then(resolve, reject),
+        }
+        return builder
+      }),
+    })),
+  }
+  return { mockDb: mock }
+})
+
 vi.mock('@/lib/db', () => ({
-  readJSON: vi.fn().mockResolvedValue([]),
-  DB_FILES: new Proxy({}, { get: (target, prop) => String(prop).toLowerCase() + '.json' })
+  db: mockDb,
+  branches: { tableName: 'branches', id: { name: 'id' }, name: { name: 'name' }, status: { name: 'status' }, isActive: { name: 'is_active' }, deletedAt: { name: 'deleted_at' } },
+  staff: { tableName: 'staff', id: { name: 'id' }, branchId: { name: 'branch_id' }, isActive: { name: 'is_active' }, deletedAt: { name: 'deleted_at' } },
+  eod: { tableName: 'eod', branchId: { name: 'branch_id' }, date: { name: 'date' } },
+  expenses: { tableName: 'expenses', branchId: { name: 'branch_id' }, date: { name: 'date' } },
+  inventory: { tableName: 'inventory', branchId: { name: 'branch_id' } },
+  attendance: { tableName: 'attendance', branchId: { name: 'branch_id' }, date: { name: 'date' } },
+  payroll: { tableName: 'payroll', branchId: { name: 'branch_id' }, month: { name: 'month' }, year: { name: 'year' } },
+  config: { tableName: 'config', id: { name: 'id' } },
 }))
 
 vi.mock('@/app/actions/auth', () => ({
-  getSession: vi.fn()
-}))
-
-vi.mock('@/app/DashboardClientPage', () => ({
-  default: (props: any) => <div data-testid="dashboard-client" data-props={JSON.stringify(props)} />
+  getSession: vi.fn(),
 }))
 
 describe('Dashboard Page RBAC', () => {
-  const mockBranches = [{ id: 'b1', name: 'Branch 1' }, { id: 'b2', name: 'Branch 2' }]
-  const mockStaff = [{ id: 's1', branchId: 'b1' }, { id: 's2', branchId: 'b2' }]
+  const mockBranches = [
+    { id: 'b1', name: 'Branch 1', isActive: true, status: 'operational' },
+    { id: 'b2', name: 'Branch 2', isActive: true, status: 'operational' },
+  ]
+  const mockStaff = [
+    { id: 's1', branchId: 'b1', isActive: true },
+    { id: 's2', branchId: 'b2', isActive: true },
+  ]
   
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.readJSON).mockResolvedValue([])
-    vi.mocked(db.readJSON).mockImplementation(async (file: string) => {
-      if (file.includes('branches')) return mockBranches
-      if (file.includes('staff')) return mockStaff
-      return []
-    })
+    mockDb.state.branches = [...mockBranches]
+    mockDb.state.staff = [...mockStaff]
+    mockDb.state.eod = []
+    mockDb.state.expenses = []
+    mockDb.state.inventory = []
+    mockDb.state.attendance = []
+    mockDb.state.payroll = []
+    mockDb.state.config = [{ attendance: true, payroll: true, inventory: true }]
   })
 
   it('Root Admin sees all data unfiltered', async () => {
-    vi.mocked(auth.getSession).mockResolvedValue({ role: 'owner', isGlobalOwner: true, isRootAdmin: true } as any)
+    vi.mocked(auth.getSession).mockResolvedValue({ role: 'owner', isGlobalOwner: true, isGlobalAdmin: true, isRootAdmin: true } as any)
     const result = await DashboardPage()
     const htmlStr = JSON.stringify(result)
     
@@ -40,7 +107,7 @@ describe('Dashboard Page RBAC', () => {
   })
 
   it('Owner sees all data unfiltered', async () => {
-    vi.mocked(auth.getSession).mockResolvedValue({ role: 'owner', isGlobalOwner: true, isRootAdmin: false } as any)
+    vi.mocked(auth.getSession).mockResolvedValue({ role: 'owner', isGlobalOwner: true, isGlobalAdmin: true, isRootAdmin: false } as any)
     const result = await DashboardPage()
     const htmlStr = JSON.stringify(result)
     
@@ -49,7 +116,7 @@ describe('Dashboard Page RBAC', () => {
   })
 
   it('Manager sees data filtered to their branchId', async () => {
-    vi.mocked(auth.getSession).mockResolvedValue({ role: 'manager', isGlobalOwner: false, isRootAdmin: false, branchId: 'b1' } as any)
+    vi.mocked(auth.getSession).mockResolvedValue({ role: 'manager', isGlobalOwner: false, isGlobalAdmin: false, isRootAdmin: false, branchId: 'b1' } as any)
     const result = await DashboardPage()
     const htmlStr = JSON.stringify(result)
     
@@ -58,7 +125,7 @@ describe('Dashboard Page RBAC', () => {
   })
 
   it('Read-Only sees all data if they have no branchId', async () => {
-    vi.mocked(auth.getSession).mockResolvedValue({ role: 'readonly', isGlobalOwner: false, isRootAdmin: false } as any)
+    vi.mocked(auth.getSession).mockResolvedValue({ role: 'readonly', isGlobalOwner: true, isGlobalAdmin: true, isRootAdmin: false } as any)
     const result = await DashboardPage()
     const htmlStr = JSON.stringify(result)
     
@@ -70,7 +137,16 @@ describe('Dashboard Page RBAC', () => {
 describe('Dashboard UI & Edge Cases', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(auth.getSession).mockResolvedValue({ role: 'owner', isGlobalOwner: true, isRootAdmin: true } as any)
+    vi.mocked(auth.getSession).mockResolvedValue({ role: 'owner', isGlobalOwner: true, isGlobalAdmin: true, isRootAdmin: true } as any)
+    mockDb.state.branches = [{ id: 'b1', name: 'B1', status: 'operational', isActive: true }]
+    mockDb.state.staff = [{ id: 's1', branchId: 'b1', isActive: true }]
+    mockDb.state.eod = []
+    mockDb.state.expenses = []
+    mockDb.state.inventory = []
+    mockDb.state.attendance = []
+    mockDb.state.payroll = []
+    mockDb.state.config = [{ attendance: true, payroll: true, inventory: true }]
+
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2023-10-15T10:00:00Z')) // Not end of month
   })
@@ -81,17 +157,12 @@ describe('Dashboard UI & Edge Cases', () => {
 
   it('calculates metrics and formats currency with en-IN locale (1,00,000)', async () => {
     const todayStr = new Date('2023-10-15T10:00:00Z').toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-    vi.mocked(db.readJSON).mockImplementation(async (file: string) => {
-      if (file.includes('branches')) return [{ id: 'b1', name: 'B1', status: 'operational', isActive: true }]
-      if (file.includes('staff')) return [{ id: 's1', branchId: 'b1', isActive: true }]
-      if (file.includes('eod')) return [
-        { branchId: 'b1', date: todayStr, income: { dineInCash: 50000, takeawayCash: 50000 } }
-      ]
-      if (file.includes('expenses')) return [
-        { branchId: 'b1', date: todayStr, amount: 20000 }
-      ]
-      return []
-    })
+    mockDb.state.eod = [
+      { branchId: 'b1', date: todayStr, income: { dineInCash: 50000, takeawayCash: 50000 } },
+    ]
+    mockDb.state.expenses = [
+      { branchId: 'b1', date: todayStr, amount: 20000 },
+    ]
 
     const result = await DashboardPage()
     const htmlStr = JSON.stringify(result)
@@ -103,10 +174,9 @@ describe('Dashboard UI & Edge Cases', () => {
   })
 
   it('renders gracefully with $0 sales (Empty State)', async () => {
-    vi.mocked(db.readJSON).mockImplementation(async (file: string) => {
-      if (file.includes('branches')) return [{ id: 'b1', name: 'B1', status: 'operational', isActive: true }]
-      return [] // No EOD, no staff, no expenses
-    })
+    mockDb.state.eod = []
+    mockDb.state.staff = []
+    mockDb.state.expenses = []
 
     const result = await DashboardPage()
     const htmlStr = JSON.stringify(result)
@@ -116,13 +186,9 @@ describe('Dashboard UI & Edge Cases', () => {
   })
 
   it('renders pending actions correctly based on system state', async () => {
-    const todayStr = new Date('2023-10-15T10:00:00Z').toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-    vi.mocked(db.readJSON).mockImplementation(async (file: string) => {
-      if (file.includes('inventory')) return [{ currentQuantity: 5, threshold: 10 }] // Low stock
-      if (file.includes('attendance')) return [] // Not marked
-      if (file.includes('eod')) return [] // Not filled
-      return []
-    })
+    mockDb.state.inventory = [{ currentQuantity: 5, threshold: 10 }] // Low stock
+    mockDb.state.attendance = [] // Not marked
+    mockDb.state.eod = [] // Not filled
 
     const result = await DashboardPage()
     const htmlStr = JSON.stringify(result)

@@ -1,7 +1,7 @@
 'use server'
 
-import { withTransaction, DB_FILES } from '@/lib/db'
-import { Expense } from './eod'
+import { db, vendors, expenses } from '@/lib/db'
+import { eq, and, ilike } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'crypto'
 import { getSession, requireBranchAccess } from './auth'
@@ -32,6 +32,7 @@ export type Vendor = {
   createdAt: string
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function addVendor(prevState: any, formData: FormData) {
   const name = formData.get('name') as string
   const phone = formData.get('phone') as string
@@ -43,34 +44,46 @@ export async function addVendor(prevState: any, formData: FormData) {
 
   try {
     branchId = await requireBranchAccess(branchId)
-  } catch (e) {
+  } catch {
     return { error: 'Forbidden' }
   }
 
-  let alreadyExists = false;
-  const success = await withTransaction<Vendor>(DB_FILES.VENDORS, (vendors) => {
-    if (vendors.some(v => v.name.toLowerCase() === name.toLowerCase() && v.branchId === branchId)) {
-      alreadyExists = true;
-      return vendors;
+  try {
+    const existing = await db
+      .select({ id: vendors.id })
+      .from(vendors)
+      .where(
+        and(
+          ilike(vendors.name, name),
+          eq(vendors.branchId, branchId),
+          eq(vendors.isActive, true)
+        )
+      )
+      .limit(1)
+
+    if (existing.length > 0) {
+      return { error: 'A vendor with this name already exists in this branch' }
     }
-    vendors.push({
-      id: `ven_${randomUUID()}`,
+
+    await db.insert(vendors).values({
+      id: randomUUID(),
       branchId,
       name,
       phone,
       supplyType,
-      createdAt: new Date().toISOString()
+      isActive: true,
+      createdAt: new Date(),
     })
-    return vendors
-  })
 
-  if (alreadyExists) return { error: 'A vendor with this name already exists in this branch' }
-
-  if (!success) return { error: 'Transaction failed' }
-  revalidatePath('/management/vendors')
-  return { success: true }
+    revalidatePath('/management/vendors')
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to add vendor:', error)
+    return { error: 'Transaction failed' }
+  }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function addVendorBill(prevState: any, formData: FormData) {
   const vendorId = formData.get('vendorId') as string
   const vendorName = formData.get('vendorName') as string
@@ -86,7 +99,7 @@ export async function addVendorBill(prevState: any, formData: FormData) {
 
   try {
     branchId = await requireBranchAccess(branchId)
-  } catch (e) {
+  } catch {
     return { error: 'Forbidden' }
   }
 
@@ -94,9 +107,9 @@ export async function addVendorBill(prevState: any, formData: FormData) {
     ? `Vendor: ${vendorName} | Invoice: ${invoiceRef}` 
     : `Vendor: ${vendorName}`
 
-  const success = await withTransaction<Expense>(DB_FILES.EXPENSES, (expenses) => {
-    expenses.push({
-      id: `venexp_${randomUUID()}`,
+  try {
+    await db.insert(expenses).values({
+      id: randomUUID(),
       branchId,
       amount,
       categoryId,
@@ -104,41 +117,45 @@ export async function addVendorBill(prevState: any, formData: FormData) {
       date,
       notes,
       isPaid,
-      createdAt: new Date().toISOString()
+      createdAt: new Date(),
     })
-    return expenses
-  })
 
-  if (!success) return { error: 'Transaction failed' }
-  revalidatePath('/management/vendors')
-  revalidatePath('/management/expenses')
-  return { success: true }
+    revalidatePath('/management/vendors')
+    revalidatePath('/management/expenses')
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to add vendor bill:', error)
+    return { error: 'Transaction failed' }
+  }
 }
 
 export async function markVendorBillAsPaid(id: string) {
   const session = await getSession()
   if (!session) return { error: 'Unauthorized' }
 
-  let notFound = false;
-  let forbidden = false;
-  const success = await withTransaction<Expense>(DB_FILES.EXPENSES, (expenses) => {
-    const index = expenses.findIndex(e => e.id === id)
-    if (index === -1) { notFound = true; return expenses; }
-    
-    if (!session.isGlobalAdmin && expenses[index].branchId !== session.branchId) {
-      forbidden = true; return expenses;
+  try {
+    const existing = await db
+      .select()
+      .from(expenses)
+      .where(eq(expenses.id, id))
+      .limit(1)
+
+    if (existing.length === 0) return { error: 'Bill not found' }
+
+    if (!session.isGlobalAdmin && existing[0].branchId !== session.branchId) {
+      return { error: 'Forbidden' }
     }
 
-    expenses[index].isPaid = true
-    return expenses
-  })
+    await db
+      .update(expenses)
+      .set({ isPaid: true })
+      .where(eq(expenses.id, id))
 
-  if (forbidden) return { error: 'Forbidden' }
-
-  if (notFound) return { error: 'Bill not found' }
-  if (!success) return { error: 'Transaction failed' }
-
-  revalidatePath('/management/vendors')
-  revalidatePath('/management/expenses')
-  return { success: true }
+    revalidatePath('/management/vendors')
+    revalidatePath('/management/expenses')
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to mark vendor bill as paid:', error)
+    return { error: 'Transaction failed' }
+  }
 }

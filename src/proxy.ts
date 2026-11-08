@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { jwtVerify } from 'jose'
-import { readJSON, DB_FILES } from '@/lib/db'
-import type { Config } from '@/app/actions/config'
+import { db, config as configTable } from '@/lib/db'
+import { eq } from 'drizzle-orm'
+import { GLOBAL_CONFIG_ID } from '@/lib/configTypes'
 
 function getSecretKey() {
   if (!process.env.JWT_SECRET) {
@@ -101,11 +102,25 @@ export async function proxy(request: NextRequest) {
   // Intercept direct access to /management/pos/* when POS is toggled off (Req 9.2)
   if (pathname.startsWith('/management/pos')) {
     try {
-      const configList = await readJSON<Config>(DB_FILES.CONFIG)
+      const configRows = await db
+        .select()
+        .from(configTable)
+        .where(eq(configTable.id, GLOBAL_CONFIG_ID))
+        .limit(1)
+
+      const globalConfig = configRows[0] || {
+        attendance: true,
+        payroll: true,
+        vendors: true,
+        inventory: true,
+        menu: true,
+        reports: true,
+        pos: true,
+      }
+
       // Only redirect if config was successfully loaded AND pos is explicitly false.
-      // If configList is empty (e.g. Edge datastore read failure or uninitialized),
-      // fail open to the page guard which runs in Node.js runtime with native Netlify DB.
-      if (configList.length > 0 && configList[0]?.pos === false) {
+      // If config row is missing or datastore errors, fail open to the page guard.
+      if (globalConfig?.pos === false) {
         return NextResponse.redirect(new URL('/management', request.url))
       }
     } catch {

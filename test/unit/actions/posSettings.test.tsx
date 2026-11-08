@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import * as db from '@/lib/db'
 import * as auth from '@/app/actions/auth'
 import { updatePosGstRate } from '@/app/actions/config'
 import { deleteUser } from '@/app/actions/users'
@@ -9,8 +8,94 @@ import { proxy } from '@/proxy'
 import { NextRequest } from 'next/server'
 
 // Mock db
+const { mockDb } = vi.hoisted(() => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const state: any = {
+    config: [{ id: 'global', pos: true, posDefaultGstPercent: 5 }],
+    users: [] as any[],
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const mock: any = {
+    state,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    select: vi.fn(() => ({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      from: vi.fn((table: any) => {
+        const isUsers = table?.tableName === 'users'
+        const list = isUsers ? state.users : state.config
+        let filtered = list
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const builder: any = {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          where: vi.fn((cond: any) => {
+            if (cond && isUsers) {
+              const str = JSON.stringify(cond)
+              filtered = list.filter((u: any) => str.includes(`"${u.id}"`))
+            }
+            return builder
+          }),
+          limit: vi.fn((count?: number) => {
+            return Promise.resolve(count !== undefined ? filtered.slice(0, count) : filtered)
+          }),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          then: (res: any) => Promise.resolve(filtered).then(res),
+        }
+        return builder
+      }),
+    })),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    insert: vi.fn(() => ({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      values: vi.fn((vals: any) => {
+        Object.assign(state.config[0], vals)
+        return {
+          onConflictDoUpdate: vi.fn(() => {
+            Object.assign(state.config[0], vals)
+            return Promise.resolve([state.config[0]])
+          }),
+        }
+      }),
+    })),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    update: vi.fn((table: any) => ({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      set: vi.fn((vals: any) => ({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        where: vi.fn((cond: any) => {
+          const isUsers = table?.tableName === 'users'
+          const list = isUsers ? state.users : state.config
+          const str = JSON.stringify(cond)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          list.forEach((item: any) => {
+            if (str.includes(`"${item.id}"`)) {
+              Object.assign(item, vals)
+            }
+          })
+          return Promise.resolve()
+        }),
+      })),
+    })),
+  }
+  return { mockDb: mock }
+})
+
 vi.mock('@/lib/db', () => ({
-  readJSON: vi.fn(),
+  db: mockDb,
+  config: {
+    tableName: 'config',
+    id: { name: 'id' },
+    posDefaultGstPercent: { name: 'pos_default_gst_percent' },
+    pos: { name: 'pos' },
+  },
+  users: {
+    tableName: 'users',
+    id: { name: 'id' },
+    role: { name: 'role' },
+    isActive: { name: 'is_active' },
+    deletedAt: { name: 'deleted_at' },
+  },
+  readJSON: vi.fn().mockImplementation(async () => mockDb.state.config),
   writeJSON: vi.fn().mockResolvedValue(true),
   withTransaction: vi.fn(),
   DB_FILES: new Proxy({}, { get: () => 'mock.json' }),
@@ -42,33 +127,28 @@ describe('POS Settings, Navigation Guards, and User Management (Tasks 9.1–9.7)
   beforeEach(() => {
     vi.clearAllMocks()
     process.env.JWT_SECRET = 'test-secret-at-least-32-chars-long'
+    mockDb.state.config = [{ id: 'global', pos: true, posDefaultGstPercent: 5 }]
+    mockDb.state.users = []
+
     vi.spyOn(auth, 'getSession').mockResolvedValue({
       userId: 'admin_1',
       role: 'admin',
       isGlobalAdmin: true,
       isRootAdmin: true,
       branchId: 'b_1',
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any)
   })
 
   // ─── 9.1 & 9.5 updatePosGstRate ────────────────────────────────────
   describe('updatePosGstRate action', () => {
     it('admin updates POS default GST rate successfully (0–28)', async () => {
-      let savedConfig: any[] = []
-      vi.mocked(db.readJSON).mockResolvedValueOnce([
-        { id: 'global', pos: true, posDefaultGstPercent: 5 },
-      ])
-      vi.mocked(db.writeJSON).mockImplementation(async (_file, data) => {
-        savedConfig = data
-        return true
-      })
-
       const fd = new FormData()
       fd.set('posDefaultGstPercent', '18')
 
       const res = await updatePosGstRate({}, fd)
       expect(res).toEqual({ success: true })
-      expect(savedConfig[0].posDefaultGstPercent).toBe(18)
+      expect(mockDb.state.config[0].posDefaultGstPercent).toBe(18)
     })
 
     it('rejects invalid GST rates (-1, 29, NaN)', async () => {
@@ -86,10 +166,12 @@ describe('POS Settings, Navigation Guards, and User Management (Tasks 9.1–9.7)
     })
 
     it('rejects non-admin users from updating GST rate', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       vi.mocked(auth.getSession).mockResolvedValueOnce({
         role: 'manager',
         isGlobalAdmin: false,
         isRootAdmin: false,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any)
 
       const fd = new FormData()
@@ -157,11 +239,13 @@ describe('POS Settings, Navigation Guards, and User Management (Tasks 9.1–9.7)
   describe('proxy.ts - POS disabled redirect (Req 9.2)', () => {
     it('redirects /management/pos/* to /management when config.pos is false', async () => {
       const { jwtVerify } = await import('jose')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       vi.mocked(jwtVerify).mockResolvedValue({
         payload: { userId: 'u1', role: 'admin', isGlobalAdmin: true },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any)
 
-      vi.mocked(db.readJSON).mockResolvedValue([{ id: 'global', pos: false }])
+      mockDb.state.config = [{ id: 'global', pos: false }]
 
       const req = makeRequest('http://localhost/management/pos/billing', 'valid-token')
       const res = await proxy(req)
@@ -171,11 +255,13 @@ describe('POS Settings, Navigation Guards, and User Management (Tasks 9.1–9.7)
 
     it('allows /management/pos access when config.pos is true', async () => {
       const { jwtVerify } = await import('jose')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       vi.mocked(jwtVerify).mockResolvedValue({
         payload: { userId: 'u1', role: 'admin', isGlobalAdmin: true },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any)
 
-      vi.mocked(db.readJSON).mockResolvedValue([{ id: 'global', pos: true }])
+      mockDb.state.config = [{ id: 'global', pos: true }]
 
       const req = makeRequest('http://localhost/management/pos', 'valid-token')
       const res = await proxy(req)
@@ -187,26 +273,23 @@ describe('POS Settings, Navigation Guards, and User Management (Tasks 9.1–9.7)
   describe('deleteUser for POS roles (Req 17.6)', () => {
     it('admin or owner can soft-delete a billing, kitchen, or waiter account', async () => {
       for (const role of ['billing', 'kitchen', 'waiter']) {
-        let updatedList: any[] = []
-        vi.mocked(db.withTransaction).mockImplementation(async (_file, cb) => {
-          const list = [
-            { id: 'u_pos', name: 'pos_user', role, isActive: true },
-          ]
-          updatedList = await cb(list)
-          return true
-        })
+        mockDb.state.users = [
+          { id: 'u_pos', name: 'pos_user', role, isActive: true },
+        ]
 
         const res = await deleteUser('u_pos')
         expect(res).toEqual({ success: true })
-        expect(updatedList[0].isActive).toBe(false)
-        expect(updatedList[0].deletedAt).toBeDefined()
+        expect(mockDb.state.users[0].isActive).toBe(false)
+        expect(mockDb.state.users[0].deletedAt).toBeDefined()
       }
     })
 
     it('manager is forbidden from soft-deleting POS accounts', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       vi.mocked(auth.getSession).mockResolvedValueOnce({
         role: 'manager',
         isGlobalAdmin: false,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any)
 
       const res = await deleteUser('u_pos')

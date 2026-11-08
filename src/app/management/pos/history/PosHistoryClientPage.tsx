@@ -309,6 +309,12 @@ export default function PosHistoryClientPage({
                         <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex flex-wrap justify-between gap-4 text-slate-300 mt-2">
                           <div>Subtotal: ₹{order.bill.subtotal}</div>
                           <div>Discount: ₹{order.bill.discount}</div>
+                          {Boolean(order.bill.parcelCharges && order.bill.parcelCharges > 0) && (
+                            <div>Parcel: +₹{order.bill.parcelCharges}</div>
+                          )}
+                          {Boolean(order.bill.acCharges && order.bill.acCharges > 0) && (
+                            <div>AC: +₹{order.bill.acCharges}</div>
+                          )}
                           <div>GST: ₹{order.bill.gst}</div>
                           <div className="font-bold text-emerald-400">Total: ₹{order.bill.totalPayable}</div>
                         </div>

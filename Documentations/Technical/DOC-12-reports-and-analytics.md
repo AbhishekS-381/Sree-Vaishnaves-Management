@@ -1,6 +1,6 @@
 # DOC-12 · Reports & Analytics
-**Version:** v2.0
-**Last updated:** 2026-09-30
+**Version:** v3.0
+**Last updated:** 2026-11-02
 **Status:** Implemented
 **Depends on:** DOC-01, DOC-02, DOC-03, DOC-04, DOC-05, DOC-07, DOC-08
 
@@ -8,9 +8,9 @@
 
 ## Overview
 
-Reports at `/management/reports` (`ReportsClientPage.tsx`). This is a **read-only, client-side analytics screen** — the page loader (`page.tsx`) reads all relevant collections server-side (branch-scoped for managers) and passes them to the client, which computes every metric in-browser for a selected branch + month + year. There are no report Server Actions and no server-side aggregation endpoints.
+Reports at `/management/reports` (`ReportsClientPage.tsx`). This is a **read-only, client-side analytics screen** — the page loader (`page.tsx`) queries all relevant relational tables server-side via Drizzle ORM (branch-scoped for managers) and passes them to the client, which computes every metric in-browser for a selected branch + month + year. There are no report Server Actions and no server-side aggregation endpoints.
 
-Data passed to the client: `branches`, `eodData`, `expensesData`, `payrollData`, `attendanceData`, `staffData`, `categories`.
+Data queried from PostgreSQL and passed to the client: `branches`, `eodData`, `expensesData`, `payrollData`, `attendanceData`, `staffData`, `categories`.
 
 ---
 
@@ -31,7 +31,7 @@ Data passed to the client: `branches`, `eodData`, `expensesData`, `payrollData`,
 
 **Expenses**
 - `totalExpenses` = Σ of filtered expense `amount` (both sources).
-- Breakdown by category (resolved via `categories`).
+- Breakdown by category (resolved via `categories` table).
 
 **Payroll**
 - `totalSalaryPayable` = Σ of filtered payroll `payableAmount`.
@@ -50,7 +50,7 @@ Data passed to the client: `branches`, `eodData`, `expensesData`, `payrollData`,
 
 ## Export
 
-- **CSV export** is built client-side and downloaded. It includes the summary lines (Total Revenue, Total Ledger Expenses, salary, Net Profit) and the relevant breakdowns for the selected period.
+- **CSV export** is built client-side and downloaded. It includes summary lines (Total Revenue, Total Ledger Expenses, salary, Net Profit) and the relevant breakdowns for the selected period.
 - There is **no** Excel (`.xlsx`) export and **no** PDF report generation in the codebase.
 - There is no separate "consolidated cross-branch" report action; consolidation is achieved by an admin/owner selecting branches in the UI over the data they can already see.
 
@@ -59,13 +59,13 @@ Data passed to the client: `branches`, `eodData`, `expensesData`, `payrollData`,
 ## Access
 
 - Visible to admin, owner, readonly, and managers (own branch).
-- Gated in navigation by the `reports` module toggle in `config.json`.
+- Gated in navigation by the `reports` module toggle in the `config` table.
 
 ---
 
 ## Business rules summary
-1. Reports are computed in the browser from server-loaded collections; nothing is written.
+1. Reports are computed in the browser from server-loaded relational data; nothing is written.
 2. Managers only ever receive their own branch's data from the loader.
 3. Net profit = revenue − ledger expenses − payroll payable for the selected period.
-4. Billing-derived metrics only reflect EOD entries where the optional `billing` block was filled.
+4. Billing-derived metrics reflect EOD entries (including automated POS settlements).
 5. Export is CSV only.

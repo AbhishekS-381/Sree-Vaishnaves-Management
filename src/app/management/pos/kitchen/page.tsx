@@ -1,11 +1,17 @@
 import { getSession } from '@/app/actions/auth'
 import { redirect } from 'next/navigation'
-import { readJSON, DB_FILES } from '@/lib/db'
+import {
+  db,
+  branches as branchesTable,
+  config as configTable,
+  posOrders as posOrdersTable,
+  posTables as posTablesTable,
+  posKots as posKotsTable,
+} from '@/lib/db'
+import { eq, and, isNull, inArray, desc } from 'drizzle-orm'
 import { getKitchenKots } from '@/app/actions/pos'
-import type { Config } from '@/app/actions/config'
 import type { PosKot, PosOrder, PosTable } from '@/app/actions/posTypes'
 import KitchenClientPage from './KitchenClientPage'
-
 import { resolvePosBranchId } from '@/lib/posUtils'
 
 function todayIST(): string {
@@ -27,19 +33,26 @@ export async function loadKitchenPage(
     redirect('/management')
   }
 
-  const configList = await readJSON<Config>(DB_FILES.CONFIG).catch(() => [])
+  const configList = await db.select().from(configTable).limit(1).catch(() => [])
   const config = configList[0]
   if (!config?.pos) {
     redirect('/management')
   }
 
-  let allBranches = await readJSON<{ id: string; name: string; isActive?: boolean }>(DB_FILES.BRANCHES).catch(() => [])
-  allBranches = allBranches.filter(b => b.isActive !== false)
+  let allBranches = await db
+    .select({
+      id: branchesTable.id,
+      name: branchesTable.name,
+      isActive: branchesTable.isActive,
+    })
+    .from(branchesTable)
+    .where(and(eq(branchesTable.isActive, true), isNull(branchesTable.deletedAt)))
+    .catch(() => [])
 
   const isGlobalAdmin = Boolean(session.isGlobalAdmin || session.role === 'admin' || session.role === 'owner')
 
   if (!isGlobalAdmin) {
-    allBranches = allBranches.filter(b => b.id === session.branchId)
+    allBranches = allBranches.filter((b) => b.id === session.branchId)
   }
 
   const resolvedParams = searchParams ? await searchParams : undefined
@@ -58,20 +71,40 @@ export async function loadKitchenPage(
 
   // Load served KOTs for today for the collapsible section
   const today = todayIST()
-  const allOrders = await readJSON<PosOrder>(DB_FILES.POS_ORDERS).catch(() => [])
-  const todayOrders = allOrders.filter(o => o.branchId === activeBranchId && o.date === today)
-  const orderMap = new Map(todayOrders.map(o => [o.id, o]))
+  const [todayOrdersRaw, allTables] = await Promise.all([
+    db
+      .select()
+      .from(posOrdersTable)
+      .where(and(eq(posOrdersTable.branchId, activeBranchId), eq(posOrdersTable.date, today)))
+      .catch(() => []),
+    db
+      .select()
+      .from(posTablesTable)
+      .where(and(eq(posTablesTable.branchId, activeBranchId), isNull(posTablesTable.deletedAt)))
+      .catch(() => []),
+  ])
 
-  const allTables = await readJSON<PosTable>(DB_FILES.POS_TABLES).catch(() => [])
-  const tableMap = new Map(allTables.map(t => [t.id, t.name]))
+  const todayOrders = todayOrdersRaw as unknown as PosOrder[]
+  const orderMap = new Map(todayOrders.map((o) => [o.id, o]))
+  const tableMap = new Map((allTables as PosTable[]).map((t) => [t.id, t.name]))
+  const orderIds = todayOrders.map((o) => o.id)
 
-  const allKots = await readJSON<PosKot>(DB_FILES.POS_KOTS).catch(() => [])
-  const orderIds = new Set(todayOrders.map(o => o.id))
+  let initialServedKots: any[] = []
+  if (orderIds.length > 0) {
+    const servedKotsRaw = await db
+      .select()
+      .from(posKotsTable)
+      .where(
+        and(
+          eq(posKotsTable.branchId, activeBranchId),
+          inArray(posKotsTable.orderId, orderIds),
+          eq(posKotsTable.status, 'served')
+        )
+      )
+      .orderBy(desc(posKotsTable.updatedAt))
+      .catch(() => [])
 
-  const initialServedKots = allKots
-    .filter(k => k.branchId === activeBranchId && orderIds.has(k.orderId) && k.status === 'served')
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-    .map(k => {
+    initialServedKots = (servedKotsRaw as any[]).map((k) => {
       const order = orderMap.get(k.orderId)
       const tableName = order?.tableId ? tableMap.get(order.tableId) : undefined
       const orderIdentifier = tableName || order?.takeawayNumber || 'Unknown'
@@ -80,17 +113,19 @@ export async function loadKitchenPage(
         id: k.id,
         orderId: k.orderId,
         kotNumber: k.kotNumber,
-        items: k.items.map(i => ({
+        items: ((k.items as any[]) || []).map((i: any) => ({
           nameSnapshot: i.nameSnapshot,
           quantity: i.quantity,
           note: i.note,
+          isParcel: Boolean(i.isParcel),
         })),
         status: k.status,
-        firedAt: k.firedAt,
+        firedAt: k.firedAt instanceof Date ? k.firedAt.toISOString() : String(k.firedAt || ''),
         orderIdentifier,
         orderType: order?.orderType,
       }
     })
+  }
 
   return (
     <KitchenClientPage
@@ -110,4 +145,3 @@ export default async function KitchenPage({
 }) {
   return loadKitchenPage(undefined, searchParams)
 }
-

@@ -1,20 +1,42 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import SettingsPage from '@/app/management/settings/page'
-import * as db from '@/lib/db'
 import * as auth from '@/app/actions/auth'
 import { redirect } from 'next/navigation'
 
+const { mockDb } = vi.hoisted(() => {
+  const mock: any = {
+    select: vi.fn(() => ({
+      from: vi.fn(() => {
+        const filtered: any[] = []
+        const builder: any = {
+          where: vi.fn(() => builder),
+          limit: vi.fn(() => Promise.resolve(filtered)),
+          catch: (cb: any) => Promise.resolve(filtered).catch(cb),
+          then: (res: any, rej: any) => Promise.resolve(filtered).then(res, rej),
+        }
+        return builder
+      }),
+    })),
+  }
+  return { mockDb: mock }
+})
+
 vi.mock('@/lib/db', () => ({
-  readJSON: vi.fn().mockResolvedValue([]),
-  DB_FILES: new Proxy({}, { get: () => 'mock.json' })
+  db: mockDb,
+  roles: { tableName: 'roles' },
+  departments: { tableName: 'departments' },
+  categories: { tableName: 'categories' },
+  users: { tableName: 'users' },
+  branches: { tableName: 'branches' },
+  config: { tableName: 'config' },
 }))
 
 vi.mock('@/app/actions/auth', () => ({
-  getSession: vi.fn()
+  getSession: vi.fn(),
 }))
 
 vi.mock('next/navigation', () => ({
-  redirect: vi.fn()
+  redirect: vi.fn(),
 }))
 
 vi.mock('@/app/management/settings/SettingsClientPage', () => ({
@@ -24,7 +46,6 @@ vi.mock('@/app/management/settings/SettingsClientPage', () => ({
 describe('Settings Page RBAC', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(db.readJSON).mockResolvedValue([])
   })
 
   it('Root Admin can access settings page', async () => {

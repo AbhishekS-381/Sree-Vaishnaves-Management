@@ -12,7 +12,6 @@ import {
   Printer,
   LogOut,
   UtensilsCrossed,
-  LayoutDashboard,
 } from 'lucide-react'
 import { logout } from '@/app/actions/auth'
 import { useToast, ToastStack } from '@/components/Toast'
@@ -27,18 +26,26 @@ export default function BillingClientPage({
   paidOrders,
   openOrders,
   tableMap,
+  tableAcMap = {},
   session,
   posDefaultGstPercent,
+  posDefaultParcelPercent = 0,
+  posDefaultAcPercent = 0,
+  posPricingMode = 'percentage',
 }: {
-  branches?: { id: string; name: string; address?: string; phone?: string }[]
+  branches?: { id: string; name: string; address?: string; phone?: string; gstin?: string }[]
   activeBranchId?: string
 
   billedOrders: PosOrder[]
   paidOrders: PosOrder[]
   openOrders: PosOrder[]
   tableMap: Record<string, string>
+  tableAcMap?: Record<string, boolean>
   session: { userId: string; name: string; role: string; isGlobalAdmin?: boolean }
   posDefaultGstPercent: number
+  posDefaultParcelPercent?: number
+  posDefaultAcPercent?: number
+  posPricingMode?: 'percentage' | 'item_price'
 }) {
   const router = useRouter()
   const { messages, dismiss, success, error } = useToast()
@@ -61,6 +68,8 @@ export default function BillingClientPage({
   const [selectedOpenOrderId, setSelectedOpenOrderId] = useState<string>('')
   const [discountInput, setDiscountInput] = useState<number>(0)
   const [gstInput, setGstInput] = useState<number>(0)
+  const [parcelChargesInput, setParcelChargesInput] = useState<number>(0)
+  const [acChargesInput, setAcChargesInput] = useState<number>(0)
   const [isBillOpenOrderModalOpen, setIsBillOpenOrderModalOpen] = useState(false)
   const [confirmZeroBill, setConfirmZeroBill] = useState(false)
 
@@ -177,8 +186,30 @@ export default function BillingClientPage({
     if (!order) return
     const subtotal = order.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0)
     const suggestedGst = posDefaultGstPercent > 0 ? Math.round((subtotal * posDefaultGstPercent) / 100) : 0
+
+    let suggestedParcel = 0
+    let suggestedAc = 0
+
+    if (posPricingMode === 'percentage') {
+      const parcelSubtotal = order.items
+        .filter(i => order.orderType === 'takeaway' || Boolean(i.isParcel))
+        .reduce((s, i) => s + i.quantity * i.unitPrice, 0)
+      const dineInSubtotal = order.items
+        .filter(i => order.orderType === 'dine-in' && !i.isParcel)
+        .reduce((s, i) => s + i.quantity * i.unitPrice, 0)
+
+      if (posDefaultParcelPercent > 0 && parcelSubtotal > 0) {
+        suggestedParcel = Math.round((parcelSubtotal * posDefaultParcelPercent) / 100)
+      }
+      if (order.orderType === 'dine-in' && order.tableId && tableAcMap?.[order.tableId] && posDefaultAcPercent > 0 && dineInSubtotal > 0) {
+        suggestedAc = Math.round((dineInSubtotal * posDefaultAcPercent) / 100)
+      }
+    }
+
     setDiscountInput(0)
     setGstInput(suggestedGst)
+    setParcelChargesInput(suggestedParcel)
+    setAcChargesInput(suggestedAc)
     setConfirmZeroBill(false)
     setIsBillOpenOrderModalOpen(true)
   }
@@ -191,6 +222,8 @@ export default function BillingClientPage({
     formData.set('orderId', selectedOpenOrderId)
     formData.set('discount', String(discountInput))
     formData.set('gst', String(gstInput))
+    formData.set('parcelCharges', String(parcelChargesInput))
+    formData.set('acCharges', String(acChargesInput))
     if (confirmZeroBill) {
       formData.set('confirmed', 'true')
     }
@@ -238,26 +271,14 @@ export default function BillingClientPage({
 
         <div className="flex flex-wrap items-center gap-3">
           {session.role !== 'billing' && (
-            <>
-              <Link
-                href={activeBranchId ? `/management/pos?branch=${activeBranchId}` : '/management/pos'}
-                className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-sm font-semibold rounded-xl transition-all"
-                title="POS Register"
-              >
-                <UtensilsCrossed className="w-4 h-4 text-amber-400" />
-                <span>POS</span>
-              </Link>
-              {Boolean(session.isGlobalAdmin || session.role === 'admin' || session.role === 'owner') && (
-                <Link
-                  href="/management"
-                  className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-sm font-semibold rounded-xl transition-all"
-                  title="Back to Management Portal"
-                >
-                  <LayoutDashboard className="w-4 h-4 text-indigo-400" />
-                  <span className="hidden lg:inline">Dashboard</span>
-                </Link>
-              )}
-            </>
+            <Link
+              href={activeBranchId ? `/management/pos?branch=${activeBranchId}` : '/management/pos'}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-sm font-semibold rounded-xl transition-all"
+              title="POS Register"
+            >
+              <UtensilsCrossed className="w-4 h-4 text-amber-400" />
+              <span>POS</span>
+            </Link>
           )}
 
           {session.isGlobalAdmin && branches && branches.length > 1 && (
@@ -472,7 +493,14 @@ export default function BillingClientPage({
                     className="flex items-center justify-between p-2 bg-slate-950/60 rounded-xl border border-slate-800/80 text-xs"
                   >
                     <div>
-                      <p className="font-semibold text-slate-200">{item.nameSnapshot}</p>
+                      <div className="flex items-center gap-1.5">
+                        <p className="font-semibold text-slate-200">{item.nameSnapshot}</p>
+                        {selectedOrder.orderType === 'dine-in' && item.isParcel && !item.nameSnapshot.toLowerCase().includes('parcel') && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                            📦 Parcel
+                          </span>
+                        )}
+                      </div>
                       <p className="text-slate-400">
                         ₹{item.unitPrice} &times; {item.quantity}
                       </p>
@@ -492,6 +520,18 @@ export default function BillingClientPage({
                   <div className="flex justify-between text-amber-400">
                     <span>Discount:</span>
                     <span className="font-semibold">-₹{selectedOrder.bill.discount}</span>
+                  </div>
+                )}
+                {Boolean(selectedOrder.bill.parcelCharges && selectedOrder.bill.parcelCharges > 0) && (
+                  <div className="flex justify-between text-slate-400">
+                    <span>Parcel Charges:</span>
+                    <span className="font-semibold text-slate-200">+₹{selectedOrder.bill.parcelCharges}</span>
+                  </div>
+                )}
+                {Boolean(selectedOrder.bill.acCharges && selectedOrder.bill.acCharges > 0) && (
+                  <div className="flex justify-between text-slate-400">
+                    <span>AC Charges:</span>
+                    <span className="font-semibold text-slate-200">+₹{selectedOrder.bill.acCharges}</span>
                   </div>
                 )}
                 {selectedOrder.bill.gst > 0 && (
@@ -667,7 +707,8 @@ export default function BillingClientPage({
               const order = openOrders.find(o => o.id === selectedOpenOrderId)
               if (!order) return null
               const subtotal = order.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0)
-              const totalPayable = Math.max(0, subtotal - discountInput + gstInput)
+              const totalPayable = Math.max(0, subtotal - discountInput + parcelChargesInput + acChargesInput + gstInput)
+              const isTableAc = Boolean(order.tableId && tableAcMap?.[order.tableId])
 
               return (
                 <form onSubmit={handleGenerateBillSubmit} className="flex flex-col gap-4">
@@ -688,6 +729,52 @@ export default function BillingClientPage({
                       className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white focus:outline-none"
                     />
                   </div>
+
+                  {posPricingMode === 'percentage' ? (
+                    <>
+                      {(order.orderType === 'takeaway' || order.items.some(i => i.isParcel) || parcelChargesInput > 0) && (
+                        <div>
+                          <div className="flex justify-between items-center mb-1">
+                            <label htmlFor="parcelChargesInput" className="text-xs font-semibold text-slate-300">Parcel Charges (₹)</label>
+                            {posDefaultParcelPercent > 0 && (
+                              <span className="text-[11px] text-slate-500">Rate: {posDefaultParcelPercent}%</span>
+                            )}
+                          </div>
+                          <input
+                            id="parcelChargesInput"
+                            type="number"
+                            min={0}
+                            value={parcelChargesInput}
+                            onChange={e => setParcelChargesInput(Number(e.target.value))}
+                            className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white focus:outline-none"
+                          />
+                        </div>
+                      )}
+
+                      {order.orderType === 'dine-in' && (isTableAc || acChargesInput > 0) && (
+                        <div>
+                          <div className="flex justify-between items-center mb-1">
+                            <label htmlFor="acChargesInput" className="text-xs font-semibold text-slate-300">AC Charges (₹)</label>
+                            {posDefaultAcPercent > 0 && (
+                              <span className="text-[11px] text-slate-500">Rate: {posDefaultAcPercent}%</span>
+                            )}
+                          </div>
+                          <input
+                            id="acChargesInput"
+                            type="number"
+                            min={0}
+                            value={acChargesInput}
+                            onChange={e => setAcChargesInput(Number(e.target.value))}
+                            className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white focus:outline-none"
+                          />
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="p-2.5 bg-slate-950/80 rounded-xl border border-slate-800 text-[11px] text-slate-400">
+                      Static item pricing active. AC/parcel charges are included in item rates.
+                    </div>
+                  )}
 
                   <div>
                     <label htmlFor="gstInput" className="text-xs font-semibold text-slate-300 block mb-1">GST (₹)</label>

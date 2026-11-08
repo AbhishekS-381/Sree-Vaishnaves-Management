@@ -89,6 +89,19 @@ describe('ReceiptPrintModal Component Tests', () => {
     expect(screen.getAllByText(/Ramesh Cashier/i).length).toBeGreaterThan(0)
   })
 
+  it('renders branch GSTIN on receipt when branch has gstin', () => {
+    render(
+      <ReceiptPrintModal
+        isOpen={true}
+        onClose={vi.fn()}
+        order={sampleOrder}
+        branch={{ ...sampleBranch, gstin: '29ABCDE1234F1Z5' }}
+      />
+    )
+
+    expect(screen.getAllByText(/GSTIN: 29ABCDE1234F1Z5/i).length).toBeGreaterThan(0)
+  })
+
   it('renders order line items and pricing breakdown', () => {
     render(
       <ReceiptPrintModal

@@ -5,7 +5,8 @@ import { redirect } from 'next/navigation'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
 
-import { readJSON, writeJSON, DB_FILES } from '@/lib/db'
+import { db, users } from '@/lib/db'
+import { eq, and, ilike, isNull } from 'drizzle-orm'
 import { signToken, verifyToken } from '@/lib/jwt'
 import { checkRateLimit, resetRateLimit, pruneRateLimits } from '@/lib/rate-limit'
 
@@ -14,55 +15,62 @@ const loginSchema = z.object({
   password: z.string().min(1, 'Password is required'),
 })
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function login(prevState: any, formData: FormData) {
-  const headersList = await headers();
-  const ip = headersList.get('x-forwarded-for') || headersList.get('x-real-ip') || 'unknown';
-  const name = formData.get('name') as string;
-  const rateLimit = await checkRateLimit(ip, name);
+  const headersList = await headers()
+  const ip = headersList.get('x-forwarded-for') || headersList.get('x-real-ip') || 'unknown'
+  const name = formData.get('name') as string
+  const rateLimit = await checkRateLimit(ip, name)
   if (!rateLimit.success) {
-    return { error: rateLimit.error };
+    return { error: rateLimit.error }
   }
 
   const password = formData.get('password') as string
 
-  const parsed = loginSchema.safeParse({ name, password });
+  const parsed = loginSchema.safeParse({ name, password })
   if (!parsed.success) {
-    return { error: parsed.error.issues[0].message };
+    return { error: parsed.error.issues[0].message }
   }
 
-  const users = await readJSON<any>(DB_FILES.USERS).catch(() => [])
-  const user = users.find((u: any) => u.name.toLowerCase() === name.toLowerCase() && u.isActive !== false)
+  const userRows = await db
+    .select()
+    .from(users)
+    .where(and(ilike(users.name, name), eq(users.isActive, true), isNull(users.deletedAt)))
+    .limit(1)
+    .catch(() => [])
 
-  let isValidPassword = false;
+  const user = userRows[0]
+
+  let isValidPassword = false
   if (user && user.password) {
-    isValidPassword = await bcrypt.compare(password, user.password);
+    isValidPassword = await bcrypt.compare(password, user.password)
   }
 
   if (user && isValidPassword) {
     // Clear rate limit counter on successful login
-    await resetRateLimit(ip, name);
+    await resetRateLimit(ip, name)
 
     // Prune stale rate limit rows ~1% of logins — fire and forget
     if (Math.random() < 0.01) {
-      pruneRateLimits().catch(() => {});
+      pruneRateLimits().catch(() => {})
     }
 
-    const role = user.role?.toLowerCase() || 'manager';
-    const isAdmin = role === 'admin';
-    const isOwner = role === 'owner';
-    const isGlobalAdmin = isAdmin || isOwner;
-    const isGlobalOwner = isOwner;
-    const isPosRole = ['billing', 'kitchen', 'waiter'].includes(role);
+    const role = user.role?.toLowerCase() || 'manager'
+    const isAdmin = role === 'admin'
+    const isOwner = role === 'owner'
+    const isGlobalAdmin = isAdmin || isOwner
+    const isGlobalOwner = isOwner
+    const isPosRole = ['billing', 'kitchen', 'waiter'].includes(role)
     const token = await signToken({
       userId: user.id || user.name,
       name: user.name,
       role,
-      branchId: user.branchId,
+      branchId: user.branchId || undefined,
       isGlobalOwner,
       isGlobalAdmin,
       isRootAdmin: isAdmin,
       posRole: isPosRole || undefined,
-    });
+    })
 
     const cookieStore = await cookies()
     cookieStore.set('session', token, {
@@ -96,49 +104,48 @@ export async function logout() {
 export async function getSession() {
   const cookieStore = await cookies()
   const token = cookieStore.get('session')?.value
-  if (!token) return null;
-  const payload = await verifyToken(token);
-  return payload;
+  if (!token) return null
+  const payload = await verifyToken(token)
+  return payload
 }
 
 export async function getSessionRole() {
-  const session = await getSession();
-  return session?.role || null;
+  const session = await getSession()
+  return session?.role || null
 }
 
 export async function requireBranchAccess(targetBranchId?: string) {
-  const session = await getSession();
-  if (!session) throw new Error('Unauthorized');
+  const session = await getSession()
+  if (!session) throw new Error('Unauthorized')
   
   if (!session.isGlobalAdmin) {
     if (targetBranchId && targetBranchId !== session.branchId) {
-      throw new Error('Forbidden: You can only access your assigned branch.');
+      throw new Error('Forbidden: You can only access your assigned branch.')
     }
-    return session.branchId as string; // Return their enforced branch ID
+    return session.branchId as string // Return their enforced branch ID
   }
   
-  return targetBranchId || session.branchId as string || '';
+  return targetBranchId || session.branchId as string || ''
 }
 
 export async function migratePasswordsToHash() {
-  const session = await getSession();
+  const session = await getSession()
   if (session?.role !== 'admin') {
-    return { error: 'Forbidden' };
+    return { error: 'Forbidden' }
   }
-  const users = await readJSON<any>(DB_FILES.USERS);
-  let updated = false;
-  const migratedUsers = await Promise.all(users.map(async (u) => {
+
+  const userList = await db.select().from(users).catch(() => [])
+  let updated = false
+  for (const u of userList) {
     if (u.password && !u.password.startsWith('$2a$') && !u.password.startsWith('$2b$')) {
-      const hash = await bcrypt.hash(u.password, 10);
-      updated = true;
-      return { ...u, password: hash };
+      const hash = await bcrypt.hash(u.password, 10)
+      await db.update(users).set({ password: hash }).where(eq(users.id, u.id))
+      updated = true
     }
-    return u;
-  }));
+  }
 
   if (updated) {
-    await writeJSON(DB_FILES.USERS, migratedUsers);
-    return { success: true, message: 'Passwords migrated successfully' };
+    return { success: true, message: 'Passwords migrated successfully' }
   }
-  return { success: true, message: 'No passwords needed migration' };
+  return { success: true, message: 'No passwords needed migration' }
 }

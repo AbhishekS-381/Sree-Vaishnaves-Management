@@ -1,11 +1,17 @@
 import { getSession } from '@/app/actions/auth'
 import { redirect } from 'next/navigation'
-import { readJSON, DB_FILES } from '@/lib/db'
+import {
+  db,
+  branches as branchesTable,
+  config as configTable,
+  posOrders as posOrdersTable,
+  posTables as posTablesTable,
+  menuCategories as menuCategoriesTable,
+} from '@/lib/db'
+import { eq, and, isNull, lt } from 'drizzle-orm'
 import { getTodayPosData } from '@/app/actions/pos'
-import type { Config } from '@/app/actions/config'
 import type { PosOrder, PosTable } from '@/app/actions/posTypes'
 import WaiterOrderClientPage from './WaiterOrderClientPage'
-
 import { resolvePosBranchId } from '@/lib/posUtils'
 
 function todayIST(): string {
@@ -27,19 +33,26 @@ export async function loadWaiterOrderPage(
     redirect('/management')
   }
 
-  const configList = await readJSON<Config>(DB_FILES.CONFIG).catch(() => [])
+  const configList = await db.select().from(configTable).limit(1).catch(() => [])
   const config = configList[0]
   if (!config?.pos) {
     redirect('/management')
   }
 
-  let allBranches = await readJSON<{ id: string; name: string; isActive?: boolean }>(DB_FILES.BRANCHES).catch(() => [])
-  allBranches = allBranches.filter(b => b.isActive !== false)
+  let allBranches = await db
+    .select({
+      id: branchesTable.id,
+      name: branchesTable.name,
+      isActive: branchesTable.isActive,
+    })
+    .from(branchesTable)
+    .where(and(eq(branchesTable.isActive, true), isNull(branchesTable.deletedAt)))
+    .catch(() => [])
 
   const isGlobalAdmin = Boolean(session.isGlobalAdmin || session.role === 'admin' || session.role === 'owner')
 
   if (!isGlobalAdmin) {
-    allBranches = allBranches.filter(b => b.id === session.branchId)
+    allBranches = allBranches.filter((b) => b.id === session.branchId)
   }
 
   const resolvedParams = searchParams ? await searchParams : undefined
@@ -60,19 +73,38 @@ export async function loadWaiterOrderPage(
 
   // Check for stale orders
   const today = todayIST()
-  const allOrders = await readJSON<PosOrder>(DB_FILES.POS_ORDERS).catch(() => [])
-  const allTables = await readJSON<PosTable>(DB_FILES.POS_TABLES).catch(() => [])
-  const tableMap = new Map(allTables.map(t => [t.id, t.name]))
+  const [staleOrdersRaw, allTables, allCategories] = await Promise.all([
+    db
+      .select()
+      .from(posOrdersTable)
+      .where(
+        and(
+          eq(posOrdersTable.branchId, activeBranchId),
+          eq(posOrdersTable.status, 'open'),
+          lt(posOrdersTable.date, today)
+        )
+      )
+      .catch(() => []),
+    db
+      .select()
+      .from(posTablesTable)
+      .where(and(eq(posTablesTable.branchId, activeBranchId), isNull(posTablesTable.deletedAt)))
+      .catch(() => []),
+    db
+      .select({ id: menuCategoriesTable.id, name: menuCategoriesTable.name })
+      .from(menuCategoriesTable)
+      .where(isNull(menuCategoriesTable.deletedAt))
+      .catch(() => []),
+  ])
 
-  const staleOrders = allOrders
-    .filter(o => o.branchId === activeBranchId && o.status === 'open' && o.date < today)
-    .map(o => ({
-      ...o,
-      tableName: o.tableId ? tableMap.get(o.tableId) || 'Table' : o.takeawayNumber || 'Takeaway',
-    }))
+  const tableMap = new Map((allTables as PosTable[]).map((t) => [t.id, t.name]))
 
-  const allCategories = await readJSON<{ id: string; name: string }>(DB_FILES.MENU_CATEGORIES).catch(() => [])
-  const categoryMap = Object.fromEntries(allCategories.map(c => [c.id, c.name]))
+  const staleOrders = (staleOrdersRaw as unknown as PosOrder[]).map((o) => ({
+    ...o,
+    tableName: o.tableId ? tableMap.get(o.tableId) || 'Table' : o.takeawayNumber || 'Takeaway',
+  }))
+
+  const categoryMap = Object.fromEntries(allCategories.map((c) => [c.id, c.name]))
 
   return (
     <WaiterOrderClientPage
@@ -82,6 +114,7 @@ export async function loadWaiterOrderPage(
       staleOrders={staleOrders}
       session={session}
       categoryMap={categoryMap}
+      posPricingMode={(config?.posPricingMode as 'percentage' | 'item_price') ?? 'percentage'}
     />
   )
 }
@@ -93,4 +126,3 @@ export default async function WaiterOrderPage({
 }) {
   return loadWaiterOrderPage(undefined, searchParams)
 }
-

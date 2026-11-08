@@ -334,7 +334,7 @@ describe('WaiterOrderClientPage Component Tests (Task 10.2, Req 16.5, 16.6, 16.8
     expect(logout).toHaveBeenCalled()
   })
 
-  it('renders POS and Dashboard link on KitchenClientPage for admin/owner', () => {
+  it('renders POS link on KitchenClientPage for admin/owner without Dashboard link', () => {
     const adminSession = { userId: 'u_admin', name: 'Boss', role: 'admin', isGlobalAdmin: true }
     render(
       <KitchenClientPage
@@ -349,9 +349,8 @@ describe('WaiterOrderClientPage Component Tests (Task 10.2, Req 16.5, 16.6, 16.8
     expect(posLink).toBeDefined()
     expect(posLink.getAttribute('href')).toContain('/management/pos')
 
-    const dashboardLink = screen.getByRole('link', { name: /Dashboard/i })
-    expect(dashboardLink).toBeDefined()
-    expect(dashboardLink.getAttribute('href')).toBe('/management')
+    const dashboardLink = screen.queryByRole('link', { name: /Dashboard/i })
+    expect(dashboardLink).toBeNull()
 
     const logoutBtn = screen.getByRole('button', { name: /Logout/i })
     expect(logoutBtn).toBeDefined()

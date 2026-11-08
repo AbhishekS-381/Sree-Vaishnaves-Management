@@ -1,12 +1,11 @@
 'use server'
 
-import { withTransaction, DB_FILES } from '@/lib/db'
+import { db, inventory, stockAdjustments, withDbTransaction } from '@/lib/db'
+import { eq, and, ilike, ne, isNull } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'crypto'
 import { requireBranchAccess } from './auth'
 import { z } from 'zod'
-
-const VALID_UNITS = ['kg', 'litre', 'packet', 'piece', 'gram', 'ml', 'box', 'bottle'] as const
 
 const addInventorySchema = z.object({
   name:      z.string().min(1, 'Item name is required').max(100, 'Name too long').trim(),
@@ -36,7 +35,7 @@ export type InventoryItem = {
   id: string
   branchId: string
   name: string
-  unit: string // kg, litre, packet, piece
+  unit: string
   currentQuantity: number
   threshold: number
   updatedAt: string
@@ -54,6 +53,7 @@ export type StockAdjustment = {
   date: string
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function addInventoryItem(prevState: any, formData: FormData) {
   const name = formData.get('name') as string
   const unit = formData.get('unit') as string
@@ -71,54 +71,78 @@ export async function addInventoryItem(prevState: any, formData: FormData) {
 
   try {
     branchId = await requireBranchAccess(branchId)
-  } catch (e) {
+  } catch {
     return { error: 'Forbidden' }
   }
 
-  let alreadyExists = false;
-  const newItem: InventoryItem = {
-    id: `inv_${randomUUID()}`,
-    branchId,
-    name,
-    unit,
-    currentQuantity: quantity,
-    threshold,
-    updatedAt: new Date().toISOString(),
-    isActive: true
-  }
+  try {
+    const existing = await db
+      .select({ id: inventory.id })
+      .from(inventory)
+      .where(
+        and(
+          ilike(inventory.name, name),
+          eq(inventory.branchId, branchId),
+          eq(inventory.unit, unit),
+          eq(inventory.isActive, true),
+          isNull(inventory.deletedAt)
+        )
+      )
+      .limit(1)
 
-  const success = await withTransaction<InventoryItem>(DB_FILES.INVENTORY, (items) => {
-    if (items.some(i => i.isActive !== false && i.name.toLowerCase() === name.toLowerCase() && i.branchId === branchId && i.unit === unit)) {
-      alreadyExists = true;
-      return items;
+    if (existing.length > 0) {
+      return { error: 'An inventory item with this name and unit already exists in this branch' }
     }
-    items.push(newItem)
-    return items
-  })
 
-  if (alreadyExists) return { error: 'An inventory item with this name and unit already exists in this branch' }
-  if (!success) return { error: 'Transaction failed' }
-  
-  // If starting quantity > 0, log adjustment
-  if (quantity > 0) {
-     await withTransaction<StockAdjustment>(DB_FILES.STOCK_ADJUSTMENTS, (logs) => {
-       logs.push({
-          id: `adj_${randomUUID()}`,
-          itemId: newItem.id,
+    const newItemId = randomUUID()
+    const now = new Date()
+
+    if (quantity > 0) {
+      // Wrap item insert + initial stock_adjustment insert in withDbTransaction (Req 7.4)
+      await withDbTransaction(async (tx) => {
+        await tx.insert(inventory).values({
+          id: newItemId,
+          branchId,
+          name,
+          unit,
+          currentQuantity: quantity,
+          threshold,
+          isActive: true,
+          updatedAt: now,
+        })
+
+        await tx.insert(stockAdjustments).values({
+          id: randomUUID(),
+          itemId: newItemId,
           branchId,
           type: 'increase',
           amount: quantity,
           reason: 'Initial Stock',
-          date: new Date().toISOString()
-       })
-       return logs
-     })
-  }
+          date: now.toISOString().split('T')[0],
+        })
+      })
+    } else {
+      await db.insert(inventory).values({
+        id: newItemId,
+        branchId,
+        name,
+        unit,
+        currentQuantity: quantity,
+        threshold,
+        isActive: true,
+        updatedAt: now,
+      })
+    }
 
-  revalidatePath('/management/inventory')
-  return { success: true }
+    revalidatePath('/management/inventory')
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to add inventory item:', error)
+    return { error: 'Transaction failed' }
+  }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function adjustStock(prevState: any, formData: FormData) {
   const itemId = formData.get('itemId') as string
   let branchId = formData.get('branchId') as string
@@ -131,55 +155,63 @@ export async function adjustStock(prevState: any, formData: FormData) {
 
   try {
     branchId = await requireBranchAccess(branchId)
-  } catch (e) {
+  } catch {
     return { error: 'Forbidden' }
   }
 
-  let notFound = false;
-  let notEnough = false;
+  try {
+    // Outer-scope flag pattern (Req 7.5, 13.5)
+    const existing = await db
+      .select()
+      .from(inventory)
+      .where(
+        and(
+          eq(inventory.id, itemId),
+          eq(inventory.isActive, true),
+          isNull(inventory.deletedAt)
+        )
+      )
+      .limit(1)
 
-  const success = await withTransaction<InventoryItem>(DB_FILES.INVENTORY, (items) => {
-    const itemIndex = items.findIndex(i => i.id === itemId)
-    if (itemIndex === -1) {
-      notFound = true;
-      return items;
+    if (existing.length === 0) return { error: 'Item not found' }
+
+    const item = existing[0]
+    if (type === 'decrease' && item.currentQuantity < amount) {
+      return { error: 'Not enough stock to decrease' }
     }
-    if (type === 'decrease' && items[itemIndex].currentQuantity < amount) {
-      notEnough = true;
-      return items;
-    }
 
-    const newQty = type === 'increase' 
-       ? items[itemIndex].currentQuantity + amount 
-       : items[itemIndex].currentQuantity - amount
+    const newQty = type === 'increase' ? item.currentQuantity + amount : item.currentQuantity - amount
+    const now = new Date()
 
-    items[itemIndex].currentQuantity = newQty
-    items[itemIndex].updatedAt = new Date().toISOString()
-    return items
-  })
+    await withDbTransaction(async (tx) => {
+      await tx
+        .update(inventory)
+        .set({
+          currentQuantity: newQty,
+          updatedAt: now,
+        })
+        .where(eq(inventory.id, itemId))
 
-  if (notFound) return { error: 'Item not found' }
-  if (notEnough) return { error: 'Not enough stock to decrease' }
-  if (!success) return { error: 'Transaction failed' }
-
-  // Log adjustment
-  await withTransaction<StockAdjustment>(DB_FILES.STOCK_ADJUSTMENTS, (logs) => {
-    logs.push({
-      id: `adj_${randomUUID()}`,
-      itemId,
-      branchId,
-      type,
-      amount,
-      reason,
-      date: new Date().toISOString()
+      await tx.insert(stockAdjustments).values({
+        id: randomUUID(),
+        itemId,
+        branchId,
+        type,
+        amount,
+        reason,
+        date: now.toISOString().split('T')[0],
+      })
     })
-    return logs
-  })
-  
-  revalidatePath('/management/inventory')
-  return { success: true }
+
+    revalidatePath('/management/inventory')
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to adjust stock:', error)
+    return { error: 'Transaction failed' }
+  }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function updateInventoryItem(prevState: any, formData: FormData) {
   const id = formData.get('id') as string
   const name = formData.get('name') as string
@@ -196,59 +228,92 @@ export async function updateInventoryItem(prevState: any, formData: FormData) {
 
   try {
     branchId = await requireBranchAccess(branchId)
-  } catch (e) {
+  } catch {
     return { error: 'Forbidden' }
   }
 
-  let notFound = false;
-  let alreadyExists = false;
+  try {
+    const existing = await db
+      .select()
+      .from(inventory)
+      .where(
+        and(
+          eq(inventory.id, id),
+          eq(inventory.isActive, true),
+          isNull(inventory.deletedAt)
+        )
+      )
+      .limit(1)
 
-  const success = await withTransaction<InventoryItem>(DB_FILES.INVENTORY, (items) => {
-    const itemIndex = items.findIndex(i => i.id === id)
-    if (itemIndex === -1) {
-      notFound = true;
-      return items;
+    if (existing.length === 0) return { error: 'Item not found' }
+
+    const duplicate = await db
+      .select({ id: inventory.id })
+      .from(inventory)
+      .where(
+        and(
+          ilike(inventory.name, name),
+          eq(inventory.branchId, branchId),
+          eq(inventory.unit, unit),
+          eq(inventory.isActive, true),
+          isNull(inventory.deletedAt),
+          ne(inventory.id, id)
+        )
+      )
+      .limit(1)
+
+    if (duplicate.length > 0) {
+      return { error: 'An inventory item with this name and unit already exists in this branch' }
     }
-    if (items.some(i => i.isActive !== false && i.name.toLowerCase() === name.toLowerCase() && i.branchId === branchId && i.unit === unit && i.id !== id)) {
-      alreadyExists = true;
-      return items;
-    }
 
-    items[itemIndex] = {
-      ...items[itemIndex],
-      name,
-      unit,
-      threshold,
-      updatedAt: new Date().toISOString()
-    }
-    return items
-  })
+    await db
+      .update(inventory)
+      .set({
+        name,
+        unit,
+        threshold,
+        updatedAt: new Date(),
+      })
+      .where(eq(inventory.id, id))
 
-  if (notFound) return { error: 'Item not found' }
-  if (alreadyExists) return { error: 'An inventory item with this name and unit already exists in this branch' }
-  if (!success) return { error: 'Transaction failed' }
-
-  revalidatePath('/management/inventory')
-  return { success: true }
+    revalidatePath('/management/inventory')
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to update inventory item:', error)
+    return { error: 'Transaction failed' }
+  }
 }
 
 export async function deleteInventoryItem(id: string) {
-  let notFound = false;
-  const success = await withTransaction<InventoryItem>(DB_FILES.INVENTORY, (items) => {
-    const itemIndex = items.findIndex(i => i.id === id)
-    if (itemIndex === -1) {
-      notFound = true;
-      return items;
-    }
-    items[itemIndex].isActive = false;
-    items[itemIndex].deletedAt = new Date().toISOString();
-    items[itemIndex].updatedAt = new Date().toISOString();
-    return items
-  })
+  try {
+    const existing = await db
+      .select()
+      .from(inventory)
+      .where(
+        and(
+          eq(inventory.id, id),
+          eq(inventory.isActive, true),
+          isNull(inventory.deletedAt)
+        )
+      )
+      .limit(1)
 
-  if (notFound) return { error: 'Item not found' }
-  if (!success) return { error: 'Transaction failed' }
+    if (existing.length === 0) return { error: 'Item not found' }
 
-  revalidatePath('/management/inventory')
-  return { success: true }
+    const now = new Date()
+    await db
+      .update(inventory)
+      .set({
+        isActive: false,
+        deletedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(inventory.id, id))
+
+    revalidatePath('/management/inventory')
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to delete inventory item:', error)
+    return { error: 'Transaction failed' }
+  }
 }

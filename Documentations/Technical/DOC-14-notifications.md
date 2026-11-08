@@ -1,13 +1,13 @@
 # DOC-14 · Notifications & Reminders
-**Version:** v2.0
-**Last updated:** 2026-09-30
+**Version:** v3.0
+**Last updated:** 2026-11-02
 **Depends on:** DOC-01, DOC-02, DOC-03, DOC-13
 
 ---
 
 ## Overview
 
-"Notifications" in this system are **in-app pending-action alerts computed on the dashboard**. There is no notifications table, no notification collection, no badge count service, and no push/email/SMS/WhatsApp. Alerts are derived fresh on each dashboard render from the current data (see DOC-13). This document describes exactly what is implemented.
+"Notifications" in this system are **in-app pending-action alerts computed on the dashboard**. There is no separate notifications table, no badge count service, and no push/email/SMS/WhatsApp. Alerts are derived fresh on each dashboard render from the current data (see DOC-13). This document describes exactly what is implemented.
 
 ---
 
@@ -33,7 +33,7 @@ Severity is expressed purely through Tailwind color classes on the banner. There
 ## How alerts are scoped
 
 - The dashboard applies branch scoping before computing alerts, so a manager only sees alerts for their branch; global admins/readonly see them across the branches they can view.
-- Alerts respect the global `config.json` module toggles: if a module is disabled, its alert is suppressed (and the module is also hidden from navigation).
+- Alerts respect the global `config` table module toggles: if a module is disabled, its alert is suppressed (and the module is also hidden from navigation).
 
 ---
 

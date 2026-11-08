@@ -1,10 +1,15 @@
 import { getSession } from '@/app/actions/auth'
 import { redirect } from 'next/navigation'
-import { readJSON, DB_FILES } from '@/lib/db'
-import type { Config } from '@/app/actions/config'
+import {
+  db,
+  branches as branchesTable,
+  config as configTable,
+  posOrders as posOrdersTable,
+  posTables as posTablesTable,
+} from '@/lib/db'
+import { eq, and, isNull } from 'drizzle-orm'
 import type { PosOrder, PosTable } from '@/app/actions/posTypes'
 import BillingClientPage from './BillingClientPage'
-
 import { resolvePosBranchId } from '@/lib/posUtils'
 
 function todayIST(): string {
@@ -26,19 +31,38 @@ export async function loadBillingPage(
     redirect('/management')
   }
 
-  const configList = await readJSON<Config>(DB_FILES.CONFIG).catch(() => [])
+  const configList = await db.select().from(configTable).limit(1).catch(() => [])
   const config = configList[0]
   if (!config?.pos) {
     redirect('/management')
   }
 
-  let allBranches = await readJSON<{ id: string; name: string; address?: string; phone?: string; isActive?: boolean }>(DB_FILES.BRANCHES).catch(() => [])
-  allBranches = allBranches.filter(b => b.isActive !== false)
+  let allBranchesRaw = await db
+    .select({
+      id: branchesTable.id,
+      name: branchesTable.name,
+      address: branchesTable.address,
+      phone: branchesTable.phone,
+      gstin: branchesTable.gstin,
+      isActive: branchesTable.isActive,
+    })
+    .from(branchesTable)
+    .where(and(eq(branchesTable.isActive, true), isNull(branchesTable.deletedAt)))
+    .catch(() => [])
+
+  let allBranches = allBranchesRaw.map((b) => ({
+    id: b.id,
+    name: b.name,
+    address: b.address || undefined,
+    phone: b.phone || undefined,
+    gstin: b.gstin || undefined,
+    isActive: b.isActive,
+  }))
 
   const isGlobalAdmin = Boolean(session.isGlobalAdmin || session.role === 'admin' || session.role === 'owner')
 
   if (!isGlobalAdmin) {
-    allBranches = allBranches.filter(b => b.id === session.branchId)
+    allBranches = allBranches.filter((b) => b.id === session.branchId)
   }
 
   const resolvedParams = searchParams ? await searchParams : undefined
@@ -53,27 +77,40 @@ export async function loadBillingPage(
   }
 
   const today = todayIST()
-  const allOrders = await readJSON<PosOrder>(DB_FILES.POS_ORDERS).catch(() => [])
-  const branchTodayOrders = allOrders.filter(o => o.branchId === activeBranchId && o.date === today)
+  const [allOrdersRaw, allTables] = await Promise.all([
+    db
+      .select()
+      .from(posOrdersTable)
+      .where(and(eq(posOrdersTable.branchId, activeBranchId), eq(posOrdersTable.date, today)))
+      .catch(() => []),
+    db
+      .select()
+      .from(posTablesTable)
+      .where(and(eq(posTablesTable.branchId, activeBranchId), isNull(posTablesTable.deletedAt)))
+      .catch(() => []),
+  ])
+
+  const branchTodayOrders = allOrdersRaw as unknown as PosOrder[]
 
   // Billed orders sorted oldest-first (by generatedAt)
   const billedOrders = branchTodayOrders
-    .filter(o => o.status === 'billed')
+    .filter((o) => o.status === 'billed')
     .sort((a, b) => (a.bill?.generatedAt || '').localeCompare(b.bill?.generatedAt || ''))
 
   // Paid orders sorted newest-first (by paidAt)
   const paidOrders = branchTodayOrders
-    .filter(o => o.status === 'paid')
+    .filter((o) => o.status === 'paid')
     .sort((a, b) => (b.payment?.paidAt || '').localeCompare(a.payment?.paidAt || ''))
 
   // Open orders (for secondary bill generation input)
-  const openOrders = branchTodayOrders.filter(o => o.status === 'open')
+  const openOrders = branchTodayOrders.filter((o) => o.status === 'open')
 
-  // Table names
-  const allTables = await readJSON<PosTable>(DB_FILES.POS_TABLES).catch(() => [])
+  // Table names and AC status
   const tableMap: Record<string, string> = {}
-  allTables.forEach(t => {
+  const tableAcMap: Record<string, boolean> = {}
+  ;(allTables as PosTable[]).forEach((t) => {
     tableMap[t.id] = t.name
+    tableAcMap[t.id] = Boolean(t.isAc)
   })
 
   return (
@@ -84,8 +121,12 @@ export async function loadBillingPage(
       paidOrders={paidOrders}
       openOrders={openOrders}
       tableMap={tableMap}
+      tableAcMap={tableAcMap}
       session={session}
       posDefaultGstPercent={config?.posDefaultGstPercent ?? 0}
+      posDefaultParcelPercent={config?.posDefaultParcelPercent ?? 0}
+      posDefaultAcPercent={config?.posDefaultAcPercent ?? 0}
+      posPricingMode={(config?.posPricingMode as 'percentage' | 'item_price') ?? 'percentage'}
     />
   )
 }
@@ -97,4 +138,3 @@ export default async function BillingPage({
 }) {
   return loadBillingPage(undefined, searchParams)
 }
-

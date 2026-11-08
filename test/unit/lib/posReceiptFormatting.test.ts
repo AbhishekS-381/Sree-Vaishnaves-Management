@@ -9,6 +9,7 @@ describe('POS Receipt & Thermal Printer Formatting - posReceiptFormatting.test.t
     tableId: 'tbl-1',
     orderType: 'dine-in',
     status: 'paid',
+    kotCount: 1,
     date: '2026-10-19',
     openedBy: 'u_waiter',
     createdAt: '2026-10-19T10:00:00Z',
@@ -136,6 +137,7 @@ describe('POS Receipt & Thermal Printer Formatting - posReceiptFormatting.test.t
           discount: 0,
           gst: 0,
           totalPayable: 200,
+          generatedAt: '2026-10-19T10:20:00Z',
         },
       }
 
@@ -176,6 +178,7 @@ describe('POS Receipt & Thermal Printer Formatting - posReceiptFormatting.test.t
           discount: 200,
           gst: 0,
           totalPayable: 0,
+          generatedAt: '2026-10-19T10:20:00Z',
         },
       }
 
@@ -339,6 +342,37 @@ describe('POS Receipt & Thermal Printer Formatting - posReceiptFormatting.test.t
 
       const slip = formatKotSlip(singleKot, 'Table 5')
       expect(slip).toContain('x1')
+    })
+
+    it('formats parcel items with [PARCEL] prefix on kitchen slip', () => {
+      const mixedKot: PosKot = {
+        ...baseKot,
+        items: [
+          { menuItemId: 'm1', nameSnapshot: 'Masala Dosa', quantity: 2, isParcel: false },
+          { menuItemId: 'm2', nameSnapshot: 'Paneer Butter Masala', quantity: 1, isParcel: true },
+        ],
+      }
+
+      const slip = formatKotSlip(mixedKot, 'Table 5')
+      expect(slip).toContain('Masala Dosa')
+      expect(slip).toContain('[PARCEL] Paneer Butter Masala')
+    })
+  })
+
+  describe('Mixed order receipt formatting', () => {
+    it('appends (Parcel) on dine-in receipts for parcel items', () => {
+      const mixedOrder: PosOrder = {
+        ...baseOrder,
+        orderType: 'dine-in',
+        items: [
+          { id: 'i1', menuItemId: 'm1', nameSnapshot: 'Masala Dosa', quantity: 2, unitPrice: 60, isParcel: false },
+          { id: 'i2', menuItemId: 'm2', nameSnapshot: 'Paneer Butter Masala', quantity: 1, unitPrice: 200, isParcel: true },
+        ],
+      }
+
+      const receipt = formatThermalReceipt(mixedOrder)
+      expect(receipt).toContain('Masala Dosa')
+      expect(receipt).toContain('Paneer Butter Masala (Parcel)')
     })
   })
 })

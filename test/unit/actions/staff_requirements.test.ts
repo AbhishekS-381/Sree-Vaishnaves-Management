@@ -1,119 +1,160 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { saveRequirement, deleteRequirement, updateRequirementSchedules } from '@/app/actions/staff_requirements'
-import * as db from '@/lib/db'
+
+const { mockDb } = vi.hoisted(() => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const queryBuilder: any = {
+    where: vi.fn(),
+    limit: vi.fn(),
+  }
+  queryBuilder.where.mockReturnValue(queryBuilder)
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const updateBuilder: any = {
+    set: vi.fn(),
+    where: vi.fn().mockResolvedValue([]),
+  }
+  updateBuilder.set.mockReturnValue(updateBuilder)
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const deleteBuilder: any = {
+    where: vi.fn().mockResolvedValue([]),
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const mock: any = {
+    _whereResult: [],
+    _limitResult: [],
+    select: vi.fn().mockReturnThis(),
+    from: vi.fn().mockReturnValue(queryBuilder),
+    insert: vi.fn().mockReturnThis(),
+    values: vi.fn().mockResolvedValue([]),
+    update: vi.fn().mockReturnValue(updateBuilder),
+    delete: vi.fn().mockReturnValue(deleteBuilder),
+    _queryBuilder: queryBuilder,
+    _updateBuilder: updateBuilder,
+    _deleteBuilder: deleteBuilder,
+  }
+
+  queryBuilder.then = (resolve: any, reject: any) =>
+    Promise.resolve(mock._whereResult).then(resolve, reject)
+  queryBuilder.catch = (fn: any) =>
+    Promise.resolve(mock._whereResult).catch(fn)
+  queryBuilder.limit.mockImplementation(() => Promise.resolve(mock._limitResult))
+
+  return { mockDb: mock }
+})
 
 vi.mock('@/lib/db', () => ({
-  withTransaction: vi.fn(),
-  readJSON: vi.fn().mockResolvedValue([]),
-  writeJSON: vi.fn().mockResolvedValue(true),
-  DB_FILES: {
-    STAFF: 'staff.json',
-    STAFF_REQUIREMENTS: 'reqs.json'
-  }
+  db: mockDb,
+  staff: {
+    id: 'id',
+    positionId: 'positionId',
+    positionIndex: 'positionIndex',
+    isActive: 'isActive',
+    deletedAt: 'deletedAt',
+  },
+  staffRequirements: {
+    id: 'id',
+    branchId: 'branchId',
+    departmentId: 'departmentId',
+    roleId: 'roleId',
+    specialtyId: 'specialtyId',
+    requiredCount: 'requiredCount',
+    defaultSalary: 'defaultSalary',
+    startTime: 'startTime',
+    endTime: 'endTime',
+    responsibility: 'responsibility',
+    schedules: 'schedules',
+    isActive: 'isActive',
+  },
 }))
+
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('@/app/actions/auth', () => ({
   getSession: vi.fn(() => ({ role: 'admin', isGlobalAdmin: true, isGlobalOwner: true, branchId: 'b1' })),
-  requireBranchAccess: vi.fn(async (b) => b || 'b1')
+  requireBranchAccess: vi.fn(async (b) => b || 'b1'),
 }))
 
 describe('Staff Requirements Actions', () => {
-  beforeEach(() => { vi.clearAllMocks() })
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockDb._whereResult = []
+    mockDb._limitResult = []
+    mockDb.select.mockReturnThis()
+    mockDb.from.mockReturnValue(mockDb._queryBuilder)
+    mockDb._queryBuilder.where.mockReturnValue(mockDb._queryBuilder)
+    mockDb._queryBuilder.limit.mockImplementation(() => Promise.resolve(mockDb._limitResult))
+    mockDb.insert.mockReturnThis()
+    mockDb.values.mockResolvedValue([])
+    mockDb.update.mockReturnValue(mockDb._updateBuilder)
+    mockDb._updateBuilder.set.mockReturnValue(mockDb._updateBuilder)
+    mockDb._updateBuilder.where.mockResolvedValue([])
+    mockDb.delete.mockReturnValue(mockDb._deleteBuilder)
+    mockDb._deleteBuilder.where.mockResolvedValue([])
+  })
 
   it('saveRequirement creates new requirement', async () => {
-    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => { await cb([]); return true })
+    mockDb._limitResult = [] // no duplicate
     const res = await saveRequirement(null, 'b1', 'd1', 'r1', 3)
     expect(res).toEqual({ success: true })
+    expect(mockDb.insert).toHaveBeenCalled()
   })
 
   it('saveRequirement updates existing by id', async () => {
-    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
-      await cb([{ id: 'req1', branchId: 'b1', departmentId: 'd1', roleId: 'r1', requiredCount: 2 }])
-      return true
-    })
+    mockDb._limitResult = []
+    mockDb._queryBuilder.limit
+      .mockResolvedValueOnce([{ id: 'req1', roleId: 'r1', departmentId: 'd1' }]) // existingReq
+      .mockResolvedValueOnce([]) // no duplicate
     const res = await saveRequirement('req1', 'b1', 'd1', 'r1', 5)
     expect(res).toEqual({ success: true })
+    expect(mockDb.update).toHaveBeenCalled()
   })
 
   it('saveRequirement blocks role/department changes when staff assigned', async () => {
-    vi.mocked(db.readJSON).mockImplementation(async (file) => {
-      if (file === db.DB_FILES.STAFF_REQUIREMENTS) {
-        return [{ id: 'req1', roleId: 'oldRole', departmentId: 'oldDept' }]
-      }
-      if (file === db.DB_FILES.STAFF) {
-        return [{ positionId: 'req1', isActive: true }]
-      }
-      return []
-    })
+    mockDb._queryBuilder.limit.mockResolvedValueOnce([{ id: 'req1', roleId: 'oldRole', departmentId: 'oldDept' }])
+    mockDb._whereResult = [{ id: 's1' }] // linked active staff
     const res = await saveRequirement('req1', 'b1', 'newDept', 'newRole', 5)
     expect(res.error).toMatch(/Cannot change role\/department/)
   })
 
   it('saveRequirement warns when requiredCount is reduced below filled count', async () => {
-    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
-      await cb([{ id: 'req1', branchId: 'b1', departmentId: 'd1', roleId: 'r1', requiredCount: 5 }])
-      return true
-    })
-    vi.mocked(db.readJSON).mockImplementation(async (file) => {
-      if (file === db.DB_FILES.STAFF_REQUIREMENTS) return [{ id: 'req1', roleId: 'r1', departmentId: 'd1' }]
-      if (file === db.DB_FILES.STAFF) {
-        return [
-          { positionId: 'req1', isActive: true },
-          { positionId: 'req1', isActive: true }
-        ] // 2 filled
-      }
-      return []
-    })
-    const res = await saveRequirement('req1', 'b1', 'd1', 'r1', 1) // Set to 1, but 2 are filled
+    mockDb._queryBuilder.limit
+      .mockResolvedValueOnce([{ id: 'req1', roleId: 'r1', departmentId: 'd1' }]) // existingReq
+      .mockResolvedValueOnce([]) // no duplicate
+    mockDb._whereResult = [{ id: 's1' }, { id: 's2' }] // 2 linked staff
+    const res = await saveRequirement('req1', 'b1', 'd1', 'r1', 1) // 1 required < 2 filled
     expect(res).toEqual({ success: true, warning: '1 staff member(s) exceed the new headcount. Please reassign them.' })
   })
 
   it('saveRequirement rejects duplicate by match (no id)', async () => {
-    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
-      await cb([{ id: 'req1', branchId: 'b1', departmentId: 'd1', roleId: 'r1', requiredCount: 2, specialtyId: undefined }])
-      return true
-    })
+    mockDb._limitResult = [{ id: 'req1' }] // duplicate exists
     const res = await saveRequirement(null, 'b1', 'd1', 'r1', 5, undefined)
     expect(res).toEqual({ error: 'A position with this Role, Department, and Branch already exists.' })
   })
 
-  it('saveRequirement handles transaction failure', async () => {
-    vi.mocked(db.withTransaction).mockResolvedValue(false)
+  it('saveRequirement handles db failure', async () => {
+    mockDb._limitResult = []
+    mockDb.values.mockRejectedValueOnce(new Error('db down'))
     const res = await saveRequirement(null, 'b1', 'd1', 'r1', 3)
     expect(res).toEqual({ error: 'Failed to save requirement' })
   })
 
-  it('deleteRequirement succeeds and keeps other requirements', async () => {
-    vi.mocked(db.withTransaction).mockImplementation(async (file, cb: any) => {
-      if (file === db.DB_FILES.STAFF) {
-        const staff = (await cb([{ positionId: 'req1' }])) as any[]
-        expect(staff[0].positionId).toBeUndefined()
-        return true
-      }
-      if (file === db.DB_FILES.STAFF_REQUIREMENTS) {
-        const reqs = (await cb([{ id: 'req1' }, { id: 'other' }])) as any[]
-        expect(reqs).toHaveLength(1)
-        expect(reqs[0].id).toBe('other')
-        return true
-      }
-      return true
-    })
+  it('deleteRequirement succeeds and cascades to staff', async () => {
     const res = await deleteRequirement('req1')
     expect(res).toEqual({ success: true })
+    expect(mockDb.update).toHaveBeenCalled()
+    expect(mockDb.delete).toHaveBeenCalled()
   })
 
-  it('deleteRequirement handles transaction failure', async () => {
-    vi.mocked(db.withTransaction).mockResolvedValue(false)
+  it('deleteRequirement handles db failure', async () => {
+    mockDb._deleteBuilder.where.mockRejectedValueOnce(new Error('db down'))
     const res = await deleteRequirement('req1')
     expect(res).toEqual({ error: 'Failed to delete requirement' })
   })
 
   // ─── Shift Scheduling Validations ──────────────────────────────────────────
   it('Position schedule with exactly 10 total hours — saves successfully', async () => {
-    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
-      await cb([{ id: 'req1' }])
-      return true
-    })
     const schedules = [{
       positionIndex: 0,
       shifts: [
@@ -123,13 +164,10 @@ describe('Staff Requirements Actions', () => {
     }]
     const res = await updateRequirementSchedules('req1', schedules)
     expect(res).toEqual({ success: true })
+    expect(mockDb.update).toHaveBeenCalled()
   })
 
-  it('Position schedule with total hours ≠ 10 — returns validation error', async () => {
-    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
-      await cb([{ id: 'req1' }])
-      return true
-    })
+  it('Position schedule with total hours > 10 — returns validation error', async () => {
     const schedules = [{
       positionIndex: 0,
       shifts: [
@@ -142,10 +180,6 @@ describe('Staff Requirements Actions', () => {
   })
 
   it('More than 3 segments — returns validation error', async () => {
-    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
-      await cb([{ id: 'req1' }])
-      return true
-    })
     const schedules = [{
       positionIndex: 0,
       shifts: [
@@ -160,10 +194,6 @@ describe('Staff Requirements Actions', () => {
   })
 
   it('Break gap less than 1 hour — returns validation error', async () => {
-    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
-      await cb([{ id: 'req1' }])
-      return true
-    })
     const schedules = [{
       positionIndex: 0,
       shifts: [
@@ -176,10 +206,6 @@ describe('Staff Requirements Actions', () => {
   })
 
   it('Segment starting before 5am — returns validation error', async () => {
-    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
-      await cb([{ id: 'req1' }])
-      return true
-    })
     const schedules = [{
       positionIndex: 0,
       shifts: [{ id: '1', start: '04:00', end: '14:00' }]
@@ -189,10 +215,6 @@ describe('Staff Requirements Actions', () => {
   })
 
   it('Segment ending after 11pm — returns validation error', async () => {
-    vi.mocked(db.withTransaction).mockImplementation(async (_f, cb) => {
-      await cb([{ id: 'req1' }])
-      return true
-    })
     const schedules = [{
       positionIndex: 0,
       shifts: [{ id: '1', start: '13:00', end: '23:30' }]
@@ -201,8 +223,8 @@ describe('Staff Requirements Actions', () => {
     expect(res.error).toMatch(/cannot end after 23:00/)
   })
 
-  it('updateRequirementSchedules handles transaction failure', async () => {
-    vi.mocked(db.withTransaction).mockResolvedValue(false)
+  it('updateRequirementSchedules handles db failure', async () => {
+    mockDb._updateBuilder.where.mockRejectedValueOnce(new Error('db down'))
     const schedules = [{
       positionIndex: 0,
       shifts: [{ id: '1', start: '10:00', end: '15:00' }]

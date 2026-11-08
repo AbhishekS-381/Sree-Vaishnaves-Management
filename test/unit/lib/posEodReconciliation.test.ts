@@ -62,7 +62,7 @@ export function validatePosEodReadiness(
 }
 
 describe('POS End-of-Day (EOD) Register Reconciliation - posEodReconciliation.test.ts', () => {
-  const samplePaidOrders: PosOrder[] = [
+  const samplePaidOrders = [
     // Dine-In cash
     {
       id: 'ord-d1',
@@ -160,7 +160,7 @@ describe('POS End-of-Day (EOD) Register Reconciliation - posEodReconciliation.te
   // =========================================================================
   describe('computePosEodData', () => {
     it('accurately computes dine-in cash and dine-in UPI', () => {
-      const eod = computePosEodData(samplePaidOrders)
+      const eod = computePosEodData(samplePaidOrders as unknown as PosOrder[])
       // Dine-in cash = ord-d1 (399) + ord-split (300) = 699
       expect(eod.dineInCash).toBe(699)
       // Dine-in UPI = ord-d2 (262.5) + ord-split (330) = 592.5
@@ -168,7 +168,7 @@ describe('POS End-of-Day (EOD) Register Reconciliation - posEodReconciliation.te
     })
 
     it('accurately computes takeaway cash and takeaway UPI', () => {
-      const eod = computePosEodData(samplePaidOrders)
+      const eod = computePosEodData(samplePaidOrders as unknown as PosOrder[])
       // Takeaway cash = ord-t1 (157.5)
       expect(eod.takeawayCash).toBe(157.5)
       // Takeaway UPI = ord-t2 (199.5)
@@ -176,7 +176,7 @@ describe('POS End-of-Day (EOD) Register Reconciliation - posEodReconciliation.te
     })
 
     it('sums total bill amount across all paid orders only', () => {
-      const eod = computePosEodData(samplePaidOrders)
+      const eod = computePosEodData(samplePaidOrders as unknown as PosOrder[])
       // Total = 399 + 262.5 + 157.5 + 199.5 + 630 = 1648.5
       expect(eod.totalBillAmount).toBe(1648.5)
       // Open and voided orders do not count towards billCount
@@ -184,7 +184,7 @@ describe('POS End-of-Day (EOD) Register Reconciliation - posEodReconciliation.te
     })
 
     it('sums cashCollectedAsBilled and upiCollectedAsBilled across all paid orders', () => {
-      const eod = computePosEodData(samplePaidOrders)
+      const eod = computePosEodData(samplePaidOrders as unknown as PosOrder[])
       // Cash collected = 399 + 157.5 + 300 = 856.5
       expect(eod.cashCollectedAsBilled).toBe(856.5)
       // UPI collected = 262.5 + 199.5 + 330 = 792
@@ -194,12 +194,12 @@ describe('POS End-of-Day (EOD) Register Reconciliation - posEodReconciliation.te
     })
 
     it('counts only voided orders towards voids metric', () => {
-      const eod = computePosEodData(samplePaidOrders)
+      const eod = computePosEodData(samplePaidOrders as unknown as PosOrder[])
       expect(eod.voids).toBe(1)
     })
 
     it('sums discounts and GST across paid orders', () => {
-      const eod = computePosEodData(samplePaidOrders)
+      const eod = computePosEodData(samplePaidOrders as unknown as PosOrder[])
       // Discounts = 20 (ord-d1) + 10 (ord-t2) = 30
       expect(eod.discounts).toBe(30)
       // GST = 19 + 12.5 + 7.5 + 9.5 + 30 = 78.5
@@ -220,7 +220,7 @@ describe('POS End-of-Day (EOD) Register Reconciliation - posEodReconciliation.te
     })
 
     it('includes complimentary ₹0 bills in billCount without affecting revenue', () => {
-      const complimentaryOrder: PosOrder = {
+      const complimentaryOrder = {
         id: 'ord-free',
         branchId: 'br-1',
         orderType: 'takeaway',
@@ -232,7 +232,7 @@ describe('POS End-of-Day (EOD) Register Reconciliation - posEodReconciliation.te
         payment: { method: 'cash', cashAmount: 0, upiAmount: 0, paidAt: '2026-10-19T14:00:00Z' },
       }
 
-      const eod = computePosEodData([complimentaryOrder])
+      const eod = computePosEodData([complimentaryOrder as unknown as PosOrder])
       expect(eod.billCount).toBe(1)
       expect(eod.totalBillAmount).toBe(0)
       expect(eod.discounts).toBe(100)
@@ -280,10 +280,10 @@ describe('POS End-of-Day (EOD) Register Reconciliation - posEodReconciliation.te
   // =========================================================================
   describe('validatePosEodReadiness', () => {
     it('approves closeout when all orders are paid/voided and all KOTs served', () => {
-      const closedOrders: PosOrder[] = [
+      const closedOrders = [
         { ...samplePaidOrders[0], status: 'paid' },
         { ...samplePaidOrders[1], status: 'voided' },
-      ]
+      ] as unknown as PosOrder[]
       const closedKots = [{ id: 'k1', status: 'served' }]
 
       const res = validatePosEodReadiness(closedOrders, closedKots)
@@ -294,7 +294,7 @@ describe('POS End-of-Day (EOD) Register Reconciliation - posEodReconciliation.te
     })
 
     it('blocks closeout when open orders remain', () => {
-      const openOrder: PosOrder = { ...samplePaidOrders[0], status: 'open' }
+      const openOrder = { ...samplePaidOrders[0], status: 'open' } as unknown as PosOrder
       const res = validatePosEodReadiness([openOrder], [])
 
       expect(res.isReadyForCloseout).toBe(false)
@@ -303,7 +303,7 @@ describe('POS End-of-Day (EOD) Register Reconciliation - posEodReconciliation.te
     })
 
     it('blocks closeout when billed orders remain unsettled', () => {
-      const billedOrder: PosOrder = { ...samplePaidOrders[0], status: 'billed' }
+      const billedOrder = { ...samplePaidOrders[0], status: 'billed' } as unknown as PosOrder
       const res = validatePosEodReadiness([billedOrder], [])
 
       expect(res.isReadyForCloseout).toBe(false)
@@ -324,7 +324,7 @@ describe('POS End-of-Day (EOD) Register Reconciliation - posEodReconciliation.te
     })
 
     it('blocks closeout with multiple reasons when both unsettled orders and active KOTs exist', () => {
-      const openOrder: PosOrder = { ...samplePaidOrders[0], status: 'open' }
+      const openOrder = { ...samplePaidOrders[0], status: 'open' } as unknown as PosOrder
       const activeKot = { id: 'k1', status: 'ready' }
 
       const res = validatePosEodReadiness([openOrder], [activeKot])

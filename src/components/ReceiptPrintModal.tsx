@@ -10,7 +10,7 @@ export interface ReceiptPrintModalProps {
   isOpen: boolean
   onClose: () => void
   order: PosOrder | null
-  branch?: { id?: string; name?: string; address?: string; phone?: string } | null
+  branch?: { id?: string; name?: string; address?: string; phone?: string; gstin?: string } | null
   tableName?: string
   cashierName?: string
   waiterName?: string
@@ -73,6 +73,7 @@ export function ReceiptPrintModal({
       restaurantName: 'SREE VAISHNAVES',
       branchName: branch?.name,
       branchAddress: branch?.address,
+      gstin: branch?.gstin,
       tableName: tableName || (order.tableId ? `Table ${order.tableId}` : order.takeawayNumber || 'Takeaway'),
       cashierName,
       waiterName,
@@ -97,7 +98,9 @@ export function ReceiptPrintModal({
   const subtotal = order.bill?.subtotal ?? order.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0)
   const discount = order.bill?.discount ?? 0
   const gst = order.bill?.gst ?? 0
-  const totalPayable = order.bill?.totalPayable ?? Math.max(0, subtotal - discount + gst)
+  const parcelCharges = order.bill?.parcelCharges ?? 0
+  const acCharges = order.bill?.acCharges ?? 0
+  const totalPayable = order.bill?.totalPayable ?? Math.max(0, subtotal - discount + parcelCharges + acCharges + gst)
   const isPaid = order.status === 'paid'
 
   return (
@@ -183,6 +186,9 @@ export function ReceiptPrintModal({
                 {branch?.phone && (
                   <p className="text-[10px] text-slate-500">Ph: {branch.phone}</p>
                 )}
+                {branch?.gstin && (
+                  <p className="text-[10px] text-slate-600 font-semibold mt-0.5">GSTIN: {branch.gstin}</p>
+                )}
 
                 {isReprint && (
                   <div className="mt-2 py-0.5 bg-amber-100 border border-amber-300 text-amber-900 font-bold text-[10px] uppercase tracking-wider rounded">
@@ -224,6 +230,9 @@ export function ReceiptPrintModal({
                       <div className="flex justify-between text-[11px] leading-tight">
                         <span className="w-1/2 font-semibold text-slate-900 truncate pr-1">
                           {item.nameSnapshot}
+                          {order.orderType === 'dine-in' && item.isParcel && !item.nameSnapshot.toLowerCase().includes('parcel') && (
+                            <span className="ml-1 text-[9px] font-bold text-amber-700 bg-amber-100 px-1 py-0.5 rounded">Parcel</span>
+                          )}
                         </span>
                         <span className="w-1/6 text-center text-slate-700">
                           {item.quantity}
@@ -250,6 +259,18 @@ export function ReceiptPrintModal({
                   <div className="flex justify-between text-emerald-700 font-semibold">
                     <span>Discount:</span>
                     <span>-₹{discount}</span>
+                  </div>
+                )}
+                {parcelCharges > 0 && (
+                  <div className="flex justify-between text-slate-600">
+                    <span>Parcel Charges:</span>
+                    <span>+₹{parcelCharges}</span>
+                  </div>
+                )}
+                {acCharges > 0 && (
+                  <div className="flex justify-between text-slate-600">
+                    <span>AC Charges:</span>
+                    <span>+₹{acCharges}</span>
                   </div>
                 )}
                 {gst > 0 && (
@@ -354,6 +375,7 @@ export function ReceiptPrintModal({
               {branch?.name && <p className="text-[11px] font-semibold">{branch.name}</p>}
               {branch?.address && <p className="text-[9px]">{branch.address}</p>}
               {branch?.phone && <p className="text-[9px]">Ph: {branch.phone}</p>}
+              {branch?.gstin && <p className="text-[9px] font-semibold">GSTIN: {branch.gstin}</p>}
               {isReprint && (
                 <p className="font-bold text-[10px] mt-1 border-t border-b border-black py-0.5 uppercase">
                   *** DUPLICATE / REPRINT ***
@@ -387,7 +409,10 @@ export function ReceiptPrintModal({
               {order.items.map((item, idx) => (
                 <div key={item.id || idx} className="py-0.5">
                   <div className="flex justify-between text-[10px]">
-                    <span className="w-1/2 font-semibold truncate pr-1">{item.nameSnapshot}</span>
+                    <span className="w-1/2 font-semibold truncate pr-1">
+                      {item.nameSnapshot}
+                      {order.orderType === 'dine-in' && item.isParcel && !item.nameSnapshot.toLowerCase().includes('parcel') ? ' [Parcel]' : ''}
+                    </span>
                     <span className="w-1/6 text-center">{item.quantity}</span>
                     <span className="w-1/3 text-right font-bold">₹{item.quantity * item.unitPrice}</span>
                   </div>
@@ -405,6 +430,18 @@ export function ReceiptPrintModal({
                 <div className="flex justify-between font-semibold">
                   <span>Discount:</span>
                   <span>-₹{discount}</span>
+                </div>
+              )}
+              {parcelCharges > 0 && (
+                <div className="flex justify-between">
+                  <span>Parcel Charges:</span>
+                  <span>+₹{parcelCharges}</span>
+                </div>
+              )}
+              {acCharges > 0 && (
+                <div className="flex justify-between">
+                  <span>AC Charges:</span>
+                  <span>+₹{acCharges}</span>
                 </div>
               )}
               {gst > 0 && (

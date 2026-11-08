@@ -11,9 +11,10 @@ export type KotStatus   = 'pending' | 'preparing' | 'ready' | 'served'
 // ─── pos_tables.json ──────────────────────────────────────────────
 
 export type PosTable = {
-  id: string          // 'ptbl_' + randomUUID()
+  id: string          // UUID
   branchId: string
   name: string        // 1–50 chars, unique per branch among isActive=true rows
+  isAc?: boolean      // true if AC table
   isActive: boolean   // soft delete
   createdAt: string   // ISO timestamp
   updatedAt: string
@@ -23,20 +24,23 @@ export type PosTable = {
 // ─── pos_orders.json ──────────────────────────────────────────────
 
 export type OrderItem = {
-  id: string            // 'oi_' + randomUUID()
+  id: string            // UUID
   menuItemId: string
   variantId?: string
   nameSnapshot: string  // captured at time of ordering — never updated post-creation
   unitPrice: number     // integer rupees, Effective_Price at time of ordering — immutable
   quantity: number      // 1–99 inclusive
   note?: string         // max 80 chars
+  isParcel?: boolean    // true if ordered as takeaway/parcel on a dine-in table or order
 }
 
 export type BillSnapshot = {
   subtotal: number      // Σ (item.quantity × item.unitPrice) — integer rupees
   discount: number      // integer rupees, 0 ≤ discount ≤ subtotal
   gst: number           // integer rupees, ≥ 0, user-confirmed value
-  totalPayable: number  // subtotal - discount + gst
+  parcelCharges?: number // integer rupees, ≥ 0
+  acCharges?: number     // integer rupees, ≥ 0
+  totalPayable: number  // subtotal - discount + gst + parcelCharges + acCharges
   generatedAt: string   // ISO timestamp
 }
 
@@ -54,7 +58,7 @@ export type VoidInfo = {
 }
 
 export type PosOrder = {
-  id: string                  // 'pord_' + randomUUID()
+  id: string                  // UUID
   branchId: string
   tableId?: string            // present for dine-in; undefined for takeaway
   takeawayNumber?: string     // 'T-N' sequential per branch+date, present for takeaway
@@ -81,10 +85,11 @@ export type KotItem = {
   nameSnapshot: string
   quantity: number    // delta quantity (items added/increased since last KOT fire)
   note?: string
+  isParcel?: boolean  // true if item is packed for takeaway/parcel
 }
 
 export type PosKot = {
-  id: string          // 'pkot_' + randomUUID()
+  id: string          // UUID
   orderId: string
   branchId: string
   kotNumber: number   // sequential within order: 1, 2, 3, …
@@ -104,6 +109,8 @@ export type CatalogItem = {
   categoryId: string
   categoryName?: string
   effectivePrice: number  // integer rupees — branch override or basePrice
+  acPrice?: number        // integer rupees — AC dine-in price
+  parcelPrice?: number    // integer rupees — takeaway / parcel price
   dietary?: string
   prepTimeMins?: number
 }

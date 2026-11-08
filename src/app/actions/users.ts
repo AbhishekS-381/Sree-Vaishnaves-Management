@@ -1,6 +1,7 @@
 'use server'
 
-import { withTransaction, DB_FILES } from '@/lib/db'
+import { db, users } from '@/lib/db'
+import { eq, and, ilike, ne } from 'drizzle-orm'
 import { randomUUID } from 'crypto'
 import { revalidatePath } from 'next/cache'
 import { getSession } from './auth'
@@ -17,6 +18,7 @@ export type User = {
   deletedAt?: string
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function addUser(prevState: any, formData: FormData) {
   const session = await getSession()
   if (!session?.isGlobalAdmin) return { error: 'Forbidden' }
@@ -32,31 +34,37 @@ export async function addUser(prevState: any, formData: FormData) {
   const isBranchScoped = (BRANCH_SCOPED_ROLES as readonly string[]).includes(role)
   if (isBranchScoped && !branchId) return { error: 'Branch is required for this role' }
 
-  const hashedPassword = await bcrypt.hash(password, 10)
+  try {
+    const existing = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(and(ilike(users.name, name), eq(users.isActive, true)))
+      .limit(1)
 
-  let alreadyExists = false
-  const success = await withTransaction<User>(DB_FILES.USERS, (list) => {
-    if (list.find(u => u.name.toLowerCase() === name.toLowerCase() && u.isActive !== false)) {
-      alreadyExists = true
-      return list
+    if (existing.length > 0) {
+      return { error: 'Username already exists' }
     }
-    list.push({
-      id: `u_${randomUUID()}`,
+
+    const hashedPassword = await bcrypt.hash(password, 10)
+
+    await db.insert(users).values({
+      id: randomUUID(),
       name,
       password: hashedPassword,
       role,
       branchId: isBranchScoped && branchId ? branchId : undefined,
-      isActive: true
+      isActive: true,
     })
-    return list
-  })
 
-  if (alreadyExists) return { error: 'Username already exists' }
-  if (!success) return { error: 'Transaction failed' }
-  revalidatePath('/management/settings')
-  return { success: true }
+    revalidatePath('/management/settings')
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to add user:', error)
+    return { error: 'Transaction failed' }
+  }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function updateUser(prevState: any, formData: FormData) {
   const session = await getSession()
   if (!session?.isGlobalAdmin) return { error: 'Forbidden' }
@@ -73,60 +81,79 @@ export async function updateUser(prevState: any, formData: FormData) {
   const isBranchScoped = (BRANCH_SCOPED_ROLES as readonly string[]).includes(role)
   if (isBranchScoped && !branchId) return { error: 'Branch is required for this role' }
 
-  const hashedPassword = password ? await bcrypt.hash(password, 10) : undefined
+  try {
+    const target = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1)
 
-  let notFound = false
-  let alreadyExists = false
-  let isRootError = false
-  const success = await withTransaction<User>(DB_FILES.USERS, (list) => {
-    const index = list.findIndex(u => u.id === id)
-    if (index === -1) { notFound = true; return list; }
-
-    if (list.find(u => u.name.toLowerCase() === name.toLowerCase() && u.id !== id && u.isActive !== false)) {
-      alreadyExists = true; return list;
+    if (target.length === 0) {
+      return { error: 'Not found' }
     }
 
-    if (list[index].role === 'admin' && role !== 'admin') {
-      isRootError = true; return list;
+    const user = target[0]
+
+    const duplicate = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(and(ilike(users.name, name), eq(users.isActive, true), ne(users.id, id)))
+      .limit(1)
+
+    if (duplicate.length > 0) {
+      return { error: 'Username taken by another user' }
     }
 
-    const existingPassword = list[index].password
-    list[index] = { 
-       ...list[index],
-       name, 
-       role, 
-       branchId: isBranchScoped && branchId ? branchId : undefined,
-       password: hashedPassword || existingPassword 
+    if (user.role === 'admin' && role !== 'admin') {
+      return { error: 'Cannot demote the admin account' }
     }
-    return list
-  })
 
-  if (notFound) return { error: 'Not found' }
-  if (alreadyExists) return { error: 'Username taken by another user' }
-  if (isRootError) return { error: 'Cannot demote the admin account' }
-  if (!success) return { error: 'Transaction failed' }
-  revalidatePath('/management/settings')
-  return { success: true }
+    const hashedPassword = password ? await bcrypt.hash(password, 10) : undefined
+
+    await db
+      .update(users)
+      .set({
+        name,
+        role,
+        branchId: isBranchScoped && branchId ? branchId : undefined,
+        ...(hashedPassword ? { password: hashedPassword } : {}),
+      })
+      .where(eq(users.id, id))
+
+    revalidatePath('/management/settings')
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to update user:', error)
+    return { error: 'Transaction failed' }
+  }
 }
 
 export async function deleteUser(id: string) {
   const session = await getSession()
   if (!session?.isGlobalAdmin) return { error: 'Forbidden' }
 
-  let isRootError = false
-  await withTransaction<User>(DB_FILES.USERS, (list) => {
-    const index = list.findIndex(u => u.id === id)
-    if (index !== -1) {
-      if (list[index].role === 'admin') {
-        isRootError = true
-      } else {
-        list[index].isActive = false
-        list[index].deletedAt = new Date().toISOString()
+  try {
+    const target = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1)
+
+    if (target.length > 0) {
+      if (target[0].role === 'admin') {
+        return { error: 'Cannot delete the admin account' }
       }
+
+      await db
+        .update(users)
+        .set({ isActive: false, deletedAt: new Date() })
+        .where(eq(users.id, id))
     }
-    return list
-  })
-  if (isRootError) return { error: 'Cannot delete the admin account' }
-  revalidatePath('/management/settings')
-  return { success: true }
+
+    revalidatePath('/management/settings')
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to delete user:', error)
+    return { error: 'Transaction failed' }
+  }
 }

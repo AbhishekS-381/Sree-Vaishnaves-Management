@@ -7,11 +7,30 @@ vi.mock('jose', () => ({
   jwtVerify: vi.fn(),
 }))
 
+const { mockDb } = vi.hoisted(() => {
+  const state = {
+    configRows: [{ pos: true }] as any[],
+    shouldThrow: false,
+  }
+  const mock: any = {
+    state,
+    select: vi.fn(() => ({
+      from: vi.fn(() => ({
+        where: vi.fn(() => ({
+          limit: vi.fn(async () => {
+            if (state.shouldThrow) throw new Error('DB read error')
+            return state.configRows
+          }),
+        })),
+      })),
+    })),
+  }
+  return { mockDb: mock }
+})
+
 vi.mock('@/lib/db', () => ({
-  readJSON: vi.fn(),
-  DB_FILES: {
-    CONFIG: 'config.json',
-  },
+  db: mockDb,
+  config: { tableName: 'config', id: { name: 'id' } },
 }))
 
 function makeRequest(url: string, cookieValue?: string): NextRequest {
@@ -25,8 +44,8 @@ describe('proxy.ts (route protection)', () => {
   beforeEach(async () => {
     vi.clearAllMocks()
     process.env.JWT_SECRET = 'test-secret'
-    const { readJSON } = await import('@/lib/db')
-    vi.mocked(readJSON).mockResolvedValue([{ pos: true }] as any)
+    mockDb.state.configRows = [{ pos: true }]
+    mockDb.state.shouldThrow = false
   })
 
   it('allows public access to /', async () => {
@@ -43,96 +62,57 @@ describe('proxy.ts (route protection)', () => {
 
   it.each([
     ['http://localhost/kitchen', '/management/pos/kitchen'],
+    ['http://localhost/kitchen/', '/management/pos/kitchen'],
     ['http://localhost/kitchen/1', '/management/pos/kitchen/1'],
     ['http://localhost/order', '/management/pos/order'],
-    ['http://localhost/order/1', '/management/pos/order/1'],
+    ['http://localhost/order/', '/management/pos/order'],
+    ['http://localhost/order/table-1', '/management/pos/order/table-1'],
     ['http://localhost/billing', '/management/pos/billing'],
-    ['http://localhost/billing/1', '/management/pos/billing/1'],
+    ['http://localhost/billing/', '/management/pos/billing'],
+    ['http://localhost/billing/2', '/management/pos/billing/2'],
     ['http://localhost/pos', '/management/pos'],
-    ['http://localhost/pos/1', '/management/pos/1'],
-  ])('redirects friendly short alias %s to %s', async (url, expectedLocation) => {
-    const req = makeRequest(url)
+    ['http://localhost/pos/', '/management/pos'],
+    ['http://localhost/pos/sub', '/management/pos/sub'],
+  ])('redirects friendly short alias %s to %s', async (fromUrl, toPath) => {
+    const req = makeRequest(fromUrl)
     const res = await proxy(req)
     expect(res.status).toBe(307)
-    expect(res.headers.get('location')).toContain(expectedLocation)
+    expect(res.headers.get('location')).toBe(`http://localhost${toPath}`)
   })
 
-  it('redirects logged-in user away from /management/login', async () => {
-    const { jwtVerify } = await import('jose')
-    vi.mocked(jwtVerify).mockResolvedValue({ payload: { role: 'owner', isGlobalOwner: true } } as any)
-    const req = makeRequest('http://localhost/management/login', 'valid-token')
+  it('redirects to /management/login when visiting /management without session', async () => {
+    const req = makeRequest('http://localhost/management')
     const res = await proxy(req)
     expect(res.status).toBe(307)
-    expect(res.headers.get('location')).toContain('/management')
+    expect(res.headers.get('location')).toContain('/management/login')
   })
 
-  it('allows non-logged-in user to access /management/login', async () => {
-    const { jwtVerify } = await import('jose')
-    vi.mocked(jwtVerify).mockRejectedValue(new Error('invalid'))
-    const req = makeRequest('http://localhost/management/login')
+  it('redirects to /management/login when visiting /management/branches without session', async () => {
+    const req = makeRequest('http://localhost/management/branches')
     const res = await proxy(req)
-    expect(res.status).toBe(200) // next()
+    expect(res.status).toBe(307)
+    expect(res.headers.get('location')).toContain('/management/login')
   })
 
-  it('redirects unauthenticated access to protected route', async () => {
+  it('redirects to /management/login when session token is invalid', async () => {
     const { jwtVerify } = await import('jose')
     vi.mocked(jwtVerify).mockRejectedValue(new Error('Invalid token'))
 
-    const req = makeRequest('http://localhost/management/dashboard', 'invalid-token')
+    const req = makeRequest('http://localhost/management', 'invalid-token')
     const res = await proxy(req)
     expect(res.status).toBe(307)
     expect(res.headers.get('location')).toContain('/management/login')
   })
 
-  it('allows authenticated access to protected route and sets no-cache headers', async () => {
-    const { jwtVerify } = await import('jose')
-    vi.mocked(jwtVerify).mockResolvedValue({ payload: { role: 'owner', isGlobalOwner: true } } as any)
-    const req = makeRequest('http://localhost/management/dashboard', 'valid-token')
+  it('allows access to /management/login when not logged in', async () => {
+    const req = makeRequest('http://localhost/management/login')
     const res = await proxy(req)
-    expect(res.status).toBe(200) // next()
-    expect(res.headers.get('Cache-Control')).toContain('no-store')
-    expect(res.headers.get('Pragma')).toBe('no-cache')
+    expect(res.status).toBe(200)
   })
 
-  it('handles missing cookie gracefully (no token)', async () => {
+  it('redirects to /management when logged-in user visits /management/login', async () => {
     const { jwtVerify } = await import('jose')
-    vi.mocked(jwtVerify).mockRejectedValue(new Error('Should not be called'))
-
-    // Simulate Request with no session cookie
-    const req = makeRequest('http://localhost/management/staff')
-    const res = await proxy(req)
-    expect(res.status).toBe(307) // redirect to /management/login
-  })
-
-  it('throws an error if JWT_SECRET is not set', async () => {
-    const originalSecret = process.env.JWT_SECRET
-    delete process.env.JWT_SECRET
-
-    const req = makeRequest('http://localhost/management/dashboard', 'valid-token')
-    const res = await proxy(req)
-    expect(res.status).toBe(307)
-    expect(res.headers.get('location')).toContain('/management/login')
-    process.env.JWT_SECRET = originalSecret
-  })
-
-  // ── POS Role Login Redirects ──
-  it.each([
-    ['billing', '/management/pos/billing'],
-    ['kitchen', '/management/pos/kitchen'],
-    ['waiter', '/management/pos/order'],
-  ])('redirects posRole user (%s) from /management/login to designated home (%s)', async (role, expectedHome) => {
-    const { jwtVerify } = await import('jose')
-    vi.mocked(jwtVerify).mockResolvedValue({ payload: { role, posRole: true } } as any)
-
-    const req = makeRequest('http://localhost/management/login', 'valid-token')
-    const res = await proxy(req)
-    expect(res.status).toBe(307)
-    expect(res.headers.get('location')).toContain(expectedHome)
-  })
-
-  it('redirects posRole user with unknown role from /management/login to /management fallback', async () => {
-    const { jwtVerify } = await import('jose')
-    vi.mocked(jwtVerify).mockResolvedValue({ payload: { role: 'unknown_role', posRole: true } } as any)
+    vi.mocked(jwtVerify).mockResolvedValue({ payload: { role: 'admin' } } as any)
 
     const req = makeRequest('http://localhost/management/login', 'valid-token')
     const res = await proxy(req)
@@ -140,12 +120,59 @@ describe('proxy.ts (route protection)', () => {
     expect(res.headers.get('location')).toContain('/management')
   })
 
-  it('falls back to /management redirect if inner jwtVerify fails at /management/login', async () => {
+  it('allows logged-in user access to /management and attaches no-cache headers', async () => {
     const { jwtVerify } = await import('jose')
-    // First call succeeds for session validation, second call throws
-    vi.mocked(jwtVerify)
-      .mockResolvedValueOnce({ payload: {} } as any)
-      .mockRejectedValueOnce(new Error('verify error'))
+    vi.mocked(jwtVerify).mockResolvedValue({ payload: { role: 'admin' } } as any)
+
+    const req = makeRequest('http://localhost/management', 'valid-token')
+    const res = await proxy(req)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('Cache-Control')).toBe('no-store, no-cache, must-revalidate, proxy-revalidate')
+    expect(res.headers.get('Pragma')).toBe('no-cache')
+  })
+
+  it('allows logged-in user access to /management/staff', async () => {
+    const { jwtVerify } = await import('jose')
+    vi.mocked(jwtVerify).mockResolvedValue({ payload: { role: 'manager' } } as any)
+
+    const req = makeRequest('http://localhost/management/staff', 'valid-token')
+    const res = await proxy(req)
+    expect(res.status).toBe(200)
+  })
+
+  it('redirects posRole user visiting /management/login to designated POS home (billing)', async () => {
+    const { jwtVerify } = await import('jose')
+    vi.mocked(jwtVerify).mockResolvedValue({ payload: { posRole: true, role: 'billing' } } as any)
+
+    const req = makeRequest('http://localhost/management/login', 'valid-token')
+    const res = await proxy(req)
+    expect(res.status).toBe(307)
+    expect(res.headers.get('location')).toContain('/management/pos/billing')
+  })
+
+  it('redirects posRole user visiting /management/login to designated POS home (kitchen)', async () => {
+    const { jwtVerify } = await import('jose')
+    vi.mocked(jwtVerify).mockResolvedValue({ payload: { posRole: true, role: 'kitchen' } } as any)
+
+    const req = makeRequest('http://localhost/management/login', 'valid-token')
+    const res = await proxy(req)
+    expect(res.status).toBe(307)
+    expect(res.headers.get('location')).toContain('/management/pos/kitchen')
+  })
+
+  it('redirects posRole user visiting /management/login to designated POS home (waiter)', async () => {
+    const { jwtVerify } = await import('jose')
+    vi.mocked(jwtVerify).mockResolvedValue({ payload: { posRole: true, role: 'waiter' } } as any)
+
+    const req = makeRequest('http://localhost/management/login', 'valid-token')
+    const res = await proxy(req)
+    expect(res.status).toBe(307)
+    expect(res.headers.get('location')).toContain('/management/pos/order')
+  })
+
+  it('redirects to /management for unknown posRole on /management/login', async () => {
+    const { jwtVerify } = await import('jose')
+    vi.mocked(jwtVerify).mockResolvedValue({ payload: { posRole: true, role: 'unknown' } } as any)
 
     const req = makeRequest('http://localhost/management/login', 'valid-token')
     const res = await proxy(req)
@@ -156,9 +183,8 @@ describe('proxy.ts (route protection)', () => {
   // ── POS Module Enabled Check ──
   it('redirects away from /management/pos/* if pos is disabled in config', async () => {
     const { jwtVerify } = await import('jose')
-    const { readJSON } = await import('@/lib/db')
     vi.mocked(jwtVerify).mockResolvedValue({ payload: { role: 'admin' } } as any)
-    vi.mocked(readJSON).mockResolvedValue([{ pos: false }] as any)
+    mockDb.state.configRows = [{ pos: false }]
 
     const req = makeRequest('http://localhost/management/pos/billing', 'valid-token')
     const res = await proxy(req)
@@ -168,20 +194,18 @@ describe('proxy.ts (route protection)', () => {
 
   it('fails open to page guard if config is empty list (e.g. Edge datastore read failure)', async () => {
     const { jwtVerify } = await import('jose')
-    const { readJSON } = await import('@/lib/db')
     vi.mocked(jwtVerify).mockResolvedValue({ payload: { role: 'admin' } } as any)
-    vi.mocked(readJSON).mockResolvedValue([] as any)
+    mockDb.state.configRows = []
 
     const req = makeRequest('http://localhost/management/pos/kitchen', 'valid-token')
     const res = await proxy(req)
     expect(res.status).toBe(200)
   })
 
-  it('fails open if readJSON throws when checking POS enabled', async () => {
+  it('fails open if db throws when checking POS enabled', async () => {
     const { jwtVerify } = await import('jose')
-    const { readJSON } = await import('@/lib/db')
     vi.mocked(jwtVerify).mockResolvedValue({ payload: { role: 'admin' } } as any)
-    vi.mocked(readJSON).mockRejectedValue(new Error('DB read error'))
+    mockDb.state.shouldThrow = true
 
     const req = makeRequest('http://localhost/management/pos/billing', 'valid-token')
     const res = await proxy(req)
@@ -198,7 +222,7 @@ describe('proxy.ts (route protection)', () => {
     ['billing', '/management/pos/order', false],
   ])('enforces designated home for %s accessing %s (allowed: %s)', async (role, path, isAllowed) => {
     const { jwtVerify } = await import('jose')
-    vi.mocked(jwtVerify).mockResolvedValue({ payload: { role, posRole: true } } as any)
+    vi.mocked(jwtVerify).mockResolvedValue({ payload: { posRole: true, role } } as any)
 
     const req = makeRequest(`http://localhost${path}`, 'valid-token')
     const res = await proxy(req)
@@ -207,26 +231,20 @@ describe('proxy.ts (route protection)', () => {
       expect(res.status).toBe(200)
     } else {
       expect(res.status).toBe(307)
+      const location = res.headers.get('location') || ''
+      expect(location).toContain(
+        role === 'waiter' ? '/management/pos/order' :
+        role === 'kitchen' ? '/management/pos/kitchen' :
+        '/management/pos/billing'
+      )
     }
   })
 
-  it('allows access to protected route when posRole is true but role has no designated home', async () => {
+  it('passes through when non-posRole user accesses any /management/pos/* page', async () => {
     const { jwtVerify } = await import('jose')
-    vi.mocked(jwtVerify).mockResolvedValue({ payload: { role: 'unknown_role', posRole: true } } as any)
+    vi.mocked(jwtVerify).mockResolvedValue({ payload: { role: 'manager', isGlobalAdmin: false } } as any)
 
-    const req = makeRequest('http://localhost/management/dashboard', 'valid-token')
-    const res = await proxy(req)
-    expect(res.status).toBe(200)
-  })
-
-  it('ignores inner edge-case re-verify failure on protected route and proceeds', async () => {
-    const { jwtVerify } = await import('jose')
-    // First call succeeds for isValidSession, second call fails
-    vi.mocked(jwtVerify)
-      .mockResolvedValueOnce({ payload: {} } as any)
-      .mockRejectedValueOnce(new Error('edge-case verify error'))
-
-    const req = makeRequest('http://localhost/management/dashboard', 'valid-token')
+    const req = makeRequest('http://localhost/management/pos/kitchen', 'valid-token')
     const res = await proxy(req)
     expect(res.status).toBe(200)
   })

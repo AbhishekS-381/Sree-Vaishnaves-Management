@@ -22,7 +22,6 @@ import {
   AlertTriangle,
   Tag,
   Printer,
-  LayoutDashboard,
   LogOut,
 } from 'lucide-react'
 import { logout } from '@/app/actions/auth'
@@ -32,6 +31,7 @@ import type {
   PosOrder,
   PosKot,
   CatalogItem,
+  OrderItem,
 } from '@/app/actions/posTypes'
 import { ReceiptPrintModal } from '@/components/ReceiptPrintModal'
 import {
@@ -40,6 +40,7 @@ import {
   deactivateTable,
   createOrder,
   addOrUpdateOrderItem,
+  toggleOrderItemParcel,
   removeOrderItem,
   updateOrderNote,
   fireKot,
@@ -50,6 +51,7 @@ import {
   advanceKotStatus,
   getDailySummary,
 } from '@/app/actions/pos'
+import { resolveItemPriceAndName } from '@/lib/posUtils'
 
 type PosInitialData = {
   tables: PosTable[]
@@ -67,14 +69,22 @@ export default function PosClientPage({
   initialData,
   staleOrders: initialStaleOrders,
   session,
+  categoryMap = {},
   posDefaultGstPercent,
+  posDefaultParcelPercent = 0,
+  posDefaultAcPercent = 0,
+  posPricingMode = 'percentage',
 }: {
-  branches: { id: string; name: string; address?: string; phone?: string }[]
+  branches: { id: string; name: string; address?: string; phone?: string; gstin?: string }[]
   activeBranchId: string
   initialData: PosInitialData | null
   staleOrders: StaleOrder[]
   session: { userId: string; name: string; role: string; isGlobalAdmin?: boolean }
+  categoryMap?: Record<string, string>
   posDefaultGstPercent: number
+  posDefaultParcelPercent?: number
+  posDefaultAcPercent?: number
+  posPricingMode?: 'percentage' | 'item_price'
 }) {
   const router = useRouter()
   const { messages, dismiss, success, error } = useToast()
@@ -91,6 +101,7 @@ export default function PosClientPage({
   const [tableModalMode, setTableModalMode] = useState<'create' | 'rename'>('create')
   const [selectedTableForRename, setSelectedTableForRename] = useState<PosTable | null>(null)
   const [tableNameInput, setTableNameInput] = useState('')
+  const [tableIsAcInput, setTableIsAcInput] = useState(false)
 
   const [isNewOrderModalOpen, setIsNewOrderModalOpen] = useState(false)
   const [orderTypeSelection, setOrderTypeSelection] = useState<'dine-in' | 'takeaway'>('dine-in')
@@ -101,11 +112,14 @@ export default function PosClientPage({
   // Catalog search / Category filter
   const [searchCatalogQuery, setSearchCatalogQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
+  const [packAsParcel, setPackAsParcel] = useState(false)
 
   // Bill & Payment modal / panel
   const [isBillModalOpen, setIsBillModalOpen] = useState(false)
   const [discountInput, setDiscountInput] = useState<number>(0)
   const [gstInput, setGstInput] = useState<number>(0)
+  const [parcelChargesInput, setParcelChargesInput] = useState<number>(0)
+  const [acChargesInput, setAcChargesInput] = useState<number>(0)
   const [confirmZeroBill, setConfirmZeroBill] = useState(false)
 
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false)
@@ -208,14 +222,22 @@ export default function PosClientPage({
     return false
   }, [selectedOrder, activeOrderKots])
 
-  // Categories in catalog
+  // Categories in catalog: array of { id: string; name: string }
   const categories = useMemo(() => {
-    const set = new Set<string>()
+    const map = new Map<string, string>()
     catalog.forEach(item => {
-      if (item.categoryId) set.add(item.categoryId)
+      if (item.categoryId) {
+        const name =
+          categoryMap[item.categoryId] ||
+          item.categoryName ||
+          item.categoryId
+        map.set(item.categoryId, name)
+      }
     })
-    return Array.from(set)
-  }, [catalog])
+    return Array.from(map.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [catalog, categoryMap])
 
   // Filtered catalog
   const filteredCatalog = useMemo(() => {
@@ -290,8 +312,24 @@ export default function PosClientPage({
 
   const handleAddItem = (item: CatalogItem) => {
     if (!selectedOrder || selectedOrder.status !== 'open') return
+    const isItemParcel = selectedOrder.orderType === 'takeaway' || packAsParcel
+    const isTableAc =
+      selectedOrder.orderType === 'dine-in' &&
+      Boolean(tables.find(t => t.id === selectedOrder.tableId)?.isAc)
+
+    const { unitPrice, nameSnapshot } = resolveItemPriceAndName(
+      item,
+      selectedOrder,
+      isTableAc,
+      posPricingMode,
+      isItemParcel
+    )
+
     const existingItem = selectedOrder.items.find(
-      i => i.menuItemId === item.menuItemId && (i.variantId ?? undefined) === (item.variantId ?? undefined)
+      i =>
+        i.menuItemId === item.menuItemId &&
+        (i.variantId ?? undefined) === (item.variantId ?? undefined) &&
+        Boolean(i.isParcel) === isItemParcel
     )
     const newQty = (existingItem?.quantity ?? 0) + 1
     if (newQty > 99) {
@@ -300,15 +338,19 @@ export default function PosClientPage({
     }
 
     startTransition(async () => {
-      const res = await addOrUpdateOrderItem(
+      const args: any[] = [
         selectedOrder.id,
         item.menuItemId,
         newQty,
-        item.effectivePrice,
-        item.name,
+        existingItem ? existingItem.unitPrice : unitPrice,
+        existingItem ? existingItem.nameSnapshot : nameSnapshot,
         item.variantId,
-        existingItem?.note
-      )
+        existingItem?.note,
+      ]
+      if (isItemParcel) {
+        args.push(true)
+      }
+      const res = await addOrUpdateOrderItem(...(args as [string, string, number, number, string, string?, string?, boolean?]))
       if (res?.error) {
         error(res.error)
       } else {
@@ -317,29 +359,86 @@ export default function PosClientPage({
     })
   }
 
-  const handleUpdateQty = (menuItemId: string, variantId: string | undefined, currentQty: number, delta: number, unitPrice: number, nameSnapshot: string) => {
+  const handleUpdateQty = (
+    itemOrId: string,
+    variantIdOrDelta?: string | number,
+    currentQty?: number,
+    delta?: number,
+    unitPrice?: number,
+    nameSnapshot?: string
+  ) => {
     if (!selectedOrder || selectedOrder.status !== 'open') return
-    const newQty = currentQty + delta
+    let item: OrderItem | undefined
+    let deltaQty = 0
+
+    if (typeof variantIdOrDelta === 'number') {
+      item = selectedOrder.items.find(i => i.id === itemOrId)
+      deltaQty = variantIdOrDelta
+    } else {
+      item = selectedOrder.items.find(
+        i => i.menuItemId === itemOrId && (i.variantId ?? undefined) === (variantIdOrDelta ?? undefined)
+      )
+      deltaQty = delta ?? 0
+    }
+
+    if (!item) return
+    const newQty = item.quantity + deltaQty
     if (newQty <= 0) {
-      const item = selectedOrder.items.find(i => i.menuItemId === menuItemId && (i.variantId ?? undefined) === (variantId ?? undefined))
-      if (item) {
-        handleRemoveItem(item.id)
-      }
+      handleRemoveItem(item.id)
       return
     }
     if (newQty > 99) return
 
     startTransition(async () => {
-      const res = await addOrUpdateOrderItem(
+      const args: any[] = [
         selectedOrder.id,
-        menuItemId,
+        item.menuItemId,
         newQty,
-        unitPrice,
-        nameSnapshot,
-        variantId
-      )
+        item.unitPrice,
+        item.nameSnapshot,
+        item.variantId,
+      ]
+      if (item.isParcel) {
+        args.push(undefined, true)
+      }
+      const res = await addOrUpdateOrderItem(...(args as [string, string, number, number, string, string?, string?, boolean?]))
       if (res?.error) error(res.error)
       else router.refresh()
+    })
+  }
+
+  const handleToggleItemParcel = (item: OrderItem) => {
+    if (!selectedOrder || selectedOrder.status !== 'open') return
+    const newParcelState = !Boolean(item.isParcel)
+    const catalogItem = catalog.find(
+      c => c.menuItemId === item.menuItemId && (c.variantId ?? undefined) === (item.variantId ?? undefined)
+    )
+    const isTableAc =
+      selectedOrder.orderType === 'dine-in' &&
+      Boolean(tables.find(t => t.id === selectedOrder.tableId)?.isAc)
+
+    let newUnitPrice = item.unitPrice
+    let newNameSnapshot = item.nameSnapshot
+    if (catalogItem) {
+      const resolved = resolveItemPriceAndName(
+        catalogItem,
+        selectedOrder,
+        isTableAc,
+        posPricingMode,
+        newParcelState
+      )
+      newUnitPrice = resolved.unitPrice
+      newNameSnapshot = resolved.nameSnapshot
+    }
+
+    startTransition(async () => {
+      const res = await toggleOrderItemParcel(selectedOrder.id, item.id, newUnitPrice, newNameSnapshot)
+      if (res?.error) {
+        error(res.error)
+      } else {
+        success(newParcelState ? 'Item marked as Parcel' : 'Item marked as Dine-In')
+        router.refresh()
+      }
     })
   }
 
@@ -360,15 +459,19 @@ export default function PosClientPage({
     const item = selectedOrder.items.find(i => i.id === orderItemId)
     if (!item) return
     startTransition(async () => {
-      const res = await addOrUpdateOrderItem(
+      const args: any[] = [
         selectedOrder.id,
         item.menuItemId,
         item.quantity,
         item.unitPrice,
         item.nameSnapshot,
         item.variantId,
-        noteText
-      )
+        noteText,
+      ]
+      if (item.isParcel) {
+        args.push(true)
+      }
+      const res = await addOrUpdateOrderItem(...(args as [string, string, number, number, string, string?, string?, boolean?]))
       if (res?.error) error(res.error)
       else {
         success('Item note saved')
@@ -394,8 +497,33 @@ export default function PosClientPage({
     if (!selectedOrder) return
     const subtotal = selectedOrder.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0)
     const suggestedGst = posDefaultGstPercent > 0 ? Math.round((subtotal * posDefaultGstPercent) / 100) : 0
+
+    let suggestedParcel = 0
+    let suggestedAc = 0
+
+    if (posPricingMode === 'percentage') {
+      const parcelSubtotal = selectedOrder.items
+        .filter(i => selectedOrder.orderType === 'takeaway' || Boolean(i.isParcel))
+        .reduce((s, i) => s + i.quantity * i.unitPrice, 0)
+      const dineInSubtotal = selectedOrder.items
+        .filter(i => selectedOrder.orderType === 'dine-in' && !i.isParcel)
+        .reduce((s, i) => s + i.quantity * i.unitPrice, 0)
+
+      if (posDefaultParcelPercent > 0 && parcelSubtotal > 0) {
+        suggestedParcel = Math.round((parcelSubtotal * posDefaultParcelPercent) / 100)
+      }
+      if (selectedOrder.orderType === 'dine-in' && selectedOrder.tableId) {
+        const orderTable = tables.find(t => t.id === selectedOrder.tableId)
+        if (orderTable?.isAc && posDefaultAcPercent > 0 && dineInSubtotal > 0) {
+          suggestedAc = Math.round((dineInSubtotal * posDefaultAcPercent) / 100)
+        }
+      }
+    }
+
     setDiscountInput(0)
     setGstInput(suggestedGst)
+    setParcelChargesInput(suggestedParcel)
+    setAcChargesInput(suggestedAc)
     setConfirmZeroBill(false)
     setIsBillModalOpen(true)
   }
@@ -407,6 +535,8 @@ export default function PosClientPage({
     formData.set('orderId', selectedOrder.id)
     formData.set('discount', String(discountInput))
     formData.set('gst', String(gstInput))
+    formData.set('parcelCharges', String(parcelChargesInput))
+    formData.set('acCharges', String(acChargesInput))
     if (confirmZeroBill) {
       formData.set('confirmed', 'true')
     }
@@ -544,6 +674,7 @@ export default function PosClientPage({
     const formData = new FormData()
     formData.set('name', tableNameInput)
     formData.set('branchId', activeBranchId)
+    formData.set('isAc', String(tableIsAcInput))
 
     startTransition(async () => {
       let res
@@ -559,6 +690,7 @@ export default function PosClientPage({
         success(`Table ${tableModalMode === 'create' ? 'created' : 'renamed'} successfully`)
         setIsTableModalOpen(false)
         setTableNameInput('')
+        setTableIsAcInput(false)
         setSelectedTableForRename(null)
         router.refresh()
       }
@@ -669,14 +801,6 @@ export default function PosClientPage({
               >
                 <History className="w-4 h-4 text-purple-400" />
                 <span>History</span>
-              </Link>
-              <Link
-                href="/management"
-                className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-sm font-semibold rounded-xl transition-all"
-                title="Back to Management Portal"
-              >
-                <LayoutDashboard className="w-4 h-4 text-indigo-400" />
-                <span className="hidden lg:inline">Dashboard</span>
               </Link>
             </>
           )}
@@ -870,6 +994,11 @@ export default function PosClientPage({
                         <span className="font-bold text-base text-white group-hover:text-amber-300 transition-colors truncate">
                           {table.name}
                         </span>
+                        {table.isAc && (
+                          <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30">
+                            AC
+                          </span>
+                        )}
                       </div>
 
                       <div className="flex items-center justify-between mt-auto">
@@ -900,6 +1029,7 @@ export default function PosClientPage({
                               e.stopPropagation()
                               setSelectedTableForRename(table)
                               setTableNameInput(table.name)
+                              setTableIsAcInput(Boolean(table.isAc))
                               setTableModalMode('rename')
                               setIsTableModalOpen(true)
                             }}
@@ -1006,8 +1136,23 @@ export default function PosClientPage({
                       className="flex items-center justify-between p-2.5 bg-slate-950/60 rounded-xl border border-slate-800/80 text-sm"
                     >
                       <div className="flex-1 min-w-0 pr-2">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <p className="font-semibold text-slate-200 truncate">{item.nameSnapshot}</p>
+                          {selectedOrder.orderType === 'dine-in' && (
+                            <button
+                              type="button"
+                              onClick={() => handleToggleItemParcel(item)}
+                              disabled={selectedOrder.status !== 'open' || isPending}
+                              className={`text-[10px] font-bold px-1.5 py-0.5 rounded border transition-colors ${
+                                item.isParcel
+                                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/30 hover:bg-amber-500/30'
+                                  : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200'
+                              }`}
+                              title={item.isParcel ? 'Click to change to Dine-In' : 'Click to pack as Parcel'}
+                            >
+                              {item.isParcel ? '📦 Parcel' : '🍽️ Dine-In'}
+                            </button>
+                          )}
                           {selectedOrder.status === 'open' && (
                             <button
                               onClick={() => setEditingNoteItem({ id: item.id, name: item.nameSnapshot, note: item.note || '' })}
@@ -1034,16 +1179,7 @@ export default function PosClientPage({
                         {selectedOrder.status === 'open' && (
                           <div className="flex items-center gap-1 bg-slate-800 rounded-lg p-0.5 border border-slate-700">
                             <button
-                              onClick={() =>
-                                handleUpdateQty(
-                                  item.menuItemId,
-                                  item.variantId,
-                                  item.quantity,
-                                  -1,
-                                  item.unitPrice,
-                                  item.nameSnapshot
-                                )
-                              }
+                              onClick={() => handleUpdateQty(item.id, -1)}
                               className="w-6 h-6 flex items-center justify-center text-slate-300 hover:text-white hover:bg-slate-700 rounded font-bold"
                             >
                               -
@@ -1052,16 +1188,7 @@ export default function PosClientPage({
                               {item.quantity}
                             </span>
                             <button
-                              onClick={() =>
-                                handleUpdateQty(
-                                  item.menuItemId,
-                                  item.variantId,
-                                  item.quantity,
-                                  1,
-                                  item.unitPrice,
-                                  item.nameSnapshot
-                                )
-                              }
+                              onClick={() => handleUpdateQty(item.id, 1)}
                               className="w-6 h-6 flex items-center justify-center text-slate-300 hover:text-white hover:bg-slate-700 rounded font-bold"
                             >
                               +
@@ -1078,15 +1205,48 @@ export default function PosClientPage({
               </div>
 
               {/* Subtotal & Action Buttons */}
-              <div className="pt-3 border-t border-slate-800 flex flex-col gap-3">
+              <div className="pt-3 border-t border-slate-800 flex flex-col gap-2.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-slate-400 font-medium">Subtotal</span>
-                  <span className="text-base font-bold text-white">
-                    ₹{selectedOrder.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0)}
+                  <span className="text-sm font-bold text-white">
+                    ₹{selectedOrder.bill?.subtotal ?? selectedOrder.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0)}
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
+                {selectedOrder.bill && (
+                  <>
+                    {selectedOrder.bill.discount > 0 && (
+                      <div className="flex items-center justify-between text-xs text-amber-400">
+                        <span>Discount</span>
+                        <span>-₹{selectedOrder.bill.discount}</span>
+                      </div>
+                    )}
+                    {Boolean(selectedOrder.bill.parcelCharges && selectedOrder.bill.parcelCharges > 0) && (
+                      <div className="flex items-center justify-between text-xs text-slate-400">
+                        <span>Parcel Charges</span>
+                        <span className="text-slate-200">+₹{selectedOrder.bill.parcelCharges}</span>
+                      </div>
+                    )}
+                    {Boolean(selectedOrder.bill.acCharges && selectedOrder.bill.acCharges > 0) && (
+                      <div className="flex items-center justify-between text-xs text-slate-400">
+                        <span>AC Charges</span>
+                        <span className="text-slate-200">+₹{selectedOrder.bill.acCharges}</span>
+                      </div>
+                    )}
+                    {selectedOrder.bill.gst > 0 && (
+                      <div className="flex items-center justify-between text-xs text-slate-400">
+                        <span>GST</span>
+                        <span className="text-slate-200">+₹{selectedOrder.bill.gst}</span>
+                      </div>
+                    )}
+                    <div className="pt-1.5 border-t border-slate-800 flex items-center justify-between">
+                      <span className="text-xs font-bold text-emerald-400">Total Payable</span>
+                      <span className="text-base font-bold text-emerald-400">₹{selectedOrder.bill.totalPayable}</span>
+                    </div>
+                  </>
+                )}
+
+                <div className="grid grid-cols-2 gap-2 mt-1">
                   {selectedOrder.status === 'open' && (
                     <>
                       <button
@@ -1204,7 +1364,22 @@ export default function PosClientPage({
               {/* Menu Catalog Search & Quick Add */}
               {selectedOrder.status === 'open' && (
                 <div className="pt-3 border-t border-slate-800 flex flex-col gap-2">
-                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Add Items from Menu</h3>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Add Items from Menu</h3>
+                    {selectedOrder.orderType === 'dine-in' && (
+                      <label className="flex items-center gap-1.5 cursor-pointer text-xs font-semibold select-none">
+                        <input
+                          type="checkbox"
+                          checked={packAsParcel}
+                          onChange={e => setPackAsParcel(e.target.checked)}
+                          className="w-3.5 h-3.5 rounded bg-slate-950 border-slate-700 text-amber-500 focus:ring-amber-500"
+                        />
+                        <span className={packAsParcel ? 'text-amber-400 font-bold' : 'text-slate-400'}>
+                          📦 Pack as Parcel
+                        </span>
+                      </label>
+                    )}
+                  </div>
                   <div className="flex gap-2">
                     <input
                       type="text"
@@ -1221,8 +1396,8 @@ export default function PosClientPage({
                       >
                         <option value="all">All Categories</option>
                         {categories.map(c => (
-                          <option key={c} value={c}>
-                            {c}
+                          <option key={c.id} value={c.id}>
+                            {c.name}
                           </option>
                         ))}
                       </select>
@@ -1273,6 +1448,7 @@ export default function PosClientPage({
                   setIsTableModalOpen(false)
                   setSelectedTableForRename(null)
                   setTableNameInput('')
+                  setTableIsAcInput(false)
                 }}
                 className="text-slate-400 hover:text-white"
               >
@@ -1303,6 +1479,15 @@ export default function PosClientPage({
                     {tableModalMode === 'rename' ? 'Update' : 'Add Table'}
                   </button>
                 </div>
+                <label className="flex items-center gap-2 cursor-pointer mt-2">
+                  <input
+                    type="checkbox"
+                    checked={tableIsAcInput}
+                    onChange={e => setTableIsAcInput(e.target.checked)}
+                    className="rounded border-slate-700 bg-slate-950 text-amber-500 focus:ring-amber-500 w-4 h-4"
+                  />
+                  <span className="text-xs text-slate-300 font-medium">AC Section / Table</span>
+                </label>
               </div>
               {tableModalMode === 'rename' && (
                 <button
@@ -1310,6 +1495,7 @@ export default function PosClientPage({
                   onClick={() => {
                     setTableModalMode('create')
                     setTableNameInput('')
+                    setTableIsAcInput(false)
                     setSelectedTableForRename(null)
                   }}
                   className="text-xs text-amber-400 hover:underline self-start"
@@ -1334,6 +1520,11 @@ export default function PosClientPage({
                         <div key={t.id} className="flex items-center justify-between p-2 rounded-xl bg-slate-950/60 border border-slate-800/80 text-xs">
                           <div className="flex items-center gap-2">
                             <span className="font-bold text-white">{t.name}</span>
+                            {t.isAc && (
+                              <span className="text-[9px] px-1 py-0.2 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30 uppercase font-bold">
+                                AC
+                              </span>
+                            )}
                             <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold uppercase ${isOccupied ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'}`}>
                               {isOccupied ? 'Occupied' : 'Available'}
                             </span>
@@ -1344,6 +1535,7 @@ export default function PosClientPage({
                               onClick={() => {
                                 setSelectedTableForRename(t)
                                 setTableNameInput(t.name)
+                                setTableIsAcInput(Boolean(t.isAc))
                                 setTableModalMode('rename')
                               }}
                               className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-amber-400 rounded-lg font-semibold"
@@ -1430,7 +1622,8 @@ export default function PosClientPage({
             <h3 className="text-base font-bold text-white mb-3">Generate Customer Bill</h3>
             {(() => {
               const subtotal = selectedOrder.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0)
-              const totalPayable = Math.max(0, subtotal - discountInput + gstInput)
+              const totalPayable = Math.max(0, subtotal - discountInput + parcelChargesInput + acChargesInput + gstInput)
+              const orderTable = tables.find(t => t.id === selectedOrder.tableId)
 
               return (
                 <form onSubmit={handleGenerateBillSubmit} className="flex flex-col gap-4">
@@ -1450,6 +1643,50 @@ export default function PosClientPage({
                       className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
                     />
                   </div>
+
+                  {posPricingMode === 'percentage' ? (
+                    <>
+                      {(selectedOrder.orderType === 'takeaway' || selectedOrder.items.some(i => i.isParcel) || parcelChargesInput > 0) && (
+                        <div>
+                          <div className="flex justify-between items-center mb-1">
+                            <label className="text-xs font-semibold text-slate-300">Parcel Charges (₹)</label>
+                            {posDefaultParcelPercent > 0 && (
+                              <span className="text-[11px] text-slate-500">Rate: {posDefaultParcelPercent}%</span>
+                            )}
+                          </div>
+                          <input
+                            type="number"
+                            min={0}
+                            value={parcelChargesInput}
+                            onChange={e => setParcelChargesInput(Number(e.target.value))}
+                            className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                          />
+                        </div>
+                      )}
+
+                      {selectedOrder.orderType === 'dine-in' && (orderTable?.isAc || acChargesInput > 0) && (
+                        <div>
+                          <div className="flex justify-between items-center mb-1">
+                            <label className="text-xs font-semibold text-slate-300">AC Charges (₹)</label>
+                            {posDefaultAcPercent > 0 && (
+                              <span className="text-[11px] text-slate-500">Rate: {posDefaultAcPercent}%</span>
+                            )}
+                          </div>
+                          <input
+                            type="number"
+                            min={0}
+                            value={acChargesInput}
+                            onChange={e => setAcChargesInput(Number(e.target.value))}
+                            className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                          />
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="p-2.5 bg-slate-950/80 rounded-xl border border-slate-800 text-[11px] text-slate-400">
+                      Static item pricing mode active. AC/parcel charges are included in item rates.
+                    </div>
+                  )}
 
                   <div>
                     <label className="text-xs font-semibold text-slate-300 block mb-1">GST Amount (₹)</label>

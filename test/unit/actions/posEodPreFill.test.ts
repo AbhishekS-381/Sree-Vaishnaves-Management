@@ -1,29 +1,50 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import * as db from '@/lib/db'
 import * as auth from '@/app/actions/auth'
 import { getPosDataForEOD } from '@/app/actions/pos'
 import { computePosEodData } from '@/lib/posUtils'
 import type { PosOrder } from '@/app/actions/posTypes'
 
+const { mockDb } = vi.hoisted(() => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const state: any = {
+    orders: [] as any[],
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const mock: any = {
+    state,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    select: vi.fn(() => ({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      from: vi.fn(() => ({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        where: vi.fn(() => Promise.resolve(state.orders)),
+      })),
+    })),
+  }
+  return { mockDb: mock }
+})
+
 vi.mock('@/lib/db', () => ({
-  readJSON: vi.fn(),
-  withTransaction: vi.fn(),
-  readBranchMenuItems: vi.fn(),
-  DB_FILES: {
-    POS_TABLES: 'pos_tables.json',
-    POS_ORDERS: 'pos_orders.json',
-    POS_KOTS: 'pos_kots.json',
+  db: mockDb,
+  withDbTransaction: vi.fn(),
+  posOrders: {
+    tableName: 'pos_orders',
+    branchId: { name: 'branch_id' },
+    date: { name: 'date' },
   },
 }))
 
 describe('EOD POS Pre-fill Integration Tests (Task 11.3, Req 6.1–6.7)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockDb.state.orders = []
     vi.spyOn(auth, 'getSession').mockResolvedValue({
       userId: 'u_mgr',
       role: 'manager',
       isGlobalAdmin: false,
       branchId: 'b_1',
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any)
     vi.spyOn(auth, 'requireBranchAccess').mockResolvedValue('b_1')
   })
@@ -136,7 +157,7 @@ describe('EOD POS Pre-fill Integration Tests (Task 11.3, Req 6.1–6.7)', () => 
 
   it('getPosDataForEOD returns PosEodData shape without leaking raw orders (Req 6.7)', async () => {
     const today = '2026-10-19'
-    vi.mocked(db.readJSON).mockResolvedValueOnce([
+    mockDb.state.orders = [
       {
         id: 'ord_p',
         branchId: 'b_1',
@@ -152,7 +173,7 @@ describe('EOD POS Pre-fill Integration Tests (Task 11.3, Req 6.1–6.7)', () => 
         createdAt: '',
         updatedAt: '',
       },
-    ])
+    ]
 
     const res = await getPosDataForEOD(today, 'b_1')
     expect('error' in res).toBe(false)
@@ -162,6 +183,7 @@ describe('EOD POS Pre-fill Integration Tests (Task 11.3, Req 6.1–6.7)', () => 
     expect(res.data.billCount).toBe(1)
     expect(res.data.totalBillAmount).toBe(315)
     expect(res.data.dineInCash).toBe(315)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect((res as any).orders).toBeUndefined()
   })
 })

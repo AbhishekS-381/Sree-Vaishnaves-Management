@@ -3,8 +3,19 @@
 import { z } from 'zod'
 import { randomUUID } from 'crypto'
 import { revalidatePath } from 'next/cache'
+import { eq, and, ne, ilike, inArray, isNull, asc, gte, lte } from 'drizzle-orm'
 
-import { readJSON, withTransaction, DB_FILES, readBranchMenuItems } from '@/lib/db'
+import {
+  db,
+  withDbTransaction,
+  posTables,
+  posOrders,
+  posKots,
+  menuItems,
+  menuCategories,
+  branchMenuItems,
+  menuItemVariants,
+} from '@/lib/db'
 import { getSession, requireBranchAccess } from '@/app/actions/auth'
 import { logAction } from '@/lib/audit'
 import {
@@ -27,6 +38,7 @@ import type {
   CatalogItem,
   OrderType,
   OrderStatus,
+  BillSnapshot,
 } from './posTypes'
 
 // ─── IST date helper ──────────────────────────────────────────────
@@ -35,38 +47,7 @@ function todayIST(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
 }
 
-function nowISO(): string {
-  return new Date().toISOString()
-}
-
-
 // ─── getTodayPosData ──────────────────────────────────────────────
-
-type MenuItem = {
-  id: string
-  name: string
-  basePrice: number
-  categoryId: string
-  isActive: boolean
-  dietary?: string
-  prepTimeMins?: number
-}
-
-type MenuItemVariant = {
-  id: string
-  menuItemId: string
-  name: string
-  basePrice: number
-  isActive: boolean
-}
-
-type BranchMenuItemRow = {
-  branchId: string
-  menuItemId: string
-  variantId?: string
-  isAvailable: boolean
-  price: number | null
-}
 
 export async function getTodayPosData(branchId: string) {
   const session = await getSession()
@@ -81,105 +62,192 @@ export async function getTodayPosData(branchId: string) {
 
   const today = todayIST()
 
-  // Read POS data
-  const allTables = await readJSON<PosTable>(DB_FILES.POS_TABLES).catch(() => [])
-  const tables = allTables
-    .filter(t => t.branchId === enforcedBranchId && t.isActive)
-    .sort((a, b) => a.name.localeCompare(b.name))
+  try {
+    // Read POS data
+    const tablesRaw = await db
+      .select()
+      .from(posTables)
+      .where(
+        and(
+          eq(posTables.branchId, enforcedBranchId),
+          eq(posTables.isActive, true),
+          isNull(posTables.deletedAt)
+        )
+      )
+      .orderBy(asc(posTables.name))
 
-  const allOrders = await readJSON<PosOrder>(DB_FILES.POS_ORDERS).catch(() => [])
-  const orders = allOrders.filter(o => o.branchId === enforcedBranchId && o.date === today)
+    const tables: PosTable[] = (tablesRaw as any[]).map((t) => ({
+      id: t.id,
+      branchId: t.branchId,
+      name: t.name,
+      isAc: Boolean(t.isAc),
+      isActive: t.isActive,
+      createdAt: t.createdAt instanceof Date ? t.createdAt.toISOString() : String(t.createdAt || ''),
+      updatedAt: t.updatedAt instanceof Date ? t.updatedAt.toISOString() : String(t.updatedAt || ''),
+      deletedAt: t.deletedAt ? (t.deletedAt instanceof Date ? t.deletedAt.toISOString() : String(t.deletedAt)) : undefined,
+    }))
 
-  const orderIds = new Set(orders.map(o => o.id))
-  const allKots = await readJSON<PosKot>(DB_FILES.POS_KOTS).catch(() => [])
-  const kots = allKots.filter(k => k.branchId === enforcedBranchId && orderIds.has(k.orderId))
+    const ordersRaw = await db
+      .select()
+      .from(posOrders)
+      .where(and(eq(posOrders.branchId, enforcedBranchId), eq(posOrders.date, today)))
 
-  // Build branch menu catalog
-  const allMenuItems = await readJSON<MenuItem>(DB_FILES.MENU).catch(() => [])
-  const activeMenuItems = allMenuItems.filter(m => m.isActive === true)
+    const orders: PosOrder[] = (ordersRaw as any[]).map((o) => ({
+      id: o.id,
+      branchId: o.branchId,
+      tableId: o.tableId ?? undefined,
+      takeawayNumber: o.takeawayNumber ?? undefined,
+      orderType: o.orderType as OrderType,
+      covers: o.covers ?? undefined,
+      status: o.status as OrderStatus,
+      items: (o.items as any) || [],
+      note: o.note ?? undefined,
+      kotCount: o.kotCount ?? 0,
+      bill: o.bill ?? undefined,
+      payment: o.payment ?? undefined,
+      void: o.void ?? undefined,
+      date: o.date,
+      openedBy: o.openedBy,
+      createdAt: o.createdAt instanceof Date ? o.createdAt.toISOString() : String(o.createdAt || ''),
+      updatedAt: o.updatedAt instanceof Date ? o.updatedAt.toISOString() : String(o.updatedAt || ''),
+    }))
 
-  const allCategories = await readJSON<{ id: string; name: string }>(DB_FILES.MENU_CATEGORIES).catch(() => [])
-  const categoryMap = new Map<string, string>()
-  for (const c of allCategories) {
-    categoryMap.set(c.id, c.name)
-  }
+    const orderIds = orders.map((o) => o.id)
+    let kots: PosKot[] = []
 
-  const branchRows = await readBranchMenuItems<BranchMenuItemRow>(enforcedBranchId)
+    if (orderIds.length > 0) {
+      const kotsRaw = await db
+        .select()
+        .from(posKots)
+        .where(
+          and(
+            eq(posKots.branchId, enforcedBranchId),
+            inArray(posKots.orderId, orderIds)
+          )
+        )
 
-  // Build a lookup map for branch overrides (only item-level rows, no variantId)
-  const branchItemMap = new Map<string, BranchMenuItemRow>()
-  for (const row of branchRows) {
-    if (!row.variantId) {
-      branchItemMap.set(row.menuItemId, row)
+      kots = (kotsRaw as any[]).map((k) => ({
+        id: k.id,
+        orderId: k.orderId,
+        branchId: k.branchId,
+        kotNumber: k.kotNumber,
+        items: (k.items as any) || [],
+        status: k.status,
+        firedBy: k.firedBy,
+        firedAt: k.firedAt instanceof Date ? k.firedAt.toISOString() : String(k.firedAt || ''),
+        updatedAt: k.updatedAt instanceof Date ? k.updatedAt.toISOString() : String(k.updatedAt || ''),
+      }))
     }
-  }
 
-  const catalog: CatalogItem[] = []
+    // Build branch menu catalog
+    const activeMenuItems = await db
+      .select()
+      .from(menuItems)
+      .where(and(eq(menuItems.isActive, true), isNull(menuItems.deletedAt)))
 
-  for (const item of activeMenuItems) {
-    const branchRow = branchItemMap.get(item.id)
+    const allCategories = await db
+      .select({ id: menuCategories.id, name: menuCategories.name })
+      .from(menuCategories)
+      .where(isNull(menuCategories.deletedAt))
 
-    // If branchRow exists and isAvailable is explicitly false, exclude
-    if (branchRow && branchRow.isAvailable === false) continue
-    // If no branchRow: default = available (consistent with menu system)
-
-    const effectivePrice = (branchRow && branchRow.price !== null)
-      ? branchRow.price
-      : item.basePrice
-
-    catalog.push({
-      menuItemId: item.id,
-      name: item.name,
-      categoryId: item.categoryId,
-      categoryName: categoryMap.get(item.categoryId) || undefined,
-      effectivePrice,
-      dietary: item.dietary,
-      prepTimeMins: item.prepTimeMins,
-    })
-  }
-
-  // Load variants
-  const allVariants = await readJSON<MenuItemVariant>(DB_FILES.MENU_ITEM_VARIANTS).catch(() => [])
-  const catalogItemIds = new Set(catalog.map(c => c.menuItemId))
-
-  // Build variant-level branch override map
-  const branchVariantMap = new Map<string, BranchMenuItemRow>()
-  for (const row of branchRows) {
-    if (row.variantId) {
-      branchVariantMap.set(`${row.menuItemId}_${row.variantId}`, row)
+    const categoryMap = new Map<string, string>()
+    for (const c of allCategories) {
+      categoryMap.set(c.id, c.name)
     }
+
+    const branchRows = await db
+      .select()
+      .from(branchMenuItems)
+      .where(eq(branchMenuItems.branchId, enforcedBranchId))
+
+    // Build a lookup map for branch overrides (only item-level rows, no variantId)
+    const branchItemMap = new Map<string, any>()
+    for (const row of branchRows) {
+      if (!row.variantId) {
+        branchItemMap.set(row.menuItemId, row)
+      }
+    }
+
+    const catalog: CatalogItem[] = []
+
+    for (const item of activeMenuItems) {
+      const branchRow = branchItemMap.get(item.id)
+
+      // If branchRow exists and isAvailable is explicitly false, exclude
+      if (branchRow && branchRow.isAvailable === false) continue
+
+      const effectivePrice =
+        branchRow && branchRow.price !== null ? branchRow.price : item.basePrice
+
+      catalog.push({
+        menuItemId: item.id,
+        name: item.name,
+        categoryId: item.categoryId,
+        categoryName: categoryMap.get(item.categoryId) || undefined,
+        effectivePrice,
+        acPrice: item.acPrice ?? undefined,
+        parcelPrice: item.parcelPrice ?? undefined,
+        dietary: (item.dietary as string) || undefined,
+        prepTimeMins: item.prepTimeMins ?? undefined,
+      })
+    }
+
+    // Load variants
+    const allVariants = await db
+      .select()
+      .from(menuItemVariants)
+      .where(and(eq(menuItemVariants.isActive, true), isNull(menuItemVariants.deletedAt)))
+
+    const catalogItemIds = new Set(catalog.map((c) => c.menuItemId))
+
+    // Build variant-level branch override map
+    const branchVariantMap = new Map<string, any>()
+    for (const row of branchRows) {
+      if (row.variantId) {
+        branchVariantMap.set(`${row.menuItemId}_${row.variantId}`, row)
+      }
+    }
+
+    for (const v of allVariants) {
+      if (!v.isActive || !catalogItemIds.has(v.menuItemId)) continue
+
+      const variantBranchRow = branchVariantMap.get(`${v.menuItemId}_${v.id}`)
+      if (variantBranchRow && variantBranchRow.isAvailable === false) continue
+
+      const parentItem = activeMenuItems.find((m) => m.id === v.menuItemId)
+      const effectivePrice =
+        variantBranchRow && variantBranchRow.price !== null
+          ? variantBranchRow.price
+          : v.basePrice
+
+      const parentCatId = parentItem?.categoryId ?? ''
+      catalog.push({
+        menuItemId: v.menuItemId,
+        variantId: v.id,
+        name: `${parentItem?.name ?? ''} - ${v.name}`,
+        categoryId: parentCatId,
+        categoryName: categoryMap.get(parentCatId) || undefined,
+        effectivePrice,
+        acPrice: parentItem?.acPrice ?? undefined,
+        parcelPrice: parentItem?.parcelPrice ?? undefined,
+        dietary: (parentItem?.dietary as string) || undefined,
+        prepTimeMins: parentItem?.prepTimeMins ?? undefined,
+      })
+    }
+
+    return { tables, orders, kots, catalog, todayIST: today }
+  } catch (error) {
+    console.error('Failed to load today POS data:', error)
+    return { error: 'Database operation failed' }
   }
-
-  for (const v of allVariants) {
-    if (!v.isActive || !catalogItemIds.has(v.menuItemId)) continue
-
-    const variantBranchRow = branchVariantMap.get(`${v.menuItemId}_${v.id}`)
-    if (variantBranchRow && variantBranchRow.isAvailable === false) continue
-
-    const parentItem = activeMenuItems.find(m => m.id === v.menuItemId)
-    const effectivePrice = (variantBranchRow && variantBranchRow.price !== null)
-      ? variantBranchRow.price
-      : v.basePrice
-
-    const parentCatId = parentItem?.categoryId ?? ''
-    catalog.push({
-      menuItemId: v.menuItemId,
-      variantId: v.id,
-      name: `${parentItem?.name ?? ''} - ${v.name}`,
-      categoryId: parentCatId,
-      categoryName: categoryMap.get(parentCatId) || undefined,
-      effectivePrice,
-      dietary: parentItem?.dietary,
-      prepTimeMins: parentItem?.prepTimeMins,
-    })
-  }
-
-  return { tables, orders, kots, catalog, todayIST: today }
 }
 
 // ─── Table Management ─────────────────────────────────────────────
 
-const tableNameSchema = z.string().min(1, 'Table name is required').max(50, 'Table name must be at most 50 characters')
+const tableNameSchema = z
+  .string()
+  .min(1, 'Table name is required')
+  .max(50, 'Table name must be at most 50 characters')
 
 export async function createTable(prevState: unknown, formData: FormData) {
   const session = await getSession()
@@ -202,41 +270,46 @@ export async function createTable(prevState: unknown, formData: FormData) {
     return { error: 'BranchAccessDenied' }
   }
 
-  let limitReached = false
-  let duplicateName = false
-  const now = nowISO()
+  try {
+    const existingActive = await db
+      .select({ id: posTables.id, name: posTables.name })
+      .from(posTables)
+      .where(
+        and(
+          eq(posTables.branchId, enforcedBranchId),
+          eq(posTables.isActive, true),
+          isNull(posTables.deletedAt)
+        )
+      )
 
-  const success = await withTransaction<PosTable>(DB_FILES.POS_TABLES, (tables) => {
-    const activeTables = tables.filter(t => t.branchId === enforcedBranchId && t.isActive)
-
-    if (activeTables.length >= 50) {
-      limitReached = true
-      return tables
+    if (existingActive.length >= 50) {
+      return { error: 'Active table limit (50) reached' }
     }
 
-    if (activeTables.some(t => t.name.toLowerCase() === name.toLowerCase())) {
-      duplicateName = true
-      return tables
+    if (existingActive.some((t) => t.name.toLowerCase() === name.toLowerCase())) {
+      return { error: 'A table with this name already exists' }
     }
 
-    tables.push({
-      id: `ptbl_${randomUUID()}`,
+    const isAcRaw = formData.get('isAc')
+    const isAc = isAcRaw === 'true' || isAcRaw === 'on' || isAcRaw === '1'
+
+    const now = new Date()
+    await db.insert(posTables).values({
+      id: randomUUID(),
       branchId: enforcedBranchId,
       name,
+      isAc,
       isActive: true,
       createdAt: now,
       updatedAt: now,
     })
 
-    return tables
-  })
-
-  if (limitReached) return { error: 'Active table limit (50) reached' }
-  if (duplicateName) return { error: 'A table with this name already exists' }
-  if (!success) return { error: 'Transaction failed' }
-
-  revalidatePath('/management/pos')
-  return { success: true }
+    revalidatePath('/management/pos')
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to create table:', error)
+    return { error: 'Transaction failed' }
+  }
 }
 
 export async function renameTable(prevState: unknown, formData: FormData) {
@@ -258,39 +331,59 @@ export async function renameTable(prevState: unknown, formData: FormData) {
     return { error: 'BranchAccessDenied' }
   }
 
-  let notFound = false
-  let duplicateName = false
-  const now = nowISO()
+  try {
+    const target = await db
+      .select()
+      .from(posTables)
+      .where(
+        and(
+          eq(posTables.id, tableId),
+          eq(posTables.branchId, enforcedBranchId),
+          isNull(posTables.deletedAt)
+        )
+      )
+      .limit(1)
 
-  const success = await withTransaction<PosTable>(DB_FILES.POS_TABLES, (tables) => {
-    const table = tables.find(t => t.id === tableId && t.branchId === enforcedBranchId)
-    if (!table) {
-      notFound = true
-      return tables
+    if (target.length === 0) return { error: 'Table not found' }
+
+    const duplicate = await db
+      .select({ id: posTables.id })
+      .from(posTables)
+      .where(
+        and(
+          eq(posTables.branchId, enforcedBranchId),
+          eq(posTables.isActive, true),
+          isNull(posTables.deletedAt),
+          ilike(posTables.name, newName),
+          ne(posTables.id, tableId)
+        )
+      )
+      .limit(1)
+
+    if (duplicate.length > 0) {
+      return { error: 'A table with this name already exists' }
     }
 
-    if (tables.some(t =>
-      t.id !== tableId &&
-      t.isActive &&
-      t.branchId === enforcedBranchId &&
-      t.name.toLowerCase() === newName.toLowerCase()
-    )) {
-      duplicateName = true
-      return tables
+    const updateData: { name: string; updatedAt: Date; isAc?: boolean } = {
+      name: newName,
+      updatedAt: new Date(),
+    }
+    if (formData.has('isAc')) {
+      const isAcRaw = formData.get('isAc')
+      updateData.isAc = isAcRaw === 'true' || isAcRaw === 'on' || isAcRaw === '1'
     }
 
-    table.name = newName
-    table.updatedAt = now
+    await db
+      .update(posTables)
+      .set(updateData)
+      .where(eq(posTables.id, tableId))
 
-    return tables
-  })
-
-  if (notFound) return { error: 'Table not found' }
-  if (duplicateName) return { error: 'A table with this name already exists' }
-  if (!success) return { error: 'Transaction failed' }
-
-  revalidatePath('/management/pos')
-  return { success: true }
+    revalidatePath('/management/pos')
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to rename table:', error)
+    return { error: 'Transaction failed' }
+  }
 }
 
 export async function deactivateTable(tableId: string) {
@@ -298,44 +391,49 @@ export async function deactivateTable(tableId: string) {
   if (!session) return { error: 'Unauthorized' }
   if (!session.isGlobalAdmin && session.role !== 'manager') return { error: 'Forbidden' }
 
-  // Load the table to verify branch access
-  const allTables = await readJSON<PosTable>(DB_FILES.POS_TABLES).catch(() => [])
-  const table = allTables.find(t => t.id === tableId)
-  if (!table) return { error: 'Table not found' }
-
   try {
-    await requireBranchAccess(table.branchId)
-  } catch {
-    return { error: 'BranchAccessDenied' }
-  }
+    const target = await db
+      .select()
+      .from(posTables)
+      .where(and(eq(posTables.id, tableId), isNull(posTables.deletedAt)))
+      .limit(1)
 
-  // Check for active orders on this table
-  const allOrders = await readJSON<PosOrder>(DB_FILES.POS_ORDERS).catch(() => [])
-  const hasOpenOrder = allOrders.some(o => o.tableId === tableId && o.status === 'open')
-  if (hasOpenOrder) {
-    return { error: 'Table has an active open order and cannot be deactivated' }
-  }
+    if (target.length === 0) return { error: 'Table not found' }
+    const table = target[0]
 
-  let notFound = false
-  const now = nowISO()
-
-  const success = await withTransaction<PosTable>(DB_FILES.POS_TABLES, (tables) => {
-    const t = tables.find(t => t.id === tableId)
-    if (!t) {
-      notFound = true
-      return tables
+    try {
+      await requireBranchAccess(table.branchId)
+    } catch {
+      return { error: 'BranchAccessDenied' }
     }
-    t.isActive = false
-    t.deletedAt = now
-    t.updatedAt = now
-    return tables
-  })
 
-  if (notFound) return { error: 'Table not found' }
-  if (!success) return { error: 'Transaction failed' }
+    // Check for active orders on this table
+    const openOrders = await db
+      .select({ id: posOrders.id })
+      .from(posOrders)
+      .where(and(eq(posOrders.tableId, tableId), eq(posOrders.status, 'open')))
+      .limit(1)
 
-  revalidatePath('/management/pos')
-  return { success: true }
+    if (openOrders.length > 0) {
+      return { error: 'Table has an active open order and cannot be deactivated' }
+    }
+
+    const now = new Date()
+    await db
+      .update(posTables)
+      .set({
+        isActive: false,
+        deletedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(posTables.id, tableId))
+
+    revalidatePath('/management/pos')
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to deactivate table:', error)
+    return { error: 'Transaction failed' }
+  }
 }
 
 // ─── Order Lifecycle ──────────────────────────────────────────────
@@ -348,7 +446,7 @@ export async function createOrder(prevState: unknown, formData: FormData) {
   const orderType = formData.get('orderType') as OrderType
   const covers = Number(formData.get('covers')) || 1
   const branchId = formData.get('branchId') as string
-  const tableId = formData.get('tableId') as string | null
+  const tableId = (formData.get('tableId') as string | null) || null
   const orderNote = (formData.get('note') as string)?.trim() || undefined
 
   // Validate
@@ -372,60 +470,104 @@ export async function createOrder(prevState: unknown, formData: FormData) {
   }
 
   const today = todayIST()
-  const now = nowISO()
+  const now = new Date()
   let newOrderId = ''
 
-  let occupied = false
-  let missingTable = false
-
-  const success = await withTransaction<PosOrder>(DB_FILES.POS_ORDERS, (orders) => {
-    if (orderType === 'dine-in') {
-      if (!tableId) { missingTable = true; return orders }
-      if (orders.some(o => o.tableId === tableId && o.status === 'open')) {
-        occupied = true
-        return orders
-      }
-    }
-
-    let takeawayNumber: string | undefined
+  try {
     if (orderType === 'takeaway') {
-      const todayTakeaways = orders.filter(o =>
-        o.branchId === enforcedBranchId &&
-        o.date === today &&
-        o.orderType === 'takeaway' &&
-        o.status !== 'voided'
+      newOrderId = await withDbTransaction(
+        async (tx) => {
+          const todayTakeaways = await tx
+            .select({ id: posOrders.id })
+            .from(posOrders)
+            .where(
+              and(
+                eq(posOrders.branchId, enforcedBranchId),
+                eq(posOrders.date, today),
+                eq(posOrders.orderType, 'takeaway'),
+                ne(posOrders.status, 'voided')
+              )
+            )
+
+          const takeawayNumber = `T-${todayTakeaways.length + 1}`
+          const id = randomUUID()
+
+          await tx.insert(posOrders).values({
+            id,
+            branchId: enforcedBranchId,
+            tableId: null,
+            takeawayNumber,
+            orderType: 'takeaway',
+            covers: null,
+            status: 'open',
+            items: [],
+            note: orderNote || null,
+            kotCount: 0,
+            date: today,
+            openedBy: session.userId,
+            createdAt: now,
+            updatedAt: now,
+          })
+
+          return id
+        },
+        { isolationLevel: 'serializable' }
       )
-      takeawayNumber = `T-${todayTakeaways.length + 1}`
+    } else {
+      // dine-in
+      newOrderId = await withDbTransaction(async (tx) => {
+        const occupied = await tx
+          .select({ id: posOrders.id })
+          .from(posOrders)
+          .where(
+            and(
+              eq(posOrders.tableId, tableId!),
+              eq(posOrders.status, 'open')
+            )
+          )
+          .limit(1)
+
+        if (occupied.length > 0) {
+          throw new Error('TABLE_OCCUPIED')
+        }
+
+        const id = randomUUID()
+        await tx.insert(posOrders).values({
+          id,
+          branchId: enforcedBranchId,
+          tableId: tableId!,
+          takeawayNumber: null,
+          orderType: 'dine-in',
+          covers,
+          status: 'open',
+          items: [],
+          note: orderNote || null,
+          kotCount: 0,
+          date: today,
+          openedBy: session.userId,
+          createdAt: now,
+          updatedAt: now,
+        })
+
+        return id
+      })
     }
 
-    newOrderId = `pord_${randomUUID()}`
-    orders.push({
-      id: newOrderId,
-      branchId: enforcedBranchId,
-      tableId: orderType === 'dine-in' ? (tableId as string) : undefined,
-      takeawayNumber,
-      orderType,
-      covers: orderType === 'dine-in' ? covers : undefined,
-      status: 'open',
-      items: [],
-      note: orderNote,
-      kotCount: 0,
-      date: today,
-      openedBy: session.userId,
-      createdAt: now,
-      updatedAt: now,
-    })
-
-    return orders
-  })
-
-  if (missingTable) return { error: 'Table is required for dine-in orders' }
-  if (occupied) return { error: 'Table already has an open order' }
-  if (!success) return { error: 'Transaction failed' }
-
-  await logAction('CREATE_POS_ORDER', 'POS_ORDER', JSON.stringify({ branchId: enforcedBranchId, orderType, tableId }), newOrderId)
-  revalidatePath('/management/pos')
-  return { success: true }
+    await logAction(
+      'CREATE_POS_ORDER',
+      'POS_ORDER',
+      JSON.stringify({ branchId: enforcedBranchId, orderType, tableId }),
+      newOrderId
+    )
+    revalidatePath('/management/pos')
+    return { success: true }
+  } catch (error: any) {
+    if (error?.message === 'TABLE_OCCUPIED' || error?.code === '23505') {
+      return { error: 'Table already has an open order' }
+    }
+    console.error('Failed to create order:', error)
+    return { error: 'Transaction failed' }
+  }
 }
 
 export async function addOrUpdateOrderItem(
@@ -435,7 +577,8 @@ export async function addOrUpdateOrderItem(
   unitPrice: number,
   nameSnapshot: string,
   variantId?: string,
-  note?: string
+  note?: string,
+  isParcel?: boolean
 ) {
   const session = await getSession()
   if (!session) return { error: 'Unauthorized' }
@@ -446,8 +589,9 @@ export async function addOrUpdateOrderItem(
     unitPrice: z.number().int().min(0),
     nameSnapshot: z.string().min(1),
     note: z.string().max(80).optional(),
+    isParcel: z.boolean().optional(),
   })
-  const parsed = schema.safeParse({ quantity, unitPrice, nameSnapshot, note })
+  const parsed = schema.safeParse({ quantity, unitPrice, nameSnapshot, note, isParcel })
   if (!parsed.success) return { error: parsed.error.issues[0].message }
 
   let enforcedBranchId: string
@@ -457,24 +601,27 @@ export async function addOrUpdateOrderItem(
     return { error: 'BranchAccessDenied' }
   }
 
-  let notFound = false
-  let branchDenied = false
-  let notOpen = false
-  let waiterForbidden = false
-  const now = nowISO()
+  try {
+    const orders = await db
+      .select()
+      .from(posOrders)
+      .where(eq(posOrders.id, orderId))
+      .limit(1)
 
-  const success = await withTransaction<PosOrder>(DB_FILES.POS_ORDERS, (orders) => {
-    const order = orders.find(o => o.id === orderId)
-    if (!order) { notFound = true; return orders }
-    if (enforcedBranchId && order.branchId !== enforcedBranchId) { branchDenied = true; return orders }
-    if (order.status !== 'open') { notOpen = true; return orders }
+    if (orders.length === 0) return { error: 'Order not found' }
+    const order = orders[0]
+    if (enforcedBranchId && order.branchId !== enforcedBranchId) return { error: 'BranchAccessDenied' }
+    if (order.status !== 'open') return { error: 'Order is not open' }
     if (!isWaiterOwnOrder(session.role, order.openedBy, session.userId)) {
-      waiterForbidden = true; return orders
+      return { error: 'Forbidden: waiters can only edit their own orders' }
     }
 
-    const existing = order.items.find(i =>
-      i.menuItemId === menuItemId &&
-      (i.variantId ?? undefined) === (variantId ?? undefined)
+    const items = Array.isArray(order.items) ? [...(order.items as any[])] : []
+    const existing = items.find(
+      (i: any) =>
+        i.menuItemId === menuItemId &&
+        (i.variantId ?? undefined) === (variantId ?? undefined) &&
+        Boolean(i.isParcel) === Boolean(isParcel)
     )
 
     if (existing) {
@@ -482,29 +629,110 @@ export async function addOrUpdateOrderItem(
       if (note !== undefined) existing.note = note || undefined
       // unitPrice is immutable — never updated on existing items
     } else {
-      order.items.push({
-        id: `oi_${randomUUID()}`,
+      items.push({
+        id: randomUUID(),
         menuItemId,
         variantId,
         nameSnapshot,
         unitPrice,
         quantity,
         note: note || undefined,
+        isParcel: Boolean(isParcel),
       })
     }
-    order.updatedAt = now
 
-    return orders
-  })
+    await db
+      .update(posOrders)
+      .set({
+        items,
+        updatedAt: new Date(),
+      })
+      .where(eq(posOrders.id, orderId))
 
-  if (notFound) return { error: 'Order not found' }
-  if (branchDenied) return { error: 'BranchAccessDenied' }
-  if (notOpen) return { error: 'Order is not open' }
-  if (waiterForbidden) return { error: 'Forbidden: waiters can only edit their own orders' }
-  if (!success) return { error: 'Transaction failed' }
+    revalidatePath('/management/pos')
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to add/update order item:', error)
+    return { error: 'Transaction failed' }
+  }
+}
 
-  revalidatePath('/management/pos')
-  return { success: true }
+export async function toggleOrderItemParcel(
+  orderId: string,
+  orderItemId: string,
+  newUnitPrice?: number,
+  newNameSnapshot?: string
+) {
+  const session = await getSession()
+  if (!session) return { error: 'Unauthorized' }
+  if (!canCreateOrder(session.role)) return { error: 'Forbidden' }
+
+  let enforcedBranchId: string
+  try {
+    enforcedBranchId = await requireBranchAccess(undefined)
+  } catch {
+    return { error: 'BranchAccessDenied' }
+  }
+
+  try {
+    const orders = await db
+      .select()
+      .from(posOrders)
+      .where(eq(posOrders.id, orderId))
+      .limit(1)
+
+    if (orders.length === 0) return { error: 'Order not found' }
+    const order = orders[0]
+    if (enforcedBranchId && order.branchId !== enforcedBranchId) return { error: 'BranchAccessDenied' }
+    if (order.status !== 'open') return { error: 'Order is not open' }
+    if (!isWaiterOwnOrder(session.role, order.openedBy, session.userId)) {
+      return { error: 'Forbidden: waiters can only edit their own orders' }
+    }
+
+    const items = Array.isArray(order.items) ? [...(order.items as any[])] : []
+    const targetIdx = items.findIndex((i: any) => i.id === orderItemId)
+    if (targetIdx === -1) return { error: 'Order item not found' }
+
+    const targetItem = items[targetIdx]
+    const newParcelStatus = !Boolean(targetItem.isParcel)
+
+    // Check if an item already exists with same menuItemId, variantId, and newParcelStatus
+    const existingSameStatus = items.find(
+      (i: any) =>
+        i.id !== orderItemId &&
+        i.menuItemId === targetItem.menuItemId &&
+        (i.variantId ?? undefined) === (targetItem.variantId ?? undefined) &&
+        Boolean(i.isParcel) === newParcelStatus
+    )
+
+    if (existingSameStatus) {
+      // Merge into existing item
+      existingSameStatus.quantity = Math.min(99, existingSameStatus.quantity + targetItem.quantity)
+      items.splice(targetIdx, 1)
+    } else {
+      targetItem.isParcel = newParcelStatus
+      if (typeof newUnitPrice === 'number' && newUnitPrice >= 0) {
+        targetItem.unitPrice = newUnitPrice
+      }
+      if (typeof newNameSnapshot === 'string' && newNameSnapshot.trim().length > 0) {
+        targetItem.nameSnapshot = newNameSnapshot.trim()
+      }
+    }
+
+    await db
+      .update(posOrders)
+      .set({
+        items,
+        updatedAt: new Date(),
+      })
+      .where(eq(posOrders.id, orderId))
+
+    revalidatePath('/management/pos')
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to toggle order item parcel status:', error)
+    return { error: 'Transaction failed' }
+  }
 }
 
 export async function removeOrderItem(orderId: string, orderItemId: string) {
@@ -519,42 +747,41 @@ export async function removeOrderItem(orderId: string, orderItemId: string) {
     return { error: 'BranchAccessDenied' }
   }
 
-  let notFound = false
-  let branchDenied = false
-  let notOpen = false
-  let itemNotFound = false
-  let waiterForbidden = false
-  const now = nowISO()
+  try {
+    const orders = await db
+      .select()
+      .from(posOrders)
+      .where(eq(posOrders.id, orderId))
+      .limit(1)
 
-  const success = await withTransaction<PosOrder>(DB_FILES.POS_ORDERS, (orders) => {
-    const order = orders.find(o => o.id === orderId)
-    if (!order) { notFound = true; return orders }
-    if (enforcedBranchId && order.branchId !== enforcedBranchId) { branchDenied = true; return orders }
-    // Req 2.6: allow removal to complete even if status changed from open
-    // during the action — the guard only applies at initiation time
-    if (order.status !== 'open') { notOpen = true; return orders }
+    if (orders.length === 0) return { error: 'Order not found' }
+    const order = orders[0]
+    if (enforcedBranchId && order.branchId !== enforcedBranchId) return { error: 'BranchAccessDenied' }
+    if (order.status !== 'open') return { error: 'Order is not open' }
     if (!isWaiterOwnOrder(session.role, order.openedBy, session.userId)) {
-      waiterForbidden = true; return orders
+      return { error: 'Forbidden: waiters can only edit their own orders' }
     }
 
-    const idx = order.items.findIndex(i => i.id === orderItemId)
-    if (idx === -1) { itemNotFound = true; return orders }
+    const items = Array.isArray(order.items) ? [...(order.items as any[])] : []
+    const idx = items.findIndex((i: any) => i.id === orderItemId)
+    if (idx === -1) return { error: 'Order item not found' }
 
-    order.items.splice(idx, 1)
-    order.updatedAt = now
+    items.splice(idx, 1)
 
-    return orders
-  })
+    await db
+      .update(posOrders)
+      .set({
+        items,
+        updatedAt: new Date(),
+      })
+      .where(eq(posOrders.id, orderId))
 
-  if (notFound) return { error: 'Order not found' }
-  if (branchDenied) return { error: 'BranchAccessDenied' }
-  if (notOpen) return { error: 'Order is not open' }
-  if (waiterForbidden) return { error: 'Forbidden: waiters can only edit their own orders' }
-  if (itemNotFound) return { error: 'Order item not found' }
-  if (!success) return { error: 'Transaction failed' }
-
-  revalidatePath('/management/pos')
-  return { success: true }
+    revalidatePath('/management/pos')
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to remove order item:', error)
+    return { error: 'Transaction failed' }
+  }
 }
 
 export async function updateOrderNote(orderId: string, note: string) {
@@ -572,35 +799,35 @@ export async function updateOrderNote(orderId: string, note: string) {
     return { error: 'BranchAccessDenied' }
   }
 
-  let notFound = false
-  let branchDenied = false
-  let notOpen = false
-  let waiterForbidden = false
-  const now = nowISO()
+  try {
+    const orders = await db
+      .select()
+      .from(posOrders)
+      .where(eq(posOrders.id, orderId))
+      .limit(1)
 
-  const success = await withTransaction<PosOrder>(DB_FILES.POS_ORDERS, (orders) => {
-    const order = orders.find(o => o.id === orderId)
-    if (!order) { notFound = true; return orders }
-    if (enforcedBranchId && order.branchId !== enforcedBranchId) { branchDenied = true; return orders }
-    if (order.status !== 'open') { notOpen = true; return orders }
+    if (orders.length === 0) return { error: 'Order not found' }
+    const order = orders[0]
+    if (enforcedBranchId && order.branchId !== enforcedBranchId) return { error: 'BranchAccessDenied' }
+    if (order.status !== 'open') return { error: 'Order is not open' }
     if (!isWaiterOwnOrder(session.role, order.openedBy, session.userId)) {
-      waiterForbidden = true; return orders
+      return { error: 'Forbidden: waiters can only edit their own orders' }
     }
 
-    order.note = note || undefined
-    order.updatedAt = now
+    await db
+      .update(posOrders)
+      .set({
+        note: note || null,
+        updatedAt: new Date(),
+      })
+      .where(eq(posOrders.id, orderId))
 
-    return orders
-  })
-
-  if (notFound) return { error: 'Order not found' }
-  if (branchDenied) return { error: 'BranchAccessDenied' }
-  if (notOpen) return { error: 'Order is not open' }
-  if (waiterForbidden) return { error: 'Forbidden: waiters can only edit their own orders' }
-  if (!success) return { error: 'Transaction failed' }
-
-  revalidatePath('/management/pos')
-  return { success: true }
+    revalidatePath('/management/pos')
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to update order note:', error)
+    return { error: 'Transaction failed' }
+  }
 }
 
 // ─── KOT ──────────────────────────────────────────────────────────
@@ -617,86 +844,115 @@ export async function fireKot(orderId: string) {
     return { error: 'BranchAccessDenied' }
   }
 
-  // Load order
-  const allOrders = await readJSON<PosOrder>(DB_FILES.POS_ORDERS).catch(() => [])
-  const order = allOrders.find(o => o.id === orderId)
-  if (!order) return { error: 'Order not found' }
-  if (enforcedBranchId && order.branchId !== enforcedBranchId) return { error: 'BranchAccessDenied' }
-  if (order.status !== 'open') return { error: 'Order is not open' }
-  if (!isWaiterOwnOrder(session.role, order.openedBy, session.userId)) {
-    return { error: 'Forbidden: waiters can only edit their own orders' }
-  }
-  if (order.items.length === 0) return { error: 'Order has no items' }
+  try {
+    let resultKotId = ''
+    let resultKotNumber = 0
+    let resultItemCount = 0
 
-  // Load prior KOTs for delta computation
-  const allKots = await readJSON<PosKot>(DB_FILES.POS_KOTS).catch(() => [])
-  const priorKots = allKots.filter(k => k.orderId === orderId)
+    const txResult = await withDbTransaction(async (tx) => {
+      // 1. Load order
+      const orders = await tx
+        .select()
+        .from(posOrders)
+        .where(eq(posOrders.id, orderId))
+        .limit(1)
 
-  // Compute delta per item
-  const kotItems: KotItem[] = []
-  for (const item of order.items) {
-    const priorTotal = priorKots.reduce((sum, kot) => {
-      return sum + kot.items
-        .filter(ki =>
-          ki.menuItemId === item.menuItemId &&
-          (ki.variantId ?? undefined) === (item.variantId ?? undefined)
-        )
-        .reduce((s, ki) => s + ki.quantity, 0)
-    }, 0)
+      if (orders.length === 0) return { error: 'Order not found' }
+      const order = orders[0]
+      if (enforcedBranchId && order.branchId !== enforcedBranchId) return { error: 'BranchAccessDenied' }
+      if (order.status !== 'open') return { error: 'Order is not open' }
+      if (!isWaiterOwnOrder(session.role, order.openedBy, session.userId)) {
+        return { error: 'Forbidden: waiters can only edit their own orders' }
+      }
 
-    const delta = item.quantity - priorTotal
-    if (delta > 0) {
-      kotItems.push({
-        menuItemId: item.menuItemId,
-        variantId: item.variantId,
-        nameSnapshot: item.nameSnapshot,
-        quantity: delta,
-        note: item.note,
+      const orderItems = (order.items as any[]) || []
+      if (orderItems.length === 0) return { error: 'Order has no items' }
+
+      // 2. Load prior KOTs for delta computation
+      const priorKots = await tx
+        .select()
+        .from(posKots)
+        .where(eq(posKots.orderId, orderId))
+
+      // 3. Compute delta per item
+      const kotItems: KotItem[] = []
+      for (const item of orderItems) {
+        const priorTotal = priorKots.reduce((sum, kot) => {
+          const kItems = (kot.items as any[]) || []
+          return (
+            sum +
+            kItems
+              .filter(
+                (ki: any) =>
+                  ki.menuItemId === item.menuItemId &&
+                  (ki.variantId ?? undefined) === (item.variantId ?? undefined) &&
+                  Boolean(ki.isParcel) === Boolean(item.isParcel)
+              )
+              .reduce((s: number, ki: any) => s + ki.quantity, 0)
+          )
+        }, 0)
+
+        const delta = item.quantity - priorTotal
+        if (delta > 0) {
+          kotItems.push({
+            menuItemId: item.menuItemId,
+            variantId: item.variantId,
+            nameSnapshot: item.nameSnapshot,
+            quantity: delta,
+            note: item.note,
+            isParcel: Boolean(item.isParcel),
+          })
+        }
+      }
+
+      if (kotItems.length === 0) return { error: 'No new items to send to kitchen' }
+
+      const newKotNumber = priorKots.length + 1
+      const now = new Date()
+      const kotId = randomUUID()
+
+      await tx.insert(posKots).values({
+        id: kotId,
+        orderId,
+        branchId: order.branchId,
+        kotNumber: newKotNumber,
+        items: kotItems,
+        status: 'pending',
+        firedBy: session.userId,
+        firedAt: now,
+        updatedAt: now,
       })
-    }
-  }
 
-  if (kotItems.length === 0) return { error: 'No new items to send to kitchen' }
+      await tx
+        .update(posOrders)
+        .set({
+          kotCount: newKotNumber,
+          updatedAt: now,
+        })
+        .where(eq(posOrders.id, orderId))
 
-  // KOT number: derived from actual prior KOTs count (authoritative)
-  const newKotNumber = priorKots.length + 1
-  const now = nowISO()
-  const kotId = `pkot_${randomUUID()}`
-
-  // Persist KOT
-  const kotSuccess = await withTransaction<PosKot>(DB_FILES.POS_KOTS, (kots) => {
-    kots.push({
-      id: kotId,
-      orderId,
-      branchId: order.branchId,
-      kotNumber: newKotNumber,
-      items: kotItems,
-      status: 'pending',
-      firedBy: session.userId,
-      firedAt: now,
-      updatedAt: now,
+      resultKotId = kotId
+      resultKotNumber = newKotNumber
+      resultItemCount = kotItems.length
+      return { success: true }
     })
-    return kots
-  })
 
-  if (!kotSuccess) return { error: 'Transaction failed' }
-
-  // Sync order.kotCount cache (warn on failure but don't fail the action)
-  const orderUpdateSuccess = await withTransaction<PosOrder>(DB_FILES.POS_ORDERS, (orders) => {
-    const o = orders.find(o => o.id === orderId)
-    if (o) {
-      o.kotCount = newKotNumber
-      o.updatedAt = now
+    if (txResult && 'error' in txResult) {
+      return txResult
     }
-    return orders
-  })
-  if (!orderUpdateSuccess) {
-    console.warn(`[POS] Failed to sync order.kotCount for ${orderId}, but KOT ${kotId} was persisted successfully.`)
-  }
 
-  await logAction('FIRE_KOT', 'POS_KOT', JSON.stringify({ orderId, kotNumber: newKotNumber, itemCount: kotItems.length }), kotId)
-  revalidatePath('/management/pos')
-  return { success: true }
+    await logAction(
+      'FIRE_KOT',
+      'POS_KOT',
+      JSON.stringify({ orderId, kotNumber: resultKotNumber, itemCount: resultItemCount }),
+      resultKotId
+    )
+    revalidatePath('/management/pos')
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to fire KOT:', error)
+    return { error: 'Transaction failed' }
+  }
 }
 
 // ─── Bill Generation ──────────────────────────────────────────────
@@ -709,13 +965,17 @@ export async function generateBill(prevState: unknown, formData: FormData) {
   const orderId = formData.get('orderId') as string
   const discount = Number(formData.get('discount')) || 0
   const gst = Number(formData.get('gst')) || 0
+  const parcelCharges = Number(formData.get('parcelCharges')) || 0
+  const acCharges = Number(formData.get('acCharges')) || 0
   const confirmed = formData.get('confirmed') === 'true'
 
   const schema = z.object({
     discount: z.number().int().min(0),
     gst: z.number().int().min(0),
+    parcelCharges: z.number().int().min(0).optional(),
+    acCharges: z.number().int().min(0).optional(),
   })
-  const parsed = schema.safeParse({ discount, gst })
+  const parsed = schema.safeParse({ discount, gst, parcelCharges, acCharges })
   if (!parsed.success) return { error: parsed.error.issues[0].message }
 
   let enforcedBranchId: string
@@ -725,56 +985,84 @@ export async function generateBill(prevState: unknown, formData: FormData) {
     return { error: 'BranchAccessDenied' }
   }
 
-  let notFound = false
-  let branchDenied = false
-  let alreadyBilled = false
-  let notOpen = false
-  let noItems = false
-  let discountExceedsSubtotal = false
-  let zeroBillUnconfirmed = false
-  let computedSubtotal = 0
-  let computedTotal = 0
-  const now = nowISO()
+  try {
+    let computedSubtotal = 0
+    let computedTotal = 0
 
-  const success = await withTransaction<PosOrder>(DB_FILES.POS_ORDERS, (orders) => {
-    const order = orders.find(o => o.id === orderId)
-    if (!order) { notFound = true; return orders }
-    if (enforcedBranchId && order.branchId !== enforcedBranchId) { branchDenied = true; return orders }
-    if (order.status === 'billed') { alreadyBilled = true; return orders }
-    if (order.status !== 'open') { notOpen = true; return orders }
-    if (order.items.length === 0) { noItems = true; return orders }
+    const txResult = await withDbTransaction(async (tx) => {
+      const orders = await tx
+        .select()
+        .from(posOrders)
+        .where(eq(posOrders.id, orderId))
+        .limit(1)
 
-    const subtotal = order.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0)
-    if (discount > subtotal) { discountExceedsSubtotal = true; return orders }
+      if (orders.length === 0) return { error: 'Order not found' }
+      const order = orders[0]
+      if (enforcedBranchId && order.branchId !== enforcedBranchId) return { error: 'BranchAccessDenied' }
+      if (order.status === 'billed') return { success: true } // idempotent
+      if (order.status !== 'open') return { error: 'Order is not open' }
 
-    const totalPayable = subtotal - discount + gst
-    if (totalPayable === 0 && !confirmed) {
-      zeroBillUnconfirmed = true
-      return orders
+      const items = (order.items as any[]) || []
+      if (items.length === 0) return { error: 'Order has no items' }
+
+      const subtotal = items.reduce((s: number, i: any) => s + i.quantity * i.unitPrice, 0)
+      if (discount > subtotal) return { error: 'Discount cannot exceed the subtotal' }
+
+      const totalPayable = Math.max(0, subtotal - discount + parcelCharges + acCharges + gst)
+      if (totalPayable === 0 && !confirmed) {
+        return { error: 'ZERO_BILL_CONFIRM_REQUIRED' }
+      }
+
+      computedSubtotal = subtotal
+      computedTotal = totalPayable
+      const now = new Date()
+
+      const bill: BillSnapshot = {
+        subtotal,
+        discount,
+        gst,
+        parcelCharges,
+        acCharges,
+        totalPayable,
+        generatedAt: now.toISOString(),
+      }
+
+      await tx
+        .update(posOrders)
+        .set({
+          bill,
+          status: 'billed',
+          updatedAt: now,
+        })
+        .where(eq(posOrders.id, orderId))
+
+      return { success: true }
+    })
+
+    if (txResult && 'error' in txResult) {
+      return txResult
     }
 
-    computedSubtotal = subtotal
-    computedTotal = totalPayable
-
-    order.bill = { subtotal, discount, gst, totalPayable, generatedAt: now }
-    order.status = 'billed'
-    order.updatedAt = now
-
-    return orders
-  })
-
-  if (notFound) return { error: 'Order not found' }
-  if (branchDenied) return { error: 'BranchAccessDenied' }
-  if (alreadyBilled) return { success: true } // no-op: already billed
-  if (notOpen) return { error: 'Order is not open' }
-  if (noItems) return { error: 'Order has no items' }
-  if (discountExceedsSubtotal) return { error: 'Discount cannot exceed the subtotal' }
-  if (zeroBillUnconfirmed) return { error: 'ZERO_BILL_CONFIRM_REQUIRED' }
-  if (!success) return { error: 'Transaction failed' }
-
-  await logAction('GENERATE_BILL', 'POS_ORDER', JSON.stringify({ orderId, subtotal: computedSubtotal, discount, gst, totalPayable: computedTotal }), orderId)
-  revalidatePath('/management/pos')
-  return { success: true }
+    await logAction(
+      'GENERATE_BILL',
+      'POS_ORDER',
+      JSON.stringify({
+        orderId,
+        subtotal: computedSubtotal,
+        discount,
+        gst,
+        parcelCharges,
+        acCharges,
+        totalPayable: computedTotal,
+      }),
+      orderId
+    )
+    revalidatePath('/management/pos')
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to generate bill:', error)
+    return { error: 'Transaction failed' }
+  }
 }
 
 // ─── Reopen Order ─────────────────────────────────────────────────
@@ -791,40 +1079,52 @@ export async function reopenOrder(orderId: string) {
     return { error: 'BranchAccessDenied' }
   }
 
-  let notFound = false
-  let branchDenied = false
-  let isPaid = false
-  let wrongStatus = false
-  const now = nowISO()
+  try {
+    const txResult = await withDbTransaction(async (tx) => {
+      const orders = await tx
+        .select()
+        .from(posOrders)
+        .where(eq(posOrders.id, orderId))
+        .limit(1)
 
-  const success = await withTransaction<PosOrder>(DB_FILES.POS_ORDERS, (orders) => {
-    const order = orders.find(o => o.id === orderId)
-    if (!order) { notFound = true; return orders }
-    if (enforcedBranchId && order.branchId !== enforcedBranchId) { branchDenied = true; return orders }
-    if (order.status === 'paid') { isPaid = true; return orders }
-    if (order.status !== 'billed') { wrongStatus = true; return orders }
+      if (orders.length === 0) return { error: 'Order not found' }
+      const order = orders[0]
+      if (enforcedBranchId && order.branchId !== enforcedBranchId) return { error: 'BranchAccessDenied' }
+      if (order.status === 'paid') return { error: 'A paid order cannot be reopened' }
+      if (order.status !== 'billed') return { error: 'Only billed orders can be reopened' }
 
-    order.status = 'open'
-    order.bill = undefined
-    order.updatedAt = now
+      const now = new Date()
+      await tx
+        .update(posOrders)
+        .set({
+          status: 'open',
+          bill: null,
+          updatedAt: now,
+        })
+        .where(eq(posOrders.id, orderId))
 
-    return orders
-  })
+      return { success: true }
+    })
 
-  if (notFound) return { error: 'Order not found' }
-  if (branchDenied) return { error: 'BranchAccessDenied' }
-  if (isPaid) return { error: 'A paid order cannot be reopened' }
-  if (wrongStatus) return { error: 'Only billed orders can be reopened' }
-  if (!success) return { error: 'Transaction failed' }
+    if (txResult && 'error' in txResult) {
+      return txResult
+    }
 
-  await logAction('REOPEN_POS_ORDER', 'POS_ORDER', JSON.stringify({ orderId }), orderId)
-  revalidatePath('/management/pos')
-  return { success: true }
+    await logAction('REOPEN_POS_ORDER', 'POS_ORDER', JSON.stringify({ orderId }), orderId)
+    revalidatePath('/management/pos')
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to reopen order:', error)
+    return { error: 'Transaction failed' }
+  }
 }
 
 // ─── Payment ──────────────────────────────────────────────────────
 
-export async function recordPayment(prevState: unknown, formData: FormData) {
+export async function recordPayment(
+  prevState: unknown,
+  formData: FormData
+): Promise<{ success?: boolean; changeDue?: number; error?: string }> {
   const session = await getSession()
   if (!session) return { error: 'Unauthorized' }
   if (!canRecordPayment(session.role)) return { error: 'Forbidden' }
@@ -851,50 +1151,84 @@ export async function recordPayment(prevState: unknown, formData: FormData) {
     return { error: 'BranchAccessDenied' }
   }
 
-  let notFound = false
-  let branchDenied = false
-  let notBilled = false
-  let noBill = false
-  let mismatch = false
-  let cashAmountStored = 0
-  const now = nowISO()
+  try {
+    let cashAmountStored = 0
 
-  const success = await withTransaction<PosOrder>(DB_FILES.POS_ORDERS, (orders) => {
-    const order = orders.find(o => o.id === orderId)
-    if (!order) { notFound = true; return orders }
-    if (enforcedBranchId && order.branchId !== enforcedBranchId) { branchDenied = true; return orders }
-    if (order.status !== 'billed') { notBilled = true; return orders }
-    if (!order.bill) { noBill = true; return orders }
+    const txResult = await withDbTransaction(async (tx) => {
+      const orders = await tx
+        .select()
+        .from(posOrders)
+        .where(eq(posOrders.id, orderId))
+        .limit(1)
 
-    const totalPayable = order.bill.totalPayable
+      if (orders.length === 0) return { error: 'Order not found' }
+      const order = orders[0]
+      if (enforcedBranchId && order.branchId !== enforcedBranchId) return { error: 'BranchAccessDenied' }
+      if (order.status !== 'billed') return { error: 'Order must be billed before payment' }
+      if (!order.bill) return { error: 'Order has no bill' }
 
-    // Enforce method-amount consistency
-    if (method === 'cash') { cashAmount = totalPayable; upiAmount = 0 }
-    if (method === 'upi') { upiAmount = totalPayable; cashAmount = 0 }
+      const totalPayable = (order.bill as any).totalPayable
 
-    if (cashAmount + upiAmount !== totalPayable) { mismatch = true; return orders }
-    if (totalPayable > 0 && cashAmount === 0 && upiAmount === 0) { mismatch = true; return orders }
+      // Enforce method-amount consistency
+      if (method === 'cash') {
+        cashAmount = totalPayable
+        upiAmount = 0
+      }
+      if (method === 'upi') {
+        upiAmount = totalPayable
+        cashAmount = 0
+      }
 
-    cashAmountStored = cashAmount
-    order.payment = { method, cashAmount: cashAmountStored, upiAmount, paidAt: now }
-    order.status = 'paid'
-    order.updatedAt = now
+      if (cashAmount + upiAmount !== totalPayable) {
+        return { error: 'Payment amounts do not balance with total payable' }
+      }
+      if (totalPayable > 0 && cashAmount === 0 && upiAmount === 0) {
+        return { error: 'Payment amounts do not balance with total payable' }
+      }
 
-    return orders
-  })
+      cashAmountStored = cashAmount
+      const now = new Date()
+      const payment = { method, cashAmount: cashAmountStored, upiAmount, paidAt: now.toISOString() }
 
-  if (notFound) return { error: 'Order not found' }
-  if (branchDenied) return { error: 'BranchAccessDenied' }
-  if (notBilled) return { error: 'Order must be billed before payment' }
-  if (noBill) return { error: 'Order has no bill' }
-  if (mismatch) return { error: 'Payment amounts do not balance with total payable' }
-  if (!success) return { error: 'Transaction failed' }
+      await tx
+        .update(posOrders)
+        .set({
+          payment,
+          status: 'paid',
+          updatedAt: now,
+        })
+        .where(eq(posOrders.id, orderId))
 
-  const changeDue = (method === 'cash' || method === 'split') ? Math.max(0, cashTendered - cashAmountStored) : 0
+      return { success: true }
+    })
 
-  await logAction('RECORD_PAYMENT', 'POS_ORDER', JSON.stringify({ orderId, method, cashAmount: cashAmountStored, upiAmount, totalPayable: cashAmountStored + upiAmount }), orderId)
-  revalidatePath('/management/pos')
-  return { success: true, changeDue }
+    if (txResult && 'error' in txResult) {
+      return txResult
+    }
+
+    const changeDue =
+      method === 'cash' || method === 'split'
+        ? Math.max(0, cashTendered - cashAmountStored)
+        : 0
+
+    await logAction(
+      'RECORD_PAYMENT',
+      'POS_ORDER',
+      JSON.stringify({
+        orderId,
+        method,
+        cashAmount: cashAmountStored,
+        upiAmount,
+        totalPayable: cashAmountStored + upiAmount,
+      }),
+      orderId
+    )
+    revalidatePath('/management/pos')
+    return { success: true, changeDue }
+  } catch (error) {
+    console.error('Failed to record payment:', error)
+    return { error: 'Transaction failed' }
+  }
 }
 
 // ─── Void Order ───────────────────────────────────────────────────
@@ -916,52 +1250,76 @@ export async function voidOrder(prevState: unknown, formData: FormData) {
     return { error: 'BranchAccessDenied' }
   }
 
-  let notFound = false
-  let branchDenied = false
-  let forbidden = false
-  let crossDay = false
-  let wrongStatus = false
-  let previousStatus: OrderStatus | undefined
-  let orderBranchId: string | undefined
-  const now = nowISO()
+  try {
+    let orderBranchId: string | undefined
+    let previousStatus: OrderStatus | undefined
 
-  const success = await withTransaction<PosOrder>(DB_FILES.POS_ORDERS, (orders) => {
-    const order = orders.find(o => o.id === orderId)
-    if (!order) { notFound = true; return orders }
-    if (enforcedBranchId && order.branchId !== enforcedBranchId) { branchDenied = true; return orders }
+    const txResult = await withDbTransaction(async (tx) => {
+      const orders = await tx
+        .select()
+        .from(posOrders)
+        .where(eq(posOrders.id, orderId))
+        .limit(1)
 
-    orderBranchId = order.branchId
-    previousStatus = order.status
+      if (orders.length === 0) return { error: 'Order not found' }
+      const order = orders[0]
+      if (enforcedBranchId && order.branchId !== enforcedBranchId) return { error: 'BranchAccessDenied' }
 
-    if (order.status === 'paid') {
-      if (!session.isGlobalAdmin) { forbidden = true; return orders }
-      const today = todayIST()
-      // Convert paidAt to IST date
-      const paidDate = new Date(order.payment!.paidAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-      if (paidDate !== today) { crossDay = true; return orders }
-    } else if (order.status === 'open') {
-      if (!canVoidOrder(session.role, 'open')) { forbidden = true; return orders }
-    } else {
-      wrongStatus = true; return orders
+      orderBranchId = order.branchId
+      previousStatus = order.status as OrderStatus
+
+      if (order.status === 'paid') {
+        if (!session.isGlobalAdmin) return { error: 'Forbidden' }
+        const today = todayIST()
+        const paidAt = (order.payment as any)?.paidAt
+        const paidDate = paidAt
+          ? new Date(paidAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+          : null
+        if (paidDate !== today) {
+          return { error: 'Order can only be voided on the day it was paid' }
+        }
+      } else if (order.status === 'open') {
+        if (!canVoidOrder(session.role, 'open')) return { error: 'Forbidden' }
+      } else {
+        return { error: 'Only open or paid orders can be voided' }
+      }
+
+      const now = new Date()
+      const voidInfo = { reason: reason!, voidedBy: session.userId, voidedAt: now.toISOString() }
+
+      await tx
+        .update(posOrders)
+        .set({
+          void: voidInfo,
+          status: 'voided',
+          updatedAt: now,
+        })
+        .where(eq(posOrders.id, orderId))
+
+      return { success: true }
+    })
+
+    if (txResult && 'error' in txResult) {
+      return txResult
     }
 
-    order.void = { reason: reason!, voidedBy: session.userId, voidedAt: now }
-    order.status = 'voided'
-    order.updatedAt = now
-
-    return orders
-  })
-
-  if (notFound) return { error: 'Order not found' }
-  if (branchDenied) return { error: 'BranchAccessDenied' }
-  if (forbidden) return { error: 'Forbidden' }
-  if (crossDay) return { error: 'Order can only be voided on the day it was paid' }
-  if (wrongStatus) return { error: 'Only open or paid orders can be voided' }
-  if (!success) return { error: 'Transaction failed' }
-
-  await logAction('VOID_POS_ORDER', 'POS_ORDER', JSON.stringify({ orderId, reason, previousStatus, branchId: orderBranchId || enforcedBranchId }), orderId)
-  revalidatePath('/management/pos')
-  return { success: true }
+    await logAction(
+      'VOID_POS_ORDER',
+      'POS_ORDER',
+      JSON.stringify({
+        orderId,
+        reason,
+        previousStatus,
+        branchId: orderBranchId || enforcedBranchId,
+      }),
+      orderId
+    )
+    revalidatePath('/management/pos')
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to void order:', error)
+    return { error: 'Transaction failed' }
+  }
 }
 
 // ─── KOT Status Advancement ──────────────────────────────────────
@@ -980,35 +1338,38 @@ export async function advanceKotStatus(kotId: string) {
     return { error: 'BranchAccessDenied' }
   }
 
-  let notFound = false
-  let branchDenied = false
-  let invalidTransition = false
-  let alreadyServed = false
-  const now = nowISO()
+  try {
+    const kots = await db
+      .select()
+      .from(posKots)
+      .where(eq(posKots.id, kotId))
+      .limit(1)
 
-  const success = await withTransaction<PosKot>(DB_FILES.POS_KOTS, (kots) => {
-    const kot = kots.find(k => k.id === kotId)
-    if (!kot) { notFound = true; return kots }
-    if (enforcedBranchId && kot.branchId !== enforcedBranchId) { branchDenied = true; return kots }
+    if (kots.length === 0) return { error: 'KOT not found' }
+    const kot = kots[0]
+    if (enforcedBranchId && kot.branchId !== enforcedBranchId) return { error: 'BranchAccessDenied' }
 
-    const currentIdx = KOT_SEQUENCE.indexOf(kot.status as typeof KOT_SEQUENCE[number])
-    if (currentIdx === -1) { invalidTransition = true; return kots }
-    if (currentIdx === KOT_SEQUENCE.length - 1) { alreadyServed = true; return kots }
+    const currentIdx = KOT_SEQUENCE.indexOf(kot.status as (typeof KOT_SEQUENCE)[number])
+    if (currentIdx === -1) return { error: 'Invalid KOT status transition' }
+    if (currentIdx === KOT_SEQUENCE.length - 1) return { error: 'KOT is already served' }
 
-    kot.status = KOT_SEQUENCE[currentIdx + 1]
-    kot.updatedAt = now
+    const nextStatus = KOT_SEQUENCE[currentIdx + 1]
+    const now = new Date()
 
-    return kots
-  })
+    await db
+      .update(posKots)
+      .set({
+        status: nextStatus,
+        updatedAt: now,
+      })
+      .where(eq(posKots.id, kotId))
 
-  if (notFound) return { error: 'KOT not found' }
-  if (branchDenied) return { error: 'BranchAccessDenied' }
-  if (alreadyServed) return { error: 'KOT is already served' }
-  if (invalidTransition) return { error: 'Invalid KOT status transition' }
-  if (!success) return { error: 'Transaction failed' }
-
-  revalidatePath('/management/pos')
-  return { success: true }
+    revalidatePath('/management/pos')
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to advance KOT status:', error)
+    return { error: 'Transaction failed' }
+  }
 }
 
 // ─── Read Actions ─────────────────────────────────────────────────
@@ -1025,56 +1386,85 @@ export async function getKitchenKots(branchId: string) {
     return { error: 'BranchAccessDenied' }
   }
 
-  const today = todayIST()
-  const allOrders = await readJSON<PosOrder>(DB_FILES.POS_ORDERS).catch(() => [])
-  const todayOrders = allOrders.filter(o => o.branchId === enforcedBranchId && o.date === today)
+  try {
+    const today = todayIST()
+    const todayOrders = await db
+      .select({
+        id: posOrders.id,
+        tableId: posOrders.tableId,
+        takeawayNumber: posOrders.takeawayNumber,
+        orderType: posOrders.orderType,
+      })
+      .from(posOrders)
+      .where(and(eq(posOrders.branchId, enforcedBranchId), eq(posOrders.date, today)))
 
-  // Build order map for resolving identifiers
-  const orderMap = new Map<string, { tableId?: string; takeawayNumber?: string; orderType: OrderType }>()
-  for (const o of todayOrders) {
-    orderMap.set(o.id, { tableId: o.tableId, takeawayNumber: o.takeawayNumber, orderType: o.orderType })
-  }
-
-  // Load tables for name resolution
-  const allTables = await readJSON<PosTable>(DB_FILES.POS_TABLES).catch(() => [])
-  const tableMap = new Map<string, string>()
-  for (const t of allTables) {
-    tableMap.set(t.id, t.name)
-  }
-
-  const orderIds = new Set(todayOrders.map(o => o.id))
-  const allKots = await readJSON<PosKot>(DB_FILES.POS_KOTS).catch(() => [])
-  const activeKots = allKots
-    .filter(k =>
-      k.branchId === enforcedBranchId &&
-      orderIds.has(k.orderId) &&
-      ['pending', 'preparing', 'ready'].includes(k.status)
-    )
-    .sort((a, b) => a.firedAt.localeCompare(b.firedAt))
-
-  // Strip financial data and resolve order identifiers
-  const kotsWithInfo = activeKots.map(k => {
-    const orderInfo = orderMap.get(k.orderId)
-    const tableName = orderInfo?.tableId ? tableMap.get(orderInfo.tableId) : undefined
-    const orderIdentifier = tableName || orderInfo?.takeawayNumber || 'Unknown'
-
-    return {
-      id: k.id,
-      orderId: k.orderId,
-      kotNumber: k.kotNumber,
-      items: k.items.map(i => ({
-        nameSnapshot: i.nameSnapshot,
-        quantity: i.quantity,
-        note: i.note,
-      })),
-      status: k.status,
-      firedAt: k.firedAt,
-      orderIdentifier,
-      orderType: orderInfo?.orderType,
+    // Build order map for resolving identifiers
+    const orderMap = new Map<string, { tableId?: string; takeawayNumber?: string; orderType: OrderType }>()
+    for (const o of todayOrders) {
+      orderMap.set(o.id, {
+        tableId: o.tableId ?? undefined,
+        takeawayNumber: o.takeawayNumber ?? undefined,
+        orderType: o.orderType as OrderType,
+      })
     }
-  })
 
-  return { kots: kotsWithInfo }
+    // Load tables for name resolution
+    const allTables = await db
+      .select({ id: posTables.id, name: posTables.name })
+      .from(posTables)
+      .where(eq(posTables.branchId, enforcedBranchId))
+
+    const tableMap = new Map<string, string>()
+    for (const t of allTables) {
+      tableMap.set(t.id, t.name)
+    }
+
+    const orderIds = todayOrders.map((o) => o.id)
+    if (orderIds.length === 0) {
+      return { kots: [] }
+    }
+
+    const allKots = await db
+      .select()
+      .from(posKots)
+      .where(
+        and(
+          eq(posKots.branchId, enforcedBranchId),
+          inArray(posKots.orderId, orderIds),
+          inArray(posKots.status, ['pending', 'preparing', 'ready'])
+        )
+      )
+      .orderBy(asc(posKots.firedAt))
+
+    // Strip financial data and resolve order identifiers
+    const kotsWithInfo = allKots.map((k) => {
+      const orderInfo = orderMap.get(k.orderId)
+      const tableName = orderInfo?.tableId ? tableMap.get(orderInfo.tableId) : undefined
+      const orderIdentifier = tableName || orderInfo?.takeawayNumber || 'Unknown'
+      const items = (k.items as any[]) || []
+
+      return {
+        id: k.id,
+        orderId: k.orderId,
+        kotNumber: k.kotNumber,
+        items: items.map((i: any) => ({
+          nameSnapshot: i.nameSnapshot,
+          quantity: i.quantity,
+          note: i.note,
+          isParcel: Boolean(i.isParcel),
+        })),
+        status: k.status,
+        firedAt: k.firedAt instanceof Date ? k.firedAt.toISOString() : String(k.firedAt || ''),
+        orderIdentifier,
+        orderType: orderInfo?.orderType,
+      }
+    })
+
+    return { kots: kotsWithInfo }
+  } catch (error) {
+    console.error('Failed to get kitchen KOTs:', error)
+    return { error: 'Database operation failed' }
+  }
 }
 
 export async function getPosOrderHistory(branchId: string, fromDate: string, toDate: string) {
@@ -1098,27 +1488,56 @@ export async function getPosOrderHistory(branchId: string, fromDate: string, toD
     enforcedBranchId = session.branchId as string
   }
 
-  const allOrders = await readJSON<PosOrder>(DB_FILES.POS_ORDERS).catch(() => [])
-  const orders = allOrders.filter(o =>
-    o.branchId === enforcedBranchId &&
-    o.date >= fromDate &&
-    o.date <= toDate
-  )
+  try {
+    const ordersRaw = await db
+      .select()
+      .from(posOrders)
+      .where(
+        and(
+          eq(posOrders.branchId, enforcedBranchId),
+          gte(posOrders.date, fromDate),
+          lte(posOrders.date, toDate)
+        )
+      )
 
-  const paidOrders = orders.filter(o => o.status === 'paid')
-  const voidedOrders = orders.filter(o => o.status === 'voided')
+    const orders: PosOrder[] = (ordersRaw as any[]).map((o) => ({
+      id: o.id,
+      branchId: o.branchId,
+      tableId: o.tableId ?? undefined,
+      takeawayNumber: o.takeawayNumber ?? undefined,
+      orderType: o.orderType as OrderType,
+      covers: o.covers ?? undefined,
+      status: o.status as OrderStatus,
+      items: (o.items as any) || [],
+      note: o.note ?? undefined,
+      kotCount: o.kotCount ?? 0,
+      bill: o.bill ?? undefined,
+      payment: o.payment ?? undefined,
+      void: o.void ?? undefined,
+      date: o.date,
+      openedBy: o.openedBy,
+      createdAt: o.createdAt instanceof Date ? o.createdAt.toISOString() : String(o.createdAt || ''),
+      updatedAt: o.updatedAt instanceof Date ? o.updatedAt.toISOString() : String(o.updatedAt || ''),
+    }))
 
-  const totalRevenue = paidOrders.reduce((s, o) => s + (o.bill?.totalPayable ?? 0), 0)
-  const billCount = paidOrders.length
-  const summary = {
-    totalRevenue,
-    billCount,
-    avgOrderValue: billCount > 0 ? Math.round(totalRevenue / billCount) : 0,
-    totalVoids: voidedOrders.length,
-    totalDiscounts: paidOrders.reduce((s, o) => s + (o.bill?.discount ?? 0), 0),
+    const paidOrders = orders.filter((o) => o.status === 'paid')
+    const voidedOrders = orders.filter((o) => o.status === 'voided')
+
+    const totalRevenue = paidOrders.reduce((s, o) => s + (o.bill?.totalPayable ?? 0), 0)
+    const billCount = paidOrders.length
+    const summary = {
+      totalRevenue,
+      billCount,
+      avgOrderValue: billCount > 0 ? Math.round(totalRevenue / billCount) : 0,
+      totalVoids: voidedOrders.length,
+      totalDiscounts: paidOrders.reduce((s, o) => s + (o.bill?.discount ?? 0), 0),
+    }
+
+    return { orders, summary }
+  } catch (error) {
+    console.error('Failed to get POS order history:', error)
+    return { error: 'Database operation failed' }
   }
-
-  return { orders, summary }
 }
 
 export async function getDailySummary(branchId: string, date: string) {
@@ -1133,18 +1552,45 @@ export async function getDailySummary(branchId: string, date: string) {
     return { error: 'BranchAccessDenied' }
   }
 
-  const allOrders = await readJSON<PosOrder>(DB_FILES.POS_ORDERS).catch(() => [])
-  const orders = allOrders.filter(o => o.branchId === enforcedBranchId && o.date === date)
+  try {
+    const ordersRaw = await db
+      .select()
+      .from(posOrders)
+      .where(and(eq(posOrders.branchId, enforcedBranchId), eq(posOrders.date, date)))
 
-  const eodData = computePosEodData(orders)
-  const paidOrders = orders.filter(o => o.status === 'paid')
+    const orders: PosOrder[] = (ordersRaw as any[]).map((o) => ({
+      id: o.id,
+      branchId: o.branchId,
+      tableId: o.tableId ?? undefined,
+      takeawayNumber: o.takeawayNumber ?? undefined,
+      orderType: o.orderType as OrderType,
+      covers: o.covers ?? undefined,
+      status: o.status as OrderStatus,
+      items: (o.items as any) || [],
+      note: o.note ?? undefined,
+      kotCount: o.kotCount ?? 0,
+      bill: o.bill ?? undefined,
+      payment: o.payment ?? undefined,
+      void: o.void ?? undefined,
+      date: o.date,
+      openedBy: o.openedBy,
+      createdAt: o.createdAt instanceof Date ? o.createdAt.toISOString() : String(o.createdAt || ''),
+      updatedAt: o.updatedAt instanceof Date ? o.updatedAt.toISOString() : String(o.updatedAt || ''),
+    }))
 
-  return {
-    ...eodData,
-    totalCash: paidOrders.reduce((s, o) => s + (o.payment?.cashAmount ?? 0), 0),
-    totalUpi: paidOrders.reduce((s, o) => s + (o.payment?.upiAmount ?? 0), 0),
-    dineInBillCount: paidOrders.filter(o => o.orderType === 'dine-in').length,
-    takeawayBillCount: paidOrders.filter(o => o.orderType === 'takeaway').length,
+    const eodData = computePosEodData(orders)
+    const paidOrders = orders.filter((o) => o.status === 'paid')
+
+    return {
+      ...eodData,
+      totalCash: paidOrders.reduce((s, o) => s + (o.payment?.cashAmount ?? 0), 0),
+      totalUpi: paidOrders.reduce((s, o) => s + (o.payment?.upiAmount ?? 0), 0),
+      dineInBillCount: paidOrders.filter((o) => o.orderType === 'dine-in').length,
+      takeawayBillCount: paidOrders.filter((o) => o.orderType === 'takeaway').length,
+    }
+  } catch (error) {
+    console.error('Failed to get daily summary:', error)
+    return { error: 'Database operation failed' }
   }
 }
 
@@ -1166,8 +1612,35 @@ export async function getPosDataForEOD(date: string, branchId: string) {
     return { error: 'BranchAccessDenied' }
   }
 
-  const allOrders = await readJSON<PosOrder>(DB_FILES.POS_ORDERS).catch(() => [])
-  const orders = allOrders.filter(o => o.branchId === enforcedBranchId && o.date === date)
+  try {
+    const ordersRaw = await db
+      .select()
+      .from(posOrders)
+      .where(and(eq(posOrders.branchId, enforcedBranchId), eq(posOrders.date, date)))
 
-  return { data: computePosEodData(orders) }
+    const orders: PosOrder[] = (ordersRaw as any[]).map((o) => ({
+      id: o.id,
+      branchId: o.branchId,
+      tableId: o.tableId ?? undefined,
+      takeawayNumber: o.takeawayNumber ?? undefined,
+      orderType: o.orderType as OrderType,
+      covers: o.covers ?? undefined,
+      status: o.status as OrderStatus,
+      items: (o.items as any) || [],
+      note: o.note ?? undefined,
+      kotCount: o.kotCount ?? 0,
+      bill: o.bill ?? undefined,
+      payment: o.payment ?? undefined,
+      void: o.void ?? undefined,
+      date: o.date,
+      openedBy: o.openedBy,
+      createdAt: o.createdAt instanceof Date ? o.createdAt.toISOString() : String(o.createdAt || ''),
+      updatedAt: o.updatedAt instanceof Date ? o.updatedAt.toISOString() : String(o.updatedAt || ''),
+    }))
+
+    return { data: computePosEodData(orders) }
+  } catch (error) {
+    console.error('Failed to get POS data for EOD:', error)
+    return { error: 'Database operation failed' }
+  }
 }

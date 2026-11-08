@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useMemo, useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   Store, Plus, Search, CheckCircle2, XCircle, Trash2, UtensilsCrossed, Pencil,
   ChevronDown, ArrowUp, ArrowDown, Clock, Download, Copy, RefreshCw, Filter,
@@ -115,6 +116,7 @@ export default function MenuClientPage({
   const [selectedBranch, setSelectedBranch] = useState(branches[0]?.id || '')
   const [activeTab, setActiveTab] = useState<'menu' | 'matrix' | 'categories' | 'archive'>('menu')
   const [isPending, startTransition] = useTransition()
+  const router = useRouter()
   const toast = useToast()
 
   const [itemModal, setItemModal] = useState<{ open: boolean; data: any }>({ open: false, data: null })
@@ -127,6 +129,7 @@ export default function MenuClientPage({
   // Optimistic overlay: id|variantId -> partial patch. Cleared when the server
   // data comes back through revalidation.
   const [optimistic, setOptimistic] = useState<Record<string, { isAvailable?: boolean; price?: number | null }>>({})
+  const [categoryOptimistic, setCategoryOptimistic] = useState<Record<string, boolean>>({})
 
   const effectiveBranchMenuItems = useMemo(() => {
     return branchMenuItems.map(row => {
@@ -136,6 +139,34 @@ export default function MenuClientPage({
     })
   }, [branchMenuItems, optimistic])
 
+  const effectiveBranchCategories = useMemo(() => {
+    if (Object.keys(categoryOptimistic).length === 0) {
+      return branchCategories
+    }
+
+    const map = new Map<string, any>()
+    for (const row of branchCategories) {
+      if (row.branchId === selectedBranch) {
+        map.set(row.categoryId, { ...row })
+      }
+    }
+    for (const [catId, isAvail] of Object.entries(categoryOptimistic)) {
+      const existing = map.get(catId)
+      if (existing) {
+        existing.isAvailable = isAvail
+      } else {
+        map.set(catId, {
+          id: `opt_${selectedBranch}_${catId}`,
+          branchId: selectedBranch,
+          categoryId: catId,
+          isAvailable: isAvail,
+        })
+      }
+    }
+    const otherBranches = branchCategories.filter(row => row.branchId !== selectedBranch)
+    return [...otherBranches, ...Array.from(map.values())]
+  }, [branchCategories, selectedBranch, categoryOptimistic])
+
   const {
     filters, setFilters, resetFilters,
     groupedItems, archivedItems, enrichedCategories, categoryName, counts, resolvedItems,
@@ -144,7 +175,7 @@ export default function MenuClientPage({
     variants,
     categories,
     branchMenuItems: effectiveBranchMenuItems,
-    branchCategories,
+    branchCategories: effectiveBranchCategories,
     selectedBranch,
   })
 
@@ -162,6 +193,9 @@ export default function MenuClientPage({
     if (res?.error) { toast.error(res.error); return false }
     if (res?.warning) { toast.info(res.warning); return true }
     if (successText) toast.success(successText)
+    startTransition(() => {
+      router.refresh()
+    })
     return true
   }
 
@@ -199,9 +233,22 @@ export default function MenuClientPage({
   }
 
   const toggleCategoryAvailability = async (categoryId: string, current: boolean) => {
-    const res = await setBranchCategoryAvailability(selectedBranch, categoryId, !current)
-    if (res?.error) toast.error(res.error)
-    else startTransition(() => { toast.success('Category availability updated') })
+    const next = !current
+    setCategoryOptimistic(prev => ({ ...prev, [categoryId]: next }))
+    const res = await setBranchCategoryAvailability(selectedBranch, categoryId, next)
+    if (res?.error) {
+      setCategoryOptimistic(prev => {
+        const copy = { ...prev }
+        delete copy[categoryId]
+        return copy
+      })
+      toast.error(res.error)
+    } else {
+      toast.success(`Category ${next ? 'enabled' : 'disabled'}`)
+      startTransition(() => {
+        router.refresh()
+      })
+    }
   }
 
   const handleDeleteItem = async (item: any) => {
@@ -351,7 +398,7 @@ export default function MenuClientPage({
                 <select
                   className="w-full pl-10 pr-10 py-2.5 bg-[#1e1b2e] border border-[#3b3054] rounded-xl text-sm focus:border-[#c084fc] outline-none cursor-pointer text-slate-200"
                   value={selectedBranch}
-                  onChange={e => { setSelectedBranch(e.target.value); setOptimistic({}); setSelectedIds([]) }}
+                  onChange={e => { setSelectedBranch(e.target.value); setOptimistic({}); setCategoryOptimistic({}); setSelectedIds([]) }}
                   aria-label="Select branch"
                 >
                   {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
@@ -643,7 +690,15 @@ export default function MenuClientPage({
                     {catItems.map((item: any) => (
                       <tr key={item.id} className="border-b border-[#3b3054]/50 hover:bg-white/[0.02]">
                         <td className="p-4 text-slate-200 sticky left-0 bg-card">{item.name}</td>
-                        <td className="p-4 text-slate-400 font-medium">₹{item.basePrice || 0}</td>
+                        <td className="p-4 text-slate-400 font-medium">
+                          <div>₹{item.basePrice || 0}</div>
+                          {(item.acPrice || item.parcelPrice) && (
+                            <div className="text-[11px] text-slate-500 flex gap-2 mt-0.5">
+                              {item.acPrice ? <span title="AC price">AC: ₹{item.acPrice}</span> : null}
+                              {item.parcelPrice ? <span title="Parcel price">Parcel: ₹{item.parcelPrice}</span> : null}
+                            </div>
+                          )}
+                        </td>
                         {branches.map(b => {
                           const mapping = branchMenuItems.find(
                             (m: any) => m.menuItemId === item.id && m.branchId === b.id && !m.variantId
