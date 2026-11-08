@@ -100,31 +100,37 @@ export async function proxy(request: NextRequest) {
 
   // ── POS module enabled check ────────────────────────────────────
   // Intercept direct access to /management/pos/* when POS is toggled off (Req 9.2)
+  // NOTE: On Netlify, middleware runs in the Edge runtime where raw TCP database connections
+  // to external databases are blocked or stall until connect_timeout (10s).
+  // In production Edge, skip the DB check in middleware so requests pass instantly (<1ms);
+  // the Node.js Server Component page guards on all POS routes enforce config.pos.
   if (pathname.startsWith('/management/pos')) {
-    try {
-      const configRows = await db
-        .select()
-        .from(configTable)
-        .where(eq(configTable.id, GLOBAL_CONFIG_ID))
-        .limit(1)
+    if (process.env.NEXT_RUNTIME !== 'edge') {
+      try {
+        const configRows = await db
+          .select()
+          .from(configTable)
+          .where(eq(configTable.id, GLOBAL_CONFIG_ID))
+          .limit(1)
 
-      const globalConfig = configRows[0] || {
-        attendance: true,
-        payroll: true,
-        vendors: true,
-        inventory: true,
-        menu: true,
-        reports: true,
-        pos: true,
-      }
+        const globalConfig = configRows[0] || {
+          attendance: true,
+          payroll: true,
+          vendors: true,
+          inventory: true,
+          menu: true,
+          reports: true,
+          pos: true,
+        }
 
-      // Only redirect if config was successfully loaded AND pos is explicitly false.
-      // If config row is missing or datastore errors, fail open to the page guard.
-      if (globalConfig?.pos === false) {
-        return NextResponse.redirect(new URL('/management', request.url))
+        // Only redirect if config was successfully loaded AND pos is explicitly false.
+        // If config row is missing or datastore errors, fail open to the page guard.
+        if (globalConfig?.pos === false) {
+          return NextResponse.redirect(new URL('/management', request.url))
+        }
+      } catch {
+        // Default fail-open to page guard if datastore read errors
       }
-    } catch {
-      // Default fail-open to page guard if datastore read errors
     }
   }
 

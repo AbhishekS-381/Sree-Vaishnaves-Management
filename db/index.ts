@@ -28,9 +28,10 @@ const sql =
       ? { rejectUnauthorized: true, ca: AIVEN_CA_CERT }
       : (DATABASE_URL.includes('sslmode=require') || DATABASE_URL.includes('aivencloud.com') ? 'require' : false),
     max: 10,             // Dedicated connection pool capped at 10 (guaranteed to never exceed Aiven's 20 limit)
-    idle_timeout: 20,    // Release idle connections down to baseline during quiet hours (20s)
+    idle_timeout: 60,    // Keep warm for 60s of inactivity to avoid repeated cross-region connection handshakes
     max_lifetime: 1800,  // Recycle connections every 30 minutes
-    connect_timeout: 10, // 10s connect timeout
+    connect_timeout: 5,  // 5s connect timeout
+    prepare: false,      // Disable prepared statement overhead for serverless/pooled workloads
     onnotice: () => {},
   });
 
