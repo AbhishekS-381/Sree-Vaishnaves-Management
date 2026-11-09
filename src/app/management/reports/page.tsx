@@ -8,7 +8,7 @@ import {
   staff as staffTable,
   categories as categoriesTable,
 } from '@/lib/db'
-import { eq, and, isNull } from 'drizzle-orm'
+import { eq, and, isNull, gte } from 'drizzle-orm'
 import ReportsClientPage from './ReportsClientPage'
 import { getSession } from '@/app/actions/auth'
 
@@ -18,6 +18,8 @@ export default async function ReportsPage() {
   const branchId = session?.branchId
 
   const isScoped = !isGlobal && Boolean(branchId)
+  const currentYear = new Date().getFullYear()
+  const cutoffDate = `${currentYear - 1}-01-01`
 
   const [branches, eod, expenses, payroll, attendance, staff, categories] = await Promise.all([
     (isScoped
@@ -31,20 +33,20 @@ export default async function ReportsPage() {
           .where(and(eq(branchesTable.isActive, true), isNull(branchesTable.deletedAt)))
     ).catch(() => []),
     (isScoped
-      ? db.select().from(eodTable).where(eq(eodTable.branchId, branchId!))
-      : db.select().from(eodTable)
+      ? db.select().from(eodTable).where(and(eq(eodTable.branchId, branchId!), gte(eodTable.date, cutoffDate)))
+      : db.select().from(eodTable).where(gte(eodTable.date, cutoffDate))
     ).catch(() => []),
     (isScoped
-      ? db.select().from(expensesTable).where(eq(expensesTable.branchId, branchId!))
-      : db.select().from(expensesTable)
+      ? db.select().from(expensesTable).where(and(eq(expensesTable.branchId, branchId!), gte(expensesTable.date, cutoffDate)))
+      : db.select().from(expensesTable).where(gte(expensesTable.date, cutoffDate))
     ).catch(() => []),
     (isScoped
-      ? db.select().from(payrollTable).where(eq(payrollTable.branchId, branchId!))
-      : db.select().from(payrollTable)
+      ? db.select().from(payrollTable).where(and(eq(payrollTable.branchId, branchId!), gte(payrollTable.year, currentYear - 1)))
+      : db.select().from(payrollTable).where(gte(payrollTable.year, currentYear - 1))
     ).catch(() => []),
     (isScoped
-      ? db.select().from(attendanceTable).where(eq(attendanceTable.branchId, branchId!))
-      : db.select().from(attendanceTable)
+      ? db.select().from(attendanceTable).where(and(eq(attendanceTable.branchId, branchId!), gte(attendanceTable.date, cutoffDate)))
+      : db.select().from(attendanceTable).where(gte(attendanceTable.date, cutoffDate))
     ).catch(() => []),
     (isScoped
       ? db

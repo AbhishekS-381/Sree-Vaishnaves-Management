@@ -31,24 +31,26 @@ export async function loadBillingPage(
     redirect('/management')
   }
 
-  const configList = await db.select().from(configTable).limit(1).catch(() => [])
+  const [configList, allBranchesRaw] = await Promise.all([
+    db.select().from(configTable).limit(1).catch(() => []),
+    db
+      .select({
+        id: branchesTable.id,
+        name: branchesTable.name,
+        address: branchesTable.address,
+        phone: branchesTable.phone,
+        gstin: branchesTable.gstin,
+        isActive: branchesTable.isActive,
+      })
+      .from(branchesTable)
+      .where(and(eq(branchesTable.isActive, true), isNull(branchesTable.deletedAt)))
+      .catch(() => []),
+  ])
+
   const config = configList[0]
   if (!config?.pos) {
     redirect('/management')
   }
-
-  let allBranchesRaw = await db
-    .select({
-      id: branchesTable.id,
-      name: branchesTable.name,
-      address: branchesTable.address,
-      phone: branchesTable.phone,
-      gstin: branchesTable.gstin,
-      isActive: branchesTable.isActive,
-    })
-    .from(branchesTable)
-    .where(and(eq(branchesTable.isActive, true), isNull(branchesTable.deletedAt)))
-    .catch(() => [])
 
   let allBranches = allBranchesRaw.map((b) => ({
     id: b.id,

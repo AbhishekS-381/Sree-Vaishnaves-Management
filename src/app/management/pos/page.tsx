@@ -41,27 +41,29 @@ export async function loadPosDashboardPage(
     redirect('/management')
   }
 
-  const configList = await db.select().from(configTable).limit(1).catch(() => [])
+  const [configList, allBranchesRaw] = await Promise.all([
+    db.select().from(configTable).limit(1).catch(() => []),
+    db
+      .select({
+        id: branchesTable.id,
+        name: branchesTable.name,
+        address: branchesTable.address,
+        phone: branchesTable.phone,
+        gstin: branchesTable.gstin,
+        isActive: branchesTable.isActive,
+      })
+      .from(branchesTable)
+      .where(and(eq(branchesTable.isActive, true), isNull(branchesTable.deletedAt)))
+      .catch(() => []),
+  ])
+
   const config = configList[0]
   if (!config?.pos) {
     redirect('/management')
   }
 
-  let allBranches = await db
-    .select({
-      id: branchesTable.id,
-      name: branchesTable.name,
-      address: branchesTable.address,
-      phone: branchesTable.phone,
-      gstin: branchesTable.gstin,
-      isActive: branchesTable.isActive,
-    })
-    .from(branchesTable)
-    .where(and(eq(branchesTable.isActive, true), isNull(branchesTable.deletedAt)))
-    .catch(() => [])
-
   const isGlobalAdmin = Boolean(session.isGlobalAdmin || session.role === 'admin' || session.role === 'owner')
-
+  let allBranches = allBranchesRaw
   if (!isGlobalAdmin) {
     allBranches = allBranches.filter((b) => b.id === session.branchId)
   }
@@ -77,12 +79,10 @@ export async function loadPosDashboardPage(
     redirect('/management')
   }
 
-  const todayDataResult = await getTodayPosData(activeBranchId)
-  const initialData = 'error' in todayDataResult ? null : todayDataResult
-
-  // Check for stale open orders from prior calendar days (IST)
+  // Run getTodayPosData and stale orders query concurrently
   const today = todayIST()
-  const [staleOrdersRaw, allTables, allCategories] = await Promise.all([
+  const [todayDataResult, staleOrdersRaw] = await Promise.all([
+    getTodayPosData(activeBranchId),
     db
       .select()
       .from(posOrdersTable)
@@ -94,26 +94,30 @@ export async function loadPosDashboardPage(
         )
       )
       .catch(() => []),
-    db
-      .select()
-      .from(posTablesTable)
-      .where(and(eq(posTablesTable.branchId, activeBranchId), isNull(posTablesTable.deletedAt)))
-      .catch(() => []),
-    db
-      .select({ id: menuCategoriesTable.id, name: menuCategoriesTable.name })
-      .from(menuCategoriesTable)
-      .where(isNull(menuCategoriesTable.deletedAt))
-      .catch(() => []),
   ])
+  const initialData = 'error' in todayDataResult ? null : todayDataResult
 
-  const tableMap = new Map((allTables as PosTable[]).map((t) => [t.id, t.name]))
+  // Reuse tables already loaded in todayDataResult
+  const tables = initialData?.tables || []
+  const tableMap = new Map((tables as PosTable[]).map((t) => [t.id, t.name]))
 
   const staleOrders = (staleOrdersRaw as unknown as PosOrder[]).map((o) => ({
     ...o,
     tableName: o.tableId ? tableMap.get(o.tableId) || 'Table' : o.takeawayNumber || 'Takeaway',
   }))
 
-  const categoryMap = Object.fromEntries(allCategories.map((c) => [c.id, c.name]))
+  // Reuse categories from todayDataResult
+  const categoriesList = (initialData as any)?.categories || []
+  let categoryMap: Record<string, string> = {}
+  if (categoriesList.length > 0) {
+    categoryMap = Object.fromEntries(categoriesList.map((c: any) => [c.id, c.name]))
+  } else if (initialData?.catalog) {
+    for (const item of initialData.catalog) {
+      if (item.categoryId && item.categoryName) {
+        categoryMap[item.categoryId] = item.categoryName
+      }
+    }
+  }
 
   return (
     <PosClientPage

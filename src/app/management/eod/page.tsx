@@ -6,7 +6,7 @@ import {
   config as configTable,
   posOrders as posOrdersTable,
 } from '@/lib/db'
-import { eq, and, isNull } from 'drizzle-orm'
+import { eq, and, isNull, gte } from 'drizzle-orm'
 import EODClientPage from './EODClientPage'
 import { getSession } from '@/app/actions/auth'
 import { redirect } from 'next/navigation'
@@ -47,25 +47,41 @@ export default async function EODPage() {
       )
   }
 
-  const [branches, categories, attendance, configList] = await Promise.all([
+  const today = todayIST()
+  const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+
+  const posOrdersQuery = db
+    .select()
+    .from(posOrdersTable)
+    .where(
+      and(
+        !session?.isGlobalAdmin && session?.branchId
+          ? eq(posOrdersTable.branchId, session.branchId)
+          : undefined,
+        eq(posOrdersTable.date, today)
+      )
+    )
+
+  const [branches, categories, attendance, configList, posOrdersAll] = await Promise.all([
     branchesQuery.catch(() => []),
     db.select().from(categoriesTable).catch(() => []),
-    db.select().from(attendanceTable).catch(() => []),
+    db
+      .select()
+      .from(attendanceTable)
+      .where(gte(attendanceTable.date, sevenDaysAgo))
+      .catch(() => []),
     db.select().from(configTable).limit(1).catch(() => []),
+    posOrdersQuery.catch(() => []),
   ])
 
   const config = configList[0]
-
-  const today = todayIST()
   const defaultBranchId = session?.isGlobalAdmin ? branches[0]?.id : session?.branchId
 
   let initialPosEodData: PosEodData | null = null
   if (config?.pos && defaultBranchId) {
-    const todayBranchOrders = (await db
-      .select()
-      .from(posOrdersTable)
-      .where(and(eq(posOrdersTable.branchId, defaultBranchId), eq(posOrdersTable.date, today)))
-      .catch(() => [])) as unknown as PosOrder[]
+    const todayBranchOrders = posOrdersAll.filter(
+      (o: any) => o.branchId === defaultBranchId
+    ) as unknown as PosOrder[]
 
     initialPosEodData = computePosEodData(todayBranchOrders)
   }

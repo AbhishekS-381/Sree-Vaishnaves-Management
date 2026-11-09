@@ -1,7 +1,7 @@
 'use server'
 
 import { db, attendance, withDbTransaction } from '@/lib/db'
-import { eq, and } from 'drizzle-orm'
+import { eq, and, sql } from 'drizzle-orm'
 import { randomUUID } from 'crypto'
 import { revalidatePath } from 'next/cache'
 import { getSession, requireBranchAccess } from '@/app/actions/auth'
@@ -77,28 +77,29 @@ export async function saveAttendance(newLogs: Partial<AttendanceLog>[]) {
   }
 
   try {
+    const validLogs = newLogs.filter((log) => log.date && log.staffId)
+    const effectiveDate = new Date()
     await withDbTransaction(async (tx) => {
-      for (const newLog of newLogs) {
-        if (!newLog.date || !newLog.staffId) continue
-
-        const effectiveDate = new Date()
+      if (validLogs.length > 0) {
         await tx
           .insert(attendance)
-          .values({
-            id: newLog.id || randomUUID(),
-            date: newLog.date,
-            staffId: newLog.staffId,
-            branchId: newLog.branchId || '',
-            status: newLog.status || 'present',
-            shiftsWorked: newLog.shiftsWorked || [],
-            createdAt: effectiveDate,
-            updatedAt: effectiveDate,
-          })
+          .values(
+            validLogs.map((newLog) => ({
+              id: newLog.id || randomUUID(),
+              date: newLog.date!,
+              staffId: newLog.staffId!,
+              branchId: newLog.branchId || '',
+              status: newLog.status || 'present',
+              shiftsWorked: newLog.shiftsWorked || [],
+              createdAt: effectiveDate,
+              updatedAt: effectiveDate,
+            }))
+          )
           .onConflictDoUpdate({
             target: [attendance.date, attendance.staffId],
             set: {
-              status: newLog.status || 'present',
-              shiftsWorked: newLog.shiftsWorked || [],
+              status: sql`excluded.status`,
+              shiftsWorked: sql`excluded.shifts_worked`,
               updatedAt: effectiveDate,
             },
           })

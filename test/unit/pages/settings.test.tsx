@@ -26,7 +26,7 @@ vi.mock('@/lib/db', () => ({
   roles: { tableName: 'roles' },
   departments: { tableName: 'departments' },
   categories: { tableName: 'categories' },
-  users: { tableName: 'users' },
+  users: { tableName: 'users', id: { name: 'id' }, name: { name: 'name' }, role: { name: 'role' }, branchId: { name: 'branch_id' }, isActive: { name: 'is_active' }, deletedAt: { name: 'deleted_at' } },
   branches: { tableName: 'branches' },
   config: { tableName: 'config' },
 }))

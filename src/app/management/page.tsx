@@ -57,7 +57,9 @@ export default async function Dashboard() {
     )
 
   const eodQuery = db
-    .select()
+    .select({
+      income: eodTable.income,
+    })
     .from(eodTable)
     .where(
       and(
@@ -67,7 +69,9 @@ export default async function Dashboard() {
     )
 
   const expensesQuery = db
-    .select()
+    .select({
+      amount: expensesTable.amount,
+    })
     .from(expensesTable)
     .where(
       and(
@@ -76,12 +80,17 @@ export default async function Dashboard() {
       )
     )
 
-  const inventoryQuery = !isGlobal && branchId
-    ? db.select().from(inventoryTable).where(eq(inventoryTable.branchId, branchId))
-    : db.select().from(inventoryTable)
+  const inventoryQuery = db
+    .select({
+      id: inventoryTable.id,
+      currentQuantity: inventoryTable.currentQuantity,
+      threshold: inventoryTable.threshold,
+    })
+    .from(inventoryTable)
+    .where(!isGlobal && branchId ? eq(inventoryTable.branchId, branchId) : undefined)
 
   const attendanceQuery = db
-    .select()
+    .select({ id: attendanceTable.id })
     .from(attendanceTable)
     .where(
       and(
@@ -89,9 +98,10 @@ export default async function Dashboard() {
         eq(attendanceTable.date, todayStr)
       )
     )
+    .limit(1)
 
   const payrollQuery = db
-    .select()
+    .select({ id: payrollTable.id })
     .from(payrollTable)
     .where(
       and(
@@ -100,6 +110,7 @@ export default async function Dashboard() {
         eq(payrollTable.year, currentYear)
       )
     )
+    .limit(1)
 
   const configQuery = db
     .select()

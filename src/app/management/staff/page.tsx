@@ -40,8 +40,8 @@ export default async function StaffPage() {
 
   const [staffRaw, roles, depts, branches, requirements, menuCategories] = await Promise.all([
     staffQuery.catch(() => []),
-    db.select().from(rolesTable).catch(() => []),
-    db.select().from(departmentsTable).catch(() => []),
+    db.select().from(rolesTable).where(eq(rolesTable.isActive, true)).catch(() => []),
+    db.select().from(departmentsTable).where(eq(departmentsTable.isActive, true)).catch(() => []),
     db.select().from(branchesTable).where(and(eq(branchesTable.isActive, true), isNull(branchesTable.deletedAt))).catch(() => []),
     requirementsQuery.catch(() => []),
     db.select().from(menuCategoriesTable).where(isNull(menuCategoriesTable.deletedAt)).catch(() => []),

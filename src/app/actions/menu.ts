@@ -755,35 +755,50 @@ export async function bulkSetBranchAvailability(
   let changed = 0
   try {
     await withDbTransaction(async (tx) => {
-      for (const menuItemId of menuItemIds) {
-        const existing = await tx
-          .select()
-          .from(branchMenuItems)
-          .where(
-            and(
-              eq(branchMenuItems.branchId, enforcedBranch),
-              eq(branchMenuItems.menuItemId, menuItemId),
-              isNull(branchMenuItems.variantId)
-            )
+      // 1. Fetch all existing branch item rows for selected items in ONE query
+      const existingRows = await tx
+        .select()
+        .from(branchMenuItems)
+        .where(
+          and(
+            eq(branchMenuItems.branchId, enforcedBranch),
+            inArray(branchMenuItems.menuItemId, menuItemIds),
+            isNull(branchMenuItems.variantId)
           )
-          .limit(1)
+        )
 
-        if (existing.length > 0) {
-          if (existing[0].isAvailable !== isAvailable) changed++
-          await tx
-            .update(branchMenuItems)
-            .set({ isAvailable })
-            .where(eq(branchMenuItems.id, existing[0].id))
+      const existingMap = new Map(existingRows.map((r) => [r.menuItemId, r]))
+      const toInsert: any[] = []
+      const toUpdate: { id: string }[] = []
+
+      for (const menuItemId of menuItemIds) {
+        const existing = existingMap.get(menuItemId)
+        if (existing) {
+          if (existing.isAvailable !== isAvailable) {
+            changed++
+            toUpdate.push({ id: existing.id })
+          }
         } else {
-          await tx.insert(branchMenuItems).values({
+          changed++
+          toInsert.push({
             id: randomUUID(),
             branchId: enforcedBranch,
             menuItemId,
             price: null,
             isAvailable,
           })
-          changed++
         }
+      }
+
+      if (toInsert.length > 0) {
+        await tx.insert(branchMenuItems).values(toInsert)
+      }
+
+      for (const item of toUpdate) {
+        await tx
+          .update(branchMenuItems)
+          .set({ isAvailable })
+          .where(eq(branchMenuItems.id, item.id))
       }
     })
 
@@ -915,27 +930,30 @@ export async function cloneBranchMenuConfig(
 
     let applied = 0
     await withDbTransaction(async (tx) => {
+      // 1. Fetch all existing target branch items in ONE query to eliminate N+1 select waterfall
+      const existingTargetRows = await tx
+        .select()
+        .from(branchMenuItems)
+        .where(eq(branchMenuItems.branchId, enforcedTarget))
+
+      const existingMap = new Map(
+        existingTargetRows.map((r) => [`${r.menuItemId}_${r.variantId || ''}`, r])
+      )
+
+      const toInsert: any[] = []
+
       for (const src of source) {
-        const conds = [
-          eq(branchMenuItems.branchId, enforcedTarget),
-          eq(branchMenuItems.menuItemId, src.menuItemId),
-        ]
-        if (src.variantId) {
-          conds.push(eq(branchMenuItems.variantId, src.variantId))
-        } else {
-          conds.push(isNull(branchMenuItems.variantId))
-        }
+        const key = `${src.menuItemId}_${src.variantId || ''}`
+        const existing = existingMap.get(key)
 
-        const existing = await tx.select().from(branchMenuItems).where(and(...conds)).limit(1)
-
-        if (existing.length > 0) {
+        if (existing) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const updateData: Record<string, any> = {}
           if (options.prices) updateData.price = src.price
           if (options.availability) updateData.isAvailable = src.isAvailable
-          await tx.update(branchMenuItems).set(updateData).where(eq(branchMenuItems.id, existing[0].id))
+          await tx.update(branchMenuItems).set(updateData).where(eq(branchMenuItems.id, existing.id))
         } else {
-          await tx.insert(branchMenuItems).values({
+          toInsert.push({
             id: randomUUID(),
             branchId: enforcedTarget,
             menuItemId: src.menuItemId,
@@ -945,6 +963,10 @@ export async function cloneBranchMenuConfig(
           })
         }
         applied++
+      }
+
+      if (toInsert.length > 0) {
+        await tx.insert(branchMenuItems).values(toInsert)
       }
     })
 

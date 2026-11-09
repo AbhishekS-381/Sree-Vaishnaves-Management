@@ -49,8 +49,8 @@ vi.mock('@/lib/db', () => ({
   branches: { tableName: 'branches', id: { name: 'id' } },
   staff: { tableName: 'staff', branchId: { name: 'branch_id' }, deletedAt: { name: 'deleted_at' } },
   roles: { tableName: 'roles' },
-  eod: { tableName: 'eod', branchId: { name: 'branch_id' } },
-  expenses: { tableName: 'expenses', branchId: { name: 'branch_id' } },
+  eod: { tableName: 'eod', branchId: { name: 'branch_id' }, date: { name: 'date' } },
+  expenses: { tableName: 'expenses', branchId: { name: 'branch_id' }, date: { name: 'date' } },
   staffRequirements: { tableName: 'staff_requirements', branchId: { name: 'branch_id' } },
 }))
 

@@ -13,35 +13,28 @@ import { getSession } from '@/app/actions/auth'
 
 export default async function MenuPage() {
   const session = await getSession()
+  const isGlobalAdmin = Boolean(session?.isGlobalAdmin)
+  const isReadonly = session?.role === 'readonly'
 
-  const [allBranches, menu, categories, variants, branchCategoriesAll] = await Promise.all([
+  const [allBranches, menu, categories, variants, branchCategoriesAll, allBranchMenuItems] = await Promise.all([
     db.select().from(branchesTable).where(and(eq(branchesTable.isActive, true), isNull(branchesTable.deletedAt))).catch(() => []),
     db.select().from(menuItemsTable).where(isNull(menuItemsTable.deletedAt)).catch(() => []),
     db.select().from(menuCategoriesTable).where(isNull(menuCategoriesTable.deletedAt)).catch(() => []),
     db.select().from(menuItemVariantsTable).catch(() => []),
     db.select().from(branchCategoriesTable).catch(() => []),
+    !isGlobalAdmin && !isReadonly && session?.branchId
+      ? db.select().from(branchMenuItemsTable).where(eq(branchMenuItemsTable.branchId, session.branchId)).catch(() => [])
+      : db.select().from(branchMenuItemsTable).catch(() => []),
   ])
-
-  const isGlobalAdmin = Boolean(session?.isGlobalAdmin)
-  const isReadonly = session?.role === 'readonly'
 
   let branches = allBranches
   if (!isGlobalAdmin && !isReadonly && session?.branchId) {
     branches = branches.filter((b: any) => b.id === session.branchId)
   }
 
-  const inScopeBranchIds = branches.map((b: any) => b.id)
-  let branchMenuItems: any[] = []
-  if (inScopeBranchIds.length > 0) {
-    branchMenuItems = await db
-      .select()
-      .from(branchMenuItemsTable)
-      .where(inArray(branchMenuItemsTable.branchId, inScopeBranchIds))
-      .catch(() => [])
-  }
-
-  const inScope = new Set(inScopeBranchIds)
-  const branchCategories = branchCategoriesAll.filter((c: any) => inScope.has(c.branchId))
+  const inScopeBranchIds = new Set(branches.map((b: any) => b.id))
+  const branchMenuItems = allBranchMenuItems.filter((bmi: any) => inScopeBranchIds.has(bmi.branchId))
+  const branchCategories = branchCategoriesAll.filter((c: any) => inScopeBranchIds.has(c.branchId))
 
   return (
     <MenuClientPage

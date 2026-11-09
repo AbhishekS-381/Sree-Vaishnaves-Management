@@ -63,11 +63,11 @@ vi.mock('@/lib/db', () => ({
   db: mockDb,
   branches: { tableName: 'branches', id: { name: 'id' }, name: { name: 'name' }, status: { name: 'status' }, isActive: { name: 'is_active' }, deletedAt: { name: 'deleted_at' } },
   staff: { tableName: 'staff', id: { name: 'id' }, branchId: { name: 'branch_id' }, isActive: { name: 'is_active' }, deletedAt: { name: 'deleted_at' } },
-  eod: { tableName: 'eod', branchId: { name: 'branch_id' }, date: { name: 'date' } },
-  expenses: { tableName: 'expenses', branchId: { name: 'branch_id' }, date: { name: 'date' } },
-  inventory: { tableName: 'inventory', branchId: { name: 'branch_id' } },
-  attendance: { tableName: 'attendance', branchId: { name: 'branch_id' }, date: { name: 'date' } },
-  payroll: { tableName: 'payroll', branchId: { name: 'branch_id' }, month: { name: 'month' }, year: { name: 'year' } },
+  eod: { tableName: 'eod', branchId: { name: 'branch_id' }, date: { name: 'date' }, income: { name: 'income' } },
+  expenses: { tableName: 'expenses', branchId: { name: 'branch_id' }, date: { name: 'date' }, amount: { name: 'amount' } },
+  inventory: { tableName: 'inventory', branchId: { name: 'branch_id' }, id: { name: 'id' }, currentQuantity: { name: 'current_quantity' }, threshold: { name: 'threshold' } },
+  attendance: { tableName: 'attendance', branchId: { name: 'branch_id' }, date: { name: 'date' }, id: { name: 'id' } },
+  payroll: { tableName: 'payroll', branchId: { name: 'branch_id' }, month: { name: 'month' }, year: { name: 'year' }, id: { name: 'id' } },
   config: { tableName: 'config', id: { name: 'id' } },
 }))
 

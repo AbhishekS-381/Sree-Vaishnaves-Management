@@ -63,18 +63,47 @@ export async function getTodayPosData(branchId: string) {
   const today = todayIST()
 
   try {
-    // Read POS data
-    const tablesRaw = await db
-      .select()
-      .from(posTables)
-      .where(
-        and(
-          eq(posTables.branchId, enforcedBranchId),
-          eq(posTables.isActive, true),
-          isNull(posTables.deletedAt)
+    // Read POS data concurrently to eliminate cross-region round-trip waterfalls
+    const [
+      tablesRaw,
+      ordersRaw,
+      activeMenuItems,
+      allCategories,
+      branchRows,
+      allVariants,
+    ] = await Promise.all([
+      db
+        .select()
+        .from(posTables)
+        .where(
+          and(
+            eq(posTables.branchId, enforcedBranchId),
+            eq(posTables.isActive, true),
+            isNull(posTables.deletedAt)
+          )
         )
-      )
-      .orderBy(asc(posTables.name))
+        .orderBy(asc(posTables.name)),
+      db
+        .select()
+        .from(posOrders)
+        .where(and(eq(posOrders.branchId, enforcedBranchId), eq(posOrders.date, today))),
+      db
+        .select()
+        .from(menuItems)
+        .where(and(eq(menuItems.isActive, true), isNull(menuItems.deletedAt))),
+      db
+        .select({ id: menuCategories.id, name: menuCategories.name })
+        .from(menuCategories)
+        .where(isNull(menuCategories.deletedAt)),
+      db
+        .select()
+        .from(branchMenuItems)
+        .where(eq(branchMenuItems.branchId, enforcedBranchId)),
+      db
+        .select()
+        .from(menuItemVariants)
+        .where(and(eq(menuItemVariants.isActive, true), isNull(menuItemVariants.deletedAt))),
+    ])
 
     const tables: PosTable[] = (tablesRaw as any[]).map((t) => ({
       id: t.id,
@@ -86,11 +115,6 @@ export async function getTodayPosData(branchId: string) {
       updatedAt: t.updatedAt instanceof Date ? t.updatedAt.toISOString() : String(t.updatedAt || ''),
       deletedAt: t.deletedAt ? (t.deletedAt instanceof Date ? t.deletedAt.toISOString() : String(t.deletedAt)) : undefined,
     }))
-
-    const ordersRaw = await db
-      .select()
-      .from(posOrders)
-      .where(and(eq(posOrders.branchId, enforcedBranchId), eq(posOrders.date, today)))
 
     const orders: PosOrder[] = (ordersRaw as any[]).map((o) => ({
       id: o.id,
@@ -139,26 +163,10 @@ export async function getTodayPosData(branchId: string) {
       }))
     }
 
-    // Build branch menu catalog
-    const activeMenuItems = await db
-      .select()
-      .from(menuItems)
-      .where(and(eq(menuItems.isActive, true), isNull(menuItems.deletedAt)))
-
-    const allCategories = await db
-      .select({ id: menuCategories.id, name: menuCategories.name })
-      .from(menuCategories)
-      .where(isNull(menuCategories.deletedAt))
-
     const categoryMap = new Map<string, string>()
     for (const c of allCategories) {
       categoryMap.set(c.id, c.name)
     }
-
-    const branchRows = await db
-      .select()
-      .from(branchMenuItems)
-      .where(eq(branchMenuItems.branchId, enforcedBranchId))
 
     // Build a lookup map for branch overrides (only item-level rows, no variantId)
     const branchItemMap = new Map<string, any>()
@@ -192,11 +200,7 @@ export async function getTodayPosData(branchId: string) {
       })
     }
 
-    // Load variants
-    const allVariants = await db
-      .select()
-      .from(menuItemVariants)
-      .where(and(eq(menuItemVariants.isActive, true), isNull(menuItemVariants.deletedAt)))
+    // Variants are already loaded concurrently in the initial Promise.all batch
 
     const catalogItemIds = new Set(catalog.map((c) => c.menuItemId))
 
@@ -235,7 +239,7 @@ export async function getTodayPosData(branchId: string) {
       })
     }
 
-    return { tables, orders, kots, catalog, todayIST: today }
+    return { tables, orders, kots, catalog, todayIST: today, categories: allCategories }
   } catch (error) {
     console.error('Failed to load today POS data:', error)
     return { error: 'Database operation failed' }
@@ -1388,15 +1392,21 @@ export async function getKitchenKots(branchId: string) {
 
   try {
     const today = todayIST()
-    const todayOrders = await db
-      .select({
-        id: posOrders.id,
-        tableId: posOrders.tableId,
-        takeawayNumber: posOrders.takeawayNumber,
-        orderType: posOrders.orderType,
-      })
-      .from(posOrders)
-      .where(and(eq(posOrders.branchId, enforcedBranchId), eq(posOrders.date, today)))
+    const [todayOrders, allTables] = await Promise.all([
+      db
+        .select({
+          id: posOrders.id,
+          tableId: posOrders.tableId,
+          takeawayNumber: posOrders.takeawayNumber,
+          orderType: posOrders.orderType,
+        })
+        .from(posOrders)
+        .where(and(eq(posOrders.branchId, enforcedBranchId), eq(posOrders.date, today))),
+      db
+        .select({ id: posTables.id, name: posTables.name })
+        .from(posTables)
+        .where(eq(posTables.branchId, enforcedBranchId)),
+    ])
 
     // Build order map for resolving identifiers
     const orderMap = new Map<string, { tableId?: string; takeawayNumber?: string; orderType: OrderType }>()
@@ -1407,12 +1417,6 @@ export async function getKitchenKots(branchId: string) {
         orderType: o.orderType as OrderType,
       })
     }
-
-    // Load tables for name resolution
-    const allTables = await db
-      .select({ id: posTables.id, name: posTables.name })
-      .from(posTables)
-      .where(eq(posTables.branchId, enforcedBranchId))
 
     const tableMap = new Map<string, string>()
     for (const t of allTables) {

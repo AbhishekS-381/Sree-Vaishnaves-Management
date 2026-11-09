@@ -4,7 +4,7 @@ import {
   branches as branchesTable,
   roles as rolesTable,
 } from '@/lib/db'
-import { getSessionRole, getSession } from '@/app/actions/auth'
+import { getSession } from '@/app/actions/auth'
 import AttendanceClientPage from './AttendanceClientPage'
 import { eq, and, isNull } from 'drizzle-orm'
 
@@ -35,11 +35,10 @@ export default async function AttendancePage() {
       .where(and(eq(branchesTable.id, branchId), eq(branchesTable.isActive, true), isNull(branchesTable.deletedAt)))
   }
 
-  const [staff, branches, roles, userRole] = await Promise.all([
+  const [staff, branches, roles] = await Promise.all([
     staffQuery.catch(() => []),
     branchesQuery.catch(() => []),
     db.select().from(rolesTable).where(eq(rolesTable.isActive, true)).catch(() => []),
-    getSessionRole(),
   ])
 
   return (
@@ -47,7 +46,7 @@ export default async function AttendancePage() {
       staff={staff}
       branches={branches}
       roles={roles}
-      userRole={userRole || ''}
+      userRole={session?.role || ''}
     />
   )
 }

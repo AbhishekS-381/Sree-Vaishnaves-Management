@@ -167,6 +167,23 @@ describe('EOD Actions', () => {
     expect(mockDb._deleteBuilder.where).toHaveBeenCalled()
   })
 
+  it('saveEODEntry batches multiple expenses into a single insert statement', async () => {
+    mockDb._limitResult = []
+    const expensesMock = [
+      { amount: 50, categoryId: 'Cat1', branchId: 'b1', date: '2023-10-01', notes: 'exp 1' },
+      { amount: 75, categoryId: 'Cat2', branchId: 'b1', date: '2023-10-01', notes: 'exp 2' },
+      { amount: 120, categoryId: 'Cat3', branchId: 'b1', date: '2023-10-01', notes: 'exp 3' },
+    ]
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const res = await saveEODEntry(
+      { date: '2023-10-01', branchId: 'b1', income: { dineInCash: 100, dineInUpi: 0, takeawayCash: 0, takeawayUpi: 0 }, openingFloat: 0, actualClosingFloat: 0, notes: '' },
+      expensesMock as any
+    )
+    expect(res).toEqual({ success: true })
+    // Called once for EOD upsert, once for batched expenses insert
+    expect(mockDb.insert).toHaveBeenCalledTimes(2)
+  })
+
   it('saveEODEntry updates existing draft', async () => {
     mockDb._limitResult = [
       {

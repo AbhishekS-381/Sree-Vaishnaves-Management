@@ -103,7 +103,25 @@ describe('Attendance Actions', () => {
       { date: todayStr, staffId: 's2' },
     ])
     expect(res).toEqual({ success: true })
-    expect(mockDb.insert).toHaveBeenCalledTimes(2)
+    expect(mockDb.insert).toHaveBeenCalledTimes(1)
+  })
+
+  it('saveAttendance batches multiple records into a single values call', async () => {
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+    const res = await saveAttendance([
+      { date: todayStr, staffId: 's1', status: 'present' },
+      { date: todayStr, staffId: 's2', status: 'absent' },
+      { date: todayStr, staffId: 's3', status: 'half-day' },
+    ])
+    expect(res).toEqual({ success: true })
+    expect(mockDb.insert).toHaveBeenCalledTimes(1)
+    expect(mockDb._insertBuilder.values).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ staffId: 's1', status: 'present' }),
+        expect.objectContaining({ staffId: 's2', status: 'absent' }),
+        expect.objectContaining({ staffId: 's3', status: 'half-day' }),
+      ])
+    )
   })
 
   it('saveAttendance handles branch access error', async () => {

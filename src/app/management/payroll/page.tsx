@@ -4,7 +4,7 @@ import {
   payroll as payrollTable,
   attendance as attendanceTable,
 } from '@/lib/db'
-import { eq, and, isNull } from 'drizzle-orm'
+import { eq, and, isNull, gte } from 'drizzle-orm'
 import PayrollClientPage from './PayrollClientPage'
 import { getSession } from '@/app/actions/auth'
 
@@ -12,6 +12,8 @@ export default async function PayrollPage() {
   const session = await getSession()
   const isGlobal = session?.isGlobalAdmin || session?.role === 'readonly'
   const branchId = session?.branchId
+
+  const currentYear = new Date().getFullYear()
 
   try {
     const [staff, payroll, attendance] = await Promise.all([
@@ -26,14 +28,26 @@ export default async function PayrollPage() {
           )
         )
         .catch(() => []),
-      (!isGlobal && branchId
-        ? db.select().from(payrollTable).where(eq(payrollTable.branchId, branchId))
-        : db.select().from(payrollTable)
-      ).catch(() => []),
-      (!isGlobal && branchId
-        ? db.select().from(attendanceTable).where(eq(attendanceTable.branchId, branchId))
-        : db.select().from(attendanceTable)
-      ).catch(() => []),
+      db
+        .select()
+        .from(payrollTable)
+        .where(
+          and(
+            !isGlobal && branchId ? eq(payrollTable.branchId, branchId) : undefined,
+            gte(payrollTable.year, currentYear - 1)
+          )
+        )
+        .catch(() => []),
+      db
+        .select()
+        .from(attendanceTable)
+        .where(
+          and(
+            !isGlobal && branchId ? eq(attendanceTable.branchId, branchId) : undefined,
+            gte(attendanceTable.date, `${currentYear}-01-01`)
+          )
+        )
+        .catch(() => []),
     ])
 
     return (

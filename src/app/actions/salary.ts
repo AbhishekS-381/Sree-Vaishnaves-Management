@@ -1,7 +1,7 @@
 'use server'
 
 import { db, payroll, staff, withDbTransaction } from '@/lib/db'
-import { eq, and, isNull } from 'drizzle-orm'
+import { eq, and, isNull, sql } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { getSession } from './auth'
 
@@ -102,33 +102,34 @@ export async function savePayroll(prevState: any, formData: FormData) {
     }
 
     await withDbTransaction(async (tx) => {
-      for (const entry of entries) {
-        const now = new Date()
+      if (entries.length > 0) {
         await tx
           .insert(payroll)
-          .values({
-            id: entry.id,
-            staffId: entry.staffId,
-            branchId: entry.branchId,
-            name: entry.name,
-            month: entry.month,
-            year: entry.year,
-            monthlySalary: entry.monthlySalary,
-            daysWorked: entry.daysWorked,
-            advances: entry.advances,
-            payableAmount: entry.payableAmount,
-            status: 'PENDING',
-            notes: entry.notes || '',
-          })
-          .onConflictDoUpdate({
-            target: payroll.id,
-            set: {
+          .values(
+            entries.map((entry) => ({
+              id: entry.id,
+              staffId: entry.staffId,
+              branchId: entry.branchId,
               name: entry.name,
+              month: entry.month,
+              year: entry.year,
               monthlySalary: entry.monthlySalary,
               daysWorked: entry.daysWorked,
               advances: entry.advances,
               payableAmount: entry.payableAmount,
+              status: 'PENDING' as const,
               notes: entry.notes || '',
+            }))
+          )
+          .onConflictDoUpdate({
+            target: payroll.id,
+            set: {
+              name: sql`excluded.name`,
+              monthlySalary: sql`excluded.monthly_salary`,
+              daysWorked: sql`excluded.days_worked`,
+              advances: sql`excluded.advances`,
+              payableAmount: sql`excluded.payable_amount`,
+              notes: sql`excluded.notes`,
             },
           })
       }

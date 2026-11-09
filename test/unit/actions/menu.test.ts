@@ -49,6 +49,10 @@ const { mockDb, mockWithDbTransaction } = vi.hoisted(() => {
                   if (str.includes('"m1"') && item.menuItemId !== 'm1') return false
                   if (str.includes('"m2"') && item.menuItemId !== 'm2') return false
                 }
+                if (table?.tableName === 'branch_menu_items' && item.branchId) {
+                  if (str.includes('"b1"') && item.branchId !== 'b1') return false
+                  if (str.includes('"b2"') && item.branchId !== 'b2') return false
+                }
                 return true
               })
             }
@@ -442,6 +446,14 @@ describe('Menu Actions', () => {
       expect(res).toMatchObject({ success: true, changed: 2 })
     })
 
+    it('bulkSetBranchAvailability batches insert into a single call for new overrides', async () => {
+      mockDb.state.branchItems = []
+      const insertSpy = vi.spyOn(mockDb, 'insert')
+      const res = await actions.bulkSetBranchAvailability('b1', ['m1', 'm2', 'm3'], false)
+      expect(res).toMatchObject({ success: true, changed: 3 })
+      expect(insertSpy).toHaveBeenCalledTimes(1)
+    })
+
     it('bulkUpdateBranchPrices validates mode and value', async () => {
       expect(await actions.bulkUpdateBranchPrices('b1', [], 'percent', 10)).toEqual({ error: 'No items selected' })
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -489,6 +501,18 @@ describe('Menu Actions', () => {
       const res = await actions.cloneBranchMenuConfig('b1', 'b2')
       expect(res).toMatchObject({ success: true, applied: 2 })
       expect(mockWithDbTransaction).toHaveBeenCalled()
+    })
+
+    it('cloneBranchMenuConfig batches insert into a single call for target branch', async () => {
+      mockDb.state.branchItems = [
+        { id: 's1', branchId: 'b1', menuItemId: 'm1', price: 90, isAvailable: false },
+        { id: 's2', branchId: 'b1', menuItemId: 'm2', price: 120, isAvailable: true },
+        { id: 's3', branchId: 'b1', menuItemId: 'm3', price: 50, isAvailable: true },
+      ]
+      const insertSpy = vi.spyOn(mockDb, 'insert')
+      const res = await actions.cloneBranchMenuConfig('b1', 'b2')
+      expect(res).toMatchObject({ success: true, applied: 3 })
+      expect(insertSpy).toHaveBeenCalledTimes(1)
     })
   })
 })

@@ -22,15 +22,23 @@ export default async function SettingsPage() {
     db.select().from(rolesTable).where(eq(rolesTable.isActive, true)).catch(() => []),
     db.select().from(departmentsTable).where(eq(departmentsTable.isActive, true)).catch(() => []),
     db.select().from(categoriesTable).catch(() => []),
-    db.select().from(usersTable).where(eq(usersTable.isActive, true)).catch(() => []),
+    db
+      .select({
+        id: usersTable.id,
+        name: usersTable.name,
+        role: usersTable.role,
+        branchId: usersTable.branchId,
+        isActive: usersTable.isActive,
+      })
+      .from(usersTable)
+      .where(and(eq(usersTable.isActive, true), isNull(usersTable.deletedAt)))
+      .catch(() => []),
     db.select().from(branchesTable).where(and(eq(branchesTable.isActive, true), isNull(branchesTable.deletedAt))).catch(() => []),
     db.select().from(configTable).limit(1).catch(() => []),
   ])
 
-  // Sanitize users to avoid leaking passwords to the client
-  const users = rawUsers
-    .filter((u: any) => u.isActive !== false)
-    .map(({ password, ...u }: any) => u)
+  // Sanitize users to avoid leaking any unnecessary fields to the client
+  const users = rawUsers.filter((u: any) => u.isActive !== false)
   
   const config = configList[0] || {
     attendance: true,

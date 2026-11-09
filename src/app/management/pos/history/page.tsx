@@ -19,13 +19,8 @@ export default async function PosHistoryPage() {
     redirect('/management')
   }
 
-  const configList = await db.select().from(configTable).limit(1).catch(() => [])
-  const config = configList[0]
-  if (!config?.pos) {
-    redirect('/management')
-  }
-
-  const [allBranches, allTables, allUsers] = await Promise.all([
+  const [configList, allBranches, allTables, allUsers] = await Promise.all([
+    db.select().from(configTable).limit(1).catch(() => []),
     db
       .select({
         id: branchesTable.id,
@@ -49,6 +44,11 @@ export default async function PosHistoryPage() {
       .where(eq(usersTable.isActive, true))
       .catch(() => []),
   ])
+
+  const config = configList[0]
+  if (!config?.pos) {
+    redirect('/management')
+  }
 
   const tableMap: Record<string, string> = {}
   for (const t of allTables) {

@@ -7,7 +7,7 @@ import {
   expenses as expensesTable,
   staffRequirements as staffRequirementsTable,
 } from '@/lib/db'
-import { eq, and, isNull } from 'drizzle-orm'
+import { eq, and, isNull, like } from 'drizzle-orm'
 import { MapPin, Phone, Users, User, FileText } from 'lucide-react'
 import { notFound, redirect } from 'next/navigation'
 import { getSession } from '@/app/actions/auth'
@@ -21,12 +21,24 @@ export default async function BranchDetailPage({ params }: { params: Promise<{ i
     redirect('/management')
   }
 
+  // Current month calculations
+  const now = new Date()
+  const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+
   const [branches, staff, roles, eod, expenses, requirements] = await Promise.all([
     db.select().from(branchesTable).where(eq(branchesTable.id, id)).limit(1).catch(() => []),
     db.select().from(staffTable).where(and(eq(staffTable.branchId, id), isNull(staffTable.deletedAt))).catch(() => []),
     db.select().from(rolesTable).catch(() => []),
-    db.select().from(eodTable).where(eq(eodTable.branchId, id)).catch(() => []),
-    db.select().from(expensesTable).where(eq(expensesTable.branchId, id)).catch(() => []),
+    db
+      .select({ income: eodTable.income, date: eodTable.date, branchId: eodTable.branchId })
+      .from(eodTable)
+      .where(and(eq(eodTable.branchId, id), like(eodTable.date, `${currentMonthStr}%`)))
+      .catch(() => []),
+    db
+      .select({ amount: expensesTable.amount, date: expensesTable.date, branchId: expensesTable.branchId })
+      .from(expensesTable)
+      .where(and(eq(expensesTable.branchId, id), like(expensesTable.date, `${currentMonthStr}%`)))
+      .catch(() => []),
     db.select().from(staffRequirementsTable).where(eq(staffRequirementsTable.branchId, id)).catch(() => []),
   ])
 
@@ -41,13 +53,9 @@ export default async function BranchDetailPage({ params }: { params: Promise<{ i
   const totalPositions = branchRequirements.reduce((sum: number, r: any) => sum + (Number(r.requiredCount) || 1), 0)
 
   const getRole = (id: string) => roles.find((r: any) => r.id === id)?.name || id
-
-  // Current month calculations
-  const now = new Date()
-  const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   
-  const branchEod = eod.filter((e: any) => e.branchId === branch.id && e.date.startsWith(currentMonthStr))
-  const branchExpenses = expenses.filter((e: any) => e.branchId === branch.id && e.date.startsWith(currentMonthStr))
+  const branchEod = eod.filter((e: any) => e.branchId === branch.id && (!e.date || e.date.startsWith(currentMonthStr)))
+  const branchExpenses = expenses.filter((e: any) => e.branchId === branch.id && (!e.date || e.date.startsWith(currentMonthStr)))
 
   let thisMonthIncome = 0
   branchEod.forEach((e: any) => {

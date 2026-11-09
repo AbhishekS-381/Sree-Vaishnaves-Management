@@ -140,7 +140,11 @@ describe('Salary Actions', () => {
 
     const insertedRecords: any[] = []
     mockDb._insertBuilder.values.mockImplementation((val: any) => {
-      insertedRecords.push(val)
+      if (Array.isArray(val)) {
+        insertedRecords.push(...val)
+      } else {
+        insertedRecords.push(val)
+      }
       return mockDb._insertBuilder
     })
 
@@ -158,6 +162,25 @@ describe('Salary Actions', () => {
     expect((res as any).success).toBe(true)
     expect(insertedRecords.length).toBe(1)
     expect(insertedRecords[0].staffId).toBe('s1')
+  })
+
+  it('savePayroll batches multiple entries into a single insert call', async () => {
+    mockDb._selectResult = [
+      { id: 's1', name: 'Alice', branchId: 'b1', monthlySalary: 3000 },
+      { id: 's2', name: 'Bob', branchId: 'b1', monthlySalary: 4000 },
+    ]
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const fd = {
+      get: (k: string) => (k === 'month' ? '10' : k === 'year' ? '2023' : null),
+      entries: () => [
+        ['staff_s1_days', '25'],
+        ['staff_s2_days', '28'],
+      ],
+    } as any
+    const res = await savePayroll({}, fd)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect((res as any).success).toBe(true)
+    expect(mockDb.insert).toHaveBeenCalledTimes(1)
   })
 
   it('savePayroll handles transaction failure', async () => {

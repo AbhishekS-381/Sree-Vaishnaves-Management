@@ -184,17 +184,19 @@ export async function saveEODEntry(
           )
         )
 
-      for (const ex of expensesOut) {
-        await tx.insert(expenses).values({
-          id: randomUUID(),
-          branchId: ex.branchId,
-          amount: ex.amount,
-          categoryId: (ex as unknown as { categoryId: string }).categoryId,
-          source: 'eod',
-          date: ex.date,
-          notes: ex.notes || '',
-          createdAt: now,
-        })
+      if (expensesOut.length > 0) {
+        await tx.insert(expenses).values(
+          expensesOut.map((ex) => ({
+            id: randomUUID(),
+            branchId: ex.branchId,
+            amount: ex.amount,
+            categoryId: (ex as unknown as { categoryId: string }).categoryId,
+            source: 'eod' as const,
+            date: ex.date,
+            notes: ex.notes || '',
+            createdAt: now,
+          }))
+        )
       }
     })
 
